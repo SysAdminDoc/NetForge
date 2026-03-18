@@ -4,7 +4,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.0.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.1.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -18,6 +18,13 @@
 ---
 
 ## Features
+
+### Connection Status Bar
+- Real-time connected/disconnected indicator with colored dot
+- Local IP, public IP (cached via api.ipify.org), gateway display
+- Connection type detection (Ethernet/WiFi/VPN)
+- WiFi details: SSID, signal strength %, channel, band, auth type, link speed
+- Auto-refresh every 30 seconds
 
 ### Network Adapter Control
 - View all physical network adapters with real-time status
@@ -60,10 +67,6 @@
   - Reset Winsock Catalog
   - Reset TCP/IP Stack
   - Full Network Reset
-- **Diagnostics**:
-  - Ping with customizable target
-  - Traceroute
-  - NSLookup
 - **Detailed Adapter Information**:
   - Interface index and type
   - Link speed and media state
@@ -71,6 +74,12 @@
   - Current DNS servers
   - IPv6 addresses
   - Driver information
+
+### Diagnostics Tab
+- **Ping Test**: 10-ping burst with min/avg/max/loss statistics
+- **Continuous Ping**: Toggle on/off, pings every 2 seconds with color-coded results (green <50ms, yellow 50-100ms, red >100ms)
+- **Speed Test**: Downloads ~10MB test file, calculates download speed in Mbps
+- **DNS Lookup**: Resolve any domain to IP addresses, shows responding DNS server
 
 ### Modern Interface
 - Professional dark theme with orange accents

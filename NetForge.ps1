@@ -3,10 +3,11 @@
     NetForge - Professional Network Adapter Management Utility
 .DESCRIPTION
     Comprehensive network adapter configuration tool with static IP management,
-    DNS control, profile saving, and extensive customization options.
+    DNS control, profile saving, ping/latency monitoring, connection status,
+    WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.0.0
+    Version: 1.1.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -43,10 +44,14 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.0.0"
+$script:AppVersion = "1.1.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
+$script:ContinuousPingRunning = $false
+$script:ContinuousPingPS = $null
+$script:CachedPublicIP = $null
+$script:SpeedTestRunning = $false
 
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
@@ -334,7 +339,7 @@ $script:DnsPresets = [ordered]@{
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="NetForge - Network Adapter Management"
     Width="1200"
-    Height="850"
+    Height="900"
     MinWidth="1000"
     MinHeight="700"
     WindowStartupLocation="CenterScreen"
@@ -645,6 +650,7 @@ $script:DnsPresets = [ordered]@{
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -657,12 +663,12 @@ $script:DnsPresets = [ordered]@{
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                
+
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.0.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.1.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -674,8 +680,95 @@ $script:DnsPresets = [ordered]@{
             </Grid>
         </Border>
 
+        <!-- Connection Status Bar -->
+        <Border Grid.Row="1" Background="#0f1318" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Connection Status -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,24,0" VerticalAlignment="Center">
+                    <Border x:Name="connStatusDot" Width="10" Height="10" CornerRadius="5" Background="{StaticResource AccentRedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <StackPanel>
+                        <TextBlock Text="STATUS" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock x:Name="txtConnStatus" Text="Checking..." FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Medium"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Local IP -->
+                <StackPanel Grid.Column="1" Margin="0,0,24,0" VerticalAlignment="Center">
+                    <TextBlock Text="LOCAL IP" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
+                    <TextBlock x:Name="txtConnLocalIP" Text="--" FontSize="12" Foreground="{StaticResource AccentBlueBrush}" FontFamily="Consolas"/>
+                </StackPanel>
+
+                <!-- Public IP -->
+                <StackPanel Grid.Column="2" Margin="0,0,24,0" VerticalAlignment="Center">
+                    <TextBlock Text="PUBLIC IP" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
+                    <TextBlock x:Name="txtConnPublicIP" Text="--" FontSize="12" Foreground="{StaticResource AccentBlueBrush}" FontFamily="Consolas"/>
+                </StackPanel>
+
+                <!-- Gateway -->
+                <StackPanel Grid.Column="3" Margin="0,0,24,0" VerticalAlignment="Center">
+                    <TextBlock Text="GATEWAY" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
+                    <TextBlock x:Name="txtConnGateway" Text="--" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" FontFamily="Consolas"/>
+                </StackPanel>
+
+                <!-- Connection Type -->
+                <StackPanel Grid.Column="4" Margin="0,0,24,0" VerticalAlignment="Center">
+                    <TextBlock Text="TYPE" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
+                    <TextBlock x:Name="txtConnType" Text="--" FontSize="12" Foreground="{StaticResource AccentOrangeBrush}" FontWeight="Medium"/>
+                </StackPanel>
+
+                <!-- WiFi Info (only visible when WiFi) -->
+                <StackPanel x:Name="pnlWifiInfo" Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="SSID: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiSSID" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Medium"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Signal: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiSignal" Text="--" FontSize="11" Foreground="{StaticResource AccentGreenBrush}" FontWeight="Medium"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Ch: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiChannel" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock Text=" / " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiBand" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Auth: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiAuth" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Speed: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiSpeed" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Speed Test Button -->
+                <Button x:Name="btnSpeedTest" Grid.Column="6" Content="Speed Test" Style="{StaticResource ModernButton}" Padding="12,6" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
         <!-- Main Content -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="320"/>
                 <ColumnDefinition Width="*"/>
@@ -723,29 +816,29 @@ $script:DnsPresets = [ordered]@{
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
-                                        
+
                                         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
                                             <Ellipse x:Name="statusIndicator" Width="10" Height="10" Fill="{StaticResource AccentGreenBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
                                             <TextBlock x:Name="txtAdapterName" Text="Select an adapter" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
                                         </StackPanel>
-                                        
+
                                         <Grid Grid.Row="1">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            
+
                                             <StackPanel Grid.Column="0">
                                                 <TextBlock Text="Current IP" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                 <TextBlock x:Name="txtCurrentIP" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
                                             </StackPanel>
-                                            
+
                                             <StackPanel Grid.Column="1">
                                                 <TextBlock Text="MAC Address" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                 <TextBlock x:Name="txtMAC" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
                                             </StackPanel>
-                                            
+
                                             <StackPanel Grid.Column="2">
                                                 <TextBlock Text="Status" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                 <TextBlock x:Name="txtStatus" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
@@ -756,7 +849,7 @@ $script:DnsPresets = [ordered]@{
 
                                 <!-- IP Mode Selection -->
                                 <TextBlock Text="IP CONFIGURATION MODE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
-                                
+
                                 <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <RadioButton x:Name="rbDHCP" Content="Obtain IP address automatically (DHCP)" Style="{StaticResource ModernRadioButton}" GroupName="IPMode" IsChecked="True" Margin="0,0,0,12"/>
@@ -812,7 +905,7 @@ $script:DnsPresets = [ordered]@{
                             <StackPanel Margin="24">
                                 <!-- DNS Preset Selection -->
                                 <TextBlock Text="DNS SERVER PRESETS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
-                                
+
                                 <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -847,7 +940,7 @@ $script:DnsPresets = [ordered]@{
 
                                 <!-- DNS Mode Selection -->
                                 <TextBlock Text="DNS CONFIGURATION MODE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
-                                
+
                                 <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <RadioButton x:Name="rbDnsDHCP" Content="Obtain DNS server address automatically" Style="{StaticResource ModernRadioButton}" GroupName="DNSMode" IsChecked="True" Margin="0,0,0,12"/>
@@ -1034,7 +1127,7 @@ $script:DnsPresets = [ordered]@{
                             <StackPanel Margin="24">
                                 <!-- Quick Actions -->
                                 <TextBlock Text="QUICK ACTIONS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
-                                
+
                                 <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <WrapPanel>
                                         <Button x:Name="btnFlushDns" Content="Flush DNS Cache" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
@@ -1048,7 +1141,7 @@ $script:DnsPresets = [ordered]@{
 
                                 <!-- Network Diagnostics -->
                                 <TextBlock Text="NETWORK DIAGNOSTICS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
-                                
+
                                 <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
@@ -1073,7 +1166,7 @@ $script:DnsPresets = [ordered]@{
 
                                 <!-- Adapter Information -->
                                 <TextBlock Text="ADAPTER DETAILS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
-                                
+
                                 <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -1143,20 +1236,134 @@ $script:DnsPresets = [ordered]@{
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
+
+                    <!-- Diagnostics Tab -->
+                    <TabItem Header="Diagnostics">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Margin="24">
+                                <!-- Ping Test -->
+                                <TextBlock Text="PING / LATENCY MONITOR" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="txtDiagPingTarget" Style="{StaticResource ModernTextBox}" Text="8.8.8.8" Grid.Column="0" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnDiagPing" Content="Ping Test (10x)" Style="{StaticResource PrimaryButton}" Grid.Column="1" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnContinuousPing" Content="Start Continuous Ping" Style="{StaticResource ModernButton}" Grid.Column="2"/>
+                                        </Grid>
+
+                                        <!-- Ping Statistics -->
+                                        <Border x:Name="pnlPingStats" Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16" Visibility="Collapsed">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                                    <TextBlock Text="MIN" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtPingMin" Text="--" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentGreenBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="ms" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                                    <TextBlock Text="AVG" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtPingAvg" Text="--" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentBlueBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="ms" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                                    <TextBlock Text="MAX" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtPingMax" Text="--" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="ms" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+                                                    <TextBlock Text="LOSS" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtPingLoss" Text="--" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentRedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="%" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Continuous Ping Log -->
+                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="350">
+                                            <ScrollViewer x:Name="svPingLog" VerticalScrollBarVisibility="Auto">
+                                                <TextBlock x:Name="txtPingLog" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Ping results will appear here..."/>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- DNS Lookup -->
+                                <TextBlock Text="DNS LOOKUP" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="txtDnsLookupDomain" Style="{StaticResource ModernTextBox}" Text="example.com" Grid.Column="0" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnDnsLookup" Content="Lookup" Style="{StaticResource PrimaryButton}" Grid.Column="1"/>
+                                        </Grid>
+
+                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="200">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <TextBlock x:Name="txtDnsLookupOutput" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Enter a domain name and click Lookup..."/>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Speed Test Result -->
+                                <TextBlock Text="SPEED TEST RESULT" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border x:Name="pnlSpeedResult" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                            <TextBlock Text="DOWNLOAD" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock x:Name="txtSpeedDown" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentGreenBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Mbps" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+                                            <TextBlock Text="FILE SIZE" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock x:Name="txtSpeedSize" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBlueBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="MB" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                            <TextBlock Text="DURATION" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock x:Name="txtSpeedTime" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="sec" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Grid>
         </Grid>
 
         <!-- Status Bar -->
-        <Border Grid.Row="2" Background="{StaticResource BgSecondaryBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
+        <Border Grid.Row="3" Background="{StaticResource BgSecondaryBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                
+
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.0.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.1.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1180,7 +1387,7 @@ $xaml.SelectNodes("//*[@*[contains(translate(name(.),'n','N'),'Name')]]") | ForE
 # ============================================================================
 function Update-Status {
     param([string]$Message, [string]$Type = "Info")
-    
+
     $window.Dispatcher.Invoke([action]{
         $script:txtStatusBar.Text = $Message
         switch ($Type) {
@@ -1251,18 +1458,18 @@ function Get-NetworkAdapters {
 function Refresh-AdapterList {
     $script:lstAdapters.Items.Clear()
     $adapters = Get-NetworkAdapters
-    
+
     foreach ($adapter in $adapters) {
         $status = if ($adapter.Status -eq "Up") { "[OK]" } else { "[--]" }
         $color = if ($adapter.Status -eq "Up") { "#3fb950" } else { "#6e7681" }
-        
+
         $item = New-Object System.Windows.Controls.StackPanel
         $item.Orientation = "Vertical"
         $item.Tag = $adapter
-        
+
         $namePanel = New-Object System.Windows.Controls.StackPanel
         $namePanel.Orientation = "Horizontal"
-        
+
         $statusText = New-Object System.Windows.Controls.TextBlock
         $statusText.Text = $status
         $statusText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom($color)
@@ -1270,28 +1477,28 @@ function Refresh-AdapterList {
         $statusText.FontSize = 12
         $statusText.Margin = "0,0,8,0"
         $statusText.VerticalAlignment = "Center"
-        
+
         $nameText = New-Object System.Windows.Controls.TextBlock
         $nameText.Text = $adapter.Name
         $nameText.FontSize = 13
         $nameText.FontWeight = "Medium"
         $nameText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
-        
+
         $namePanel.Children.Add($statusText) | Out-Null
         $namePanel.Children.Add($nameText) | Out-Null
-        
+
         $descText = New-Object System.Windows.Controls.TextBlock
         $descText.Text = $adapter.InterfaceDescription
         $descText.FontSize = 11
         $descText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
         $descText.Margin = "22,4,0,0"
-        
+
         $item.Children.Add($namePanel) | Out-Null
         $item.Children.Add($descText) | Out-Null
-        
+
         $script:lstAdapters.Items.Add($item) | Out-Null
     }
-    
+
     Update-Status "Found $($adapters.Count) network adapter(s)"
 }
 
@@ -1311,17 +1518,17 @@ function Update-AdapterDisplay {
         $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#6e7681")
         return
     }
-    
+
     $script:txtAdapterName.Text = $adapter.Name
     $script:txtMAC.Text = $adapter.MacAddress
     $script:txtStatus.Text = $adapter.Status
-    
+
     if ($adapter.Status -eq "Up") {
         $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#3fb950")
     } else {
         $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
     }
-    
+
     # Get IP configuration
     try {
         $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -1333,13 +1540,13 @@ function Update-AdapterDisplay {
         } else {
             $script:txtCurrentIP.Text = "Not configured"
         }
-        
+
         # Get gateway
         $gateway = Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($gateway) {
             $script:txtGateway.Text = $gateway.NextHop
         }
-        
+
         # Check if DHCP
         $dhcpEnabled = (Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).Dhcp -eq "Enabled"
         if ($dhcpEnabled) {
@@ -1350,38 +1557,38 @@ function Update-AdapterDisplay {
     } catch {
         $script:txtCurrentIP.Text = "Error"
     }
-    
+
     Update-AdapterDetails
 }
 
 function Update-AdapterDetails {
     $adapter = Get-SelectedAdapter
     if ($null -eq $adapter) { return }
-    
+
     try {
         $script:txtInfoIndex.Text = $adapter.ifIndex.ToString()
         $script:txtInfoType.Text = $adapter.InterfaceType
-        
+
         $speed = $adapter.LinkSpeed
         $script:txtInfoSpeed.Text = $speed
-        
+
         $script:txtInfoMedia.Text = if ($adapter.MediaConnectionState -eq "Connected") { "Connected" } else { "Disconnected" }
-        
+
         $ipInterface = Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
         $script:txtInfoDHCP.Text = if ($ipInterface.Dhcp -eq "Enabled") { "Yes" } else { "No" }
-        
+
         $dhcpServer = (Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.InterfaceIndex -eq $adapter.ifIndex }).DHCPServer
         $script:txtInfoDHCPServer.Text = if ($dhcpServer) { $dhcpServer } else { "--" }
-        
+
         $dnsServers = (Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
         $script:txtInfoDNS.Text = if ($dnsServers) { $dnsServers -join ", " } else { "--" }
-        
+
         $gateway = Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
         $script:txtInfoGateway.Text = if ($gateway) { $gateway.NextHop } else { "--" }
-        
+
         $ipv6 = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1
         $script:txtInfoIPv6.Text = if ($ipv6) { $ipv6.IPAddress } else { "--" }
-        
+
         $script:txtInfoDriver.Text = $adapter.DriverDescription
         $script:txtInfoMAC.Text = $adapter.MacAddress
     } catch {
@@ -1390,40 +1597,598 @@ function Update-AdapterDetails {
 }
 
 # ============================================================================
+# CONNECTION STATUS FUNCTIONS
+# ============================================================================
+function Update-ConnectionStatus {
+    try {
+        # Determine connection type and status
+        $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and ($_.Virtual -eq $false -or $_.Name -like "*Ethernet*" -or $_.Name -like "*Wi-Fi*") } | Select-Object -First 1
+
+        if ($null -eq $activeAdapter) {
+            $script:connStatusDot.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
+            $script:txtConnStatus.Text = "Disconnected"
+            $script:txtConnLocalIP.Text = "--"
+            $script:txtConnGateway.Text = "--"
+            $script:txtConnType.Text = "--"
+            $script:pnlWifiInfo.Visibility = "Collapsed"
+            return
+        }
+
+        $script:connStatusDot.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#3fb950")
+        $script:txtConnStatus.Text = "Connected"
+
+        # Local IP
+        $localIP = Get-NetIPAddress -InterfaceIndex $activeAdapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+        $script:txtConnLocalIP.Text = if ($localIP) { $localIP.IPAddress } else { "--" }
+
+        # Gateway
+        $gw = Get-NetRoute -InterfaceIndex $activeAdapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $script:txtConnGateway.Text = if ($gw) { $gw.NextHop } else { "--" }
+
+        # Connection type
+        $connType = "Unknown"
+        if ($activeAdapter.Name -like "*Wi-Fi*" -or $activeAdapter.Name -like "*Wireless*" -or $activeAdapter.InterfaceDescription -like "*Wireless*" -or $activeAdapter.InterfaceDescription -like "*Wi-Fi*") {
+            $connType = "WiFi"
+        } elseif ($activeAdapter.Name -like "*Ethernet*" -or $activeAdapter.InterfaceType -eq 6) {
+            $connType = "Ethernet"
+        } elseif ($activeAdapter.Name -like "*VPN*" -or $activeAdapter.InterfaceDescription -like "*VPN*" -or $activeAdapter.InterfaceDescription -like "*TAP*" -or $activeAdapter.InterfaceDescription -like "*TUN*") {
+            $connType = "VPN"
+        }
+        $script:txtConnType.Text = $connType
+
+        # WiFi info
+        if ($connType -eq "WiFi") {
+            $script:pnlWifiInfo.Visibility = "Visible"
+            Update-WifiInfo
+        } else {
+            $script:pnlWifiInfo.Visibility = "Collapsed"
+        }
+    } catch {
+        # Ignore errors in status refresh
+    }
+}
+
+function Update-WifiInfo {
+    try {
+        $wlanOutput = netsh wlan show interfaces 2>&1 | Out-String
+        $lines = $wlanOutput -split "`n"
+
+        $ssid = "--"
+        $signal = "--"
+        $channel = "--"
+        $band = "--"
+        $auth = "--"
+        $speed = "--"
+
+        foreach ($line in $lines) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^\s*SSID\s*:\s*(.+)$' -and $trimmed -notmatch 'BSSID') {
+                $ssid = $Matches[1].Trim()
+            }
+            if ($trimmed -match '^\s*Signal\s*:\s*(.+)$') {
+                $signal = $Matches[1].Trim()
+            }
+            if ($trimmed -match '^\s*Channel\s*:\s*(.+)$') {
+                $channel = $Matches[1].Trim()
+            }
+            if ($trimmed -match '^\s*Band\s*:\s*(.+)$') {
+                $band = $Matches[1].Trim()
+            }
+            if ($trimmed -match '^\s*Radio type\s*:\s*(.+)$') {
+                $radioType = $Matches[1].Trim()
+                if ($band -eq "--") {
+                    if ($radioType -match '802\.11a' -or $radioType -match '802\.11ac' -or $radioType -match '802\.11ax' -or $radioType -match '802\.11n.*5') {
+                        $band = "5 GHz"
+                    } else {
+                        $band = "2.4 GHz"
+                    }
+                }
+            }
+            if ($trimmed -match '^\s*Authentication\s*:\s*(.+)$') {
+                $auth = $Matches[1].Trim()
+            }
+            if ($trimmed -match '^\s*Receive rate \(Mbps\)\s*:\s*(.+)$') {
+                $speed = $Matches[1].Trim() + " Mbps"
+            }
+        }
+
+        $script:txtWifiSSID.Text = $ssid
+        $script:txtWifiSignal.Text = $signal
+        $script:txtWifiChannel.Text = $channel
+        $script:txtWifiBand.Text = $band
+        $script:txtWifiAuth.Text = $auth
+        $script:txtWifiSpeed.Text = $speed
+
+        # Color signal strength
+        $signalNum = 0
+        if ($signal -match '(\d+)') { $signalNum = [int]$Matches[1] }
+        if ($signalNum -ge 70) {
+            $script:txtWifiSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#3fb950")
+        } elseif ($signalNum -ge 40) {
+            $script:txtWifiSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#d29922")
+        } else {
+            $script:txtWifiSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
+        }
+    } catch {
+        # Ignore wifi info errors
+    }
+}
+
+function Update-PublicIP {
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        try {
+            $wc = New-Object System.Net.WebClient
+            $wc.Headers.Add("User-Agent", "NetForge/1.1.0")
+            $ip = $wc.DownloadString("https://api.ipify.org").Trim()
+            $wc.Dispose()
+            return $ip
+        } catch {
+            try {
+                $wc2 = New-Object System.Net.WebClient
+                $wc2.Headers.Add("User-Agent", "NetForge/1.1.0")
+                $ip = $wc2.DownloadString("https://icanhazip.com").Trim()
+                $wc2.Dispose()
+                return $ip
+            } catch {
+                return "Error"
+            }
+        }
+    })
+
+    $handle = $ps.BeginInvoke()
+
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(500)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $result = $ps.EndInvoke($handle)
+                if ($result -and $result.Count -gt 0) {
+                    $script:CachedPublicIP = $result[0]
+                    $script:txtConnPublicIP.Text = $result[0]
+                }
+            } catch {
+                $script:txtConnPublicIP.Text = "Error"
+            }
+            $ps.Dispose()
+            $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+# ============================================================================
+# PING / LATENCY MONITOR FUNCTIONS
+# ============================================================================
+function Invoke-DiagPingTest {
+    $target = $script:txtDiagPingTarget.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
+        return
+    }
+
+    $script:btnDiagPing.IsEnabled = $false
+    $script:txtPingLog.Text = "Pinging $target with 10 requests...`n"
+    $script:pnlPingStats.Visibility = "Collapsed"
+    Update-Status "Running ping test to $target..."
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        param($t)
+        $results = @()
+        $lost = 0
+        for ($i = 0; $i -lt 10; $i++) {
+            try {
+                $ping = New-Object System.Net.NetworkInformation.Ping
+                $reply = $ping.Send($t, 3000)
+                if ($reply.Status -eq 'Success') {
+                    $results += $reply.RoundtripTime
+                } else {
+                    $lost++
+                    $results += -1
+                }
+                $ping.Dispose()
+            } catch {
+                $lost++
+                $results += -1
+            }
+        }
+        return @{
+            Results = $results
+            Lost = $lost
+        }
+    }).AddArgument($target)
+
+    $handle = $ps.BeginInvoke()
+
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(500)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $data = $ps.EndInvoke($handle)
+                if ($data -and $data.Count -gt 0) {
+                    $info = $data[0]
+                    $allResults = $info.Results
+                    $lost = $info.Lost
+                    $successful = $allResults | Where-Object { $_ -ge 0 }
+
+                    $sb = New-Object System.Text.StringBuilder
+                    $sb.AppendLine("Ping results for $target (10 pings):") | Out-Null
+                    $sb.AppendLine("=" * 40) | Out-Null
+                    $seq = 0
+                    foreach ($r in $allResults) {
+                        $seq++
+                        if ($r -ge 0) {
+                            $sb.AppendLine("  Seq $seq : ${r}ms") | Out-Null
+                        } else {
+                            $sb.AppendLine("  Seq $seq : Request timed out") | Out-Null
+                        }
+                    }
+                    $script:txtPingLog.Text = $sb.ToString()
+
+                    $script:pnlPingStats.Visibility = "Visible"
+                    if ($successful -and @($successful).Count -gt 0) {
+                        $successArr = @($successful)
+                        $minVal = ($successArr | Measure-Object -Minimum).Minimum
+                        $maxVal = ($successArr | Measure-Object -Maximum).Maximum
+                        $avgVal = [math]::Round(($successArr | Measure-Object -Average).Average, 1)
+                        $script:txtPingMin.Text = $minVal.ToString()
+                        $script:txtPingAvg.Text = $avgVal.ToString()
+                        $script:txtPingMax.Text = $maxVal.ToString()
+                    } else {
+                        $script:txtPingMin.Text = "--"
+                        $script:txtPingAvg.Text = "--"
+                        $script:txtPingMax.Text = "--"
+                    }
+                    $lossPercent = [math]::Round(($lost / 10) * 100, 0)
+                    $script:txtPingLoss.Text = $lossPercent.ToString()
+                }
+            } catch {
+                $script:txtPingLog.Text = "Error running ping test."
+            }
+            $ps.Dispose()
+            $script:btnDiagPing.IsEnabled = $true
+            Update-Status "Ping test complete"
+            $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+function Toggle-ContinuousPing {
+    if ($script:ContinuousPingRunning) {
+        # Stop continuous ping
+        $script:ContinuousPingRunning = $false
+        $script:btnContinuousPing.Content = "Start Continuous Ping"
+        if ($script:ContinuousPingPS) {
+            try {
+                $script:ContinuousPingPS.Stop()
+                $script:ContinuousPingPS.Dispose()
+            } catch {}
+            $script:ContinuousPingPS = $null
+        }
+        Update-Status "Continuous ping stopped"
+        return
+    }
+
+    $target = $script:txtDiagPingTarget.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
+        return
+    }
+
+    $script:ContinuousPingRunning = $true
+    $script:btnContinuousPing.Content = "Stop Continuous Ping"
+    $script:txtPingLog.Text = "Continuous ping to $target started...`n"
+    $script:txtPingLog.Inlines.Clear()
+    Update-Status "Continuous ping running to $target..."
+
+    $script:PingCounter = 0
+
+    $pingTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $pingTimer.Interval = [TimeSpan]::FromSeconds(2)
+    $pingTimer.Tag = $target
+
+    $pingTimer.Add_Tick({
+        if (-not $script:ContinuousPingRunning) {
+            $pingTimer.Stop()
+            return
+        }
+
+        $t = $pingTimer.Tag
+        $ps = [PowerShell]::Create()
+        $ps.AddScript({
+            param($target)
+            try {
+                $ping = New-Object System.Net.NetworkInformation.Ping
+                $reply = $ping.Send($target, 3000)
+                $ping.Dispose()
+                if ($reply.Status -eq 'Success') {
+                    return @{ Time = $reply.RoundtripTime; Status = "OK" }
+                } else {
+                    return @{ Time = -1; Status = $reply.Status.ToString() }
+                }
+            } catch {
+                return @{ Time = -1; Status = "Error" }
+            }
+        }).AddArgument($t)
+
+        $handle = $ps.BeginInvoke()
+
+        $resultTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $resultTimer.Interval = [TimeSpan]::FromMilliseconds(200)
+        $resultTimer.Add_Tick({
+            if ($handle.IsCompleted) {
+                try {
+                    $data = $ps.EndInvoke($handle)
+                    if ($data -and $data.Count -gt 0) {
+                        $info = $data[0]
+                        $script:PingCounter++
+                        $ts = Get-Date -Format "HH:mm:ss"
+
+                        if ($info.Time -ge 0) {
+                            $ms = $info.Time
+                            $color = "#3fb950"
+                            if ($ms -gt 100) { $color = "#f85149" }
+                            elseif ($ms -gt 50) { $color = "#d29922" }
+
+                            $run = New-Object System.Windows.Documents.Run
+                            $run.Text = "[$ts] #$($script:PingCounter) Reply from $t : ${ms}ms`n"
+                            $run.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom($color)
+                        } else {
+                            $run = New-Object System.Windows.Documents.Run
+                            $run.Text = "[$ts] #$($script:PingCounter) Request timed out ($($info.Status))`n"
+                            $run.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
+                        }
+
+                        # Convert TextBlock to use Inlines for color
+                        $script:txtPingLog.Inlines.Add($run)
+
+                        # Keep only last 100 lines
+                        while ($script:txtPingLog.Inlines.Count -gt 100) {
+                            $script:txtPingLog.Inlines.Remove($script:txtPingLog.Inlines.FirstInline)
+                        }
+
+                        # Auto-scroll
+                        $script:svPingLog.ScrollToEnd()
+                    }
+                } catch {}
+                $ps.Dispose()
+                $resultTimer.Stop()
+            }
+        }.GetNewClosure())
+        $resultTimer.Start()
+    }.GetNewClosure())
+    $pingTimer.Start()
+
+    # Store reference so we can stop
+    $script:ContinuousPingTimer = $pingTimer
+}
+
+# ============================================================================
+# SPEED TEST FUNCTION
+# ============================================================================
+function Invoke-SpeedTest {
+    if ($script:SpeedTestRunning) { return }
+    $script:SpeedTestRunning = $true
+    $script:btnSpeedTest.IsEnabled = $false
+    $script:btnSpeedTest.Content = "Testing..."
+    Update-Status "Running speed test..."
+
+    $script:txtSpeedDown.Text = "..."
+    $script:txtSpeedSize.Text = "..."
+    $script:txtSpeedTime.Text = "..."
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        try {
+            # Use a ~10MB test file from a reliable CDN
+            $url = "http://speedtest.tele2.net/10MB.zip"
+            $wc = New-Object System.Net.WebClient
+            $wc.Headers.Add("User-Agent", "NetForge/1.1.0")
+
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $data = $wc.DownloadData($url)
+            $sw.Stop()
+            $wc.Dispose()
+
+            $sizeBytes = $data.Length
+            $sizeMB = [math]::Round($sizeBytes / 1MB, 2)
+            $elapsed = $sw.Elapsed.TotalSeconds
+            $speedMbps = [math]::Round(($sizeBytes * 8) / ($elapsed * 1000000), 2)
+
+            return @{
+                SpeedMbps = $speedMbps
+                SizeMB = $sizeMB
+                Seconds = [math]::Round($elapsed, 2)
+                Success = $true
+            }
+        } catch {
+            # Fallback URL
+            try {
+                $url2 = "http://proof.ovh.net/files/1Mb.dat"
+                $wc2 = New-Object System.Net.WebClient
+                $wc2.Headers.Add("User-Agent", "NetForge/1.1.0")
+
+                $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
+                $data2 = $wc2.DownloadData($url2)
+                $sw2.Stop()
+                $wc2.Dispose()
+
+                $sizeBytes2 = $data2.Length
+                $sizeMB2 = [math]::Round($sizeBytes2 / 1MB, 2)
+                $elapsed2 = $sw2.Elapsed.TotalSeconds
+                $speedMbps2 = [math]::Round(($sizeBytes2 * 8) / ($elapsed2 * 1000000), 2)
+
+                return @{
+                    SpeedMbps = $speedMbps2
+                    SizeMB = $sizeMB2
+                    Seconds = [math]::Round($elapsed2, 2)
+                    Success = $true
+                }
+            } catch {
+                return @{ Success = $false; Error = $_.Exception.Message }
+            }
+        }
+    })
+
+    $handle = $ps.BeginInvoke()
+
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(500)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $data = $ps.EndInvoke($handle)
+                if ($data -and $data.Count -gt 0) {
+                    $info = $data[0]
+                    if ($info.Success) {
+                        $script:txtSpeedDown.Text = $info.SpeedMbps.ToString()
+                        $script:txtSpeedSize.Text = $info.SizeMB.ToString()
+                        $script:txtSpeedTime.Text = $info.Seconds.ToString()
+                        Update-Status ("Speed test complete: " + $info.SpeedMbps.ToString() + " Mbps") -Type Success
+                    } else {
+                        $script:txtSpeedDown.Text = "ERR"
+                        $script:txtSpeedSize.Text = "--"
+                        $script:txtSpeedTime.Text = "--"
+                        Update-Status "Speed test failed" -Type Error
+                    }
+                }
+            } catch {
+                $script:txtSpeedDown.Text = "ERR"
+                Update-Status "Speed test error" -Type Error
+            }
+            $ps.Dispose()
+            $script:SpeedTestRunning = $false
+            $script:btnSpeedTest.IsEnabled = $true
+            $script:btnSpeedTest.Content = "Speed Test"
+            $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+# ============================================================================
+# DNS LOOKUP FUNCTION
+# ============================================================================
+function Invoke-DnsLookup {
+    $domain = $script:txtDnsLookupDomain.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($domain)) {
+        Show-MessageBox -Message "Please enter a domain name." -Title "No Domain" -Icon Warning
+        return
+    }
+
+    $script:btnDnsLookup.IsEnabled = $false
+    $script:txtDnsLookupOutput.Text = "Resolving $domain ..."
+    Update-Status "DNS lookup for $domain..."
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        param($d)
+        $sb = New-Object System.Text.StringBuilder
+
+        try {
+            # Get current DNS servers
+            $dnsConfig = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.ServerAddresses.Count -gt 0 } | Select-Object -First 1
+            $dnsServer = if ($dnsConfig) { $dnsConfig.ServerAddresses -join ", " } else { "System default" }
+
+            $sb.AppendLine("DNS Lookup: $d") | Out-Null
+            $sb.AppendLine("=" * 40) | Out-Null
+            $sb.AppendLine("DNS Server: $dnsServer") | Out-Null
+            $sb.AppendLine("") | Out-Null
+
+            $results = [System.Net.Dns]::GetHostAddresses($d)
+
+            if ($results.Count -gt 0) {
+                $sb.AppendLine("Resolved addresses:") | Out-Null
+                foreach ($addr in $results) {
+                    $type = if ($addr.AddressFamily -eq 'InterNetwork') { "A (IPv4)" } else { "AAAA (IPv6)" }
+                    $sb.AppendLine("  $type : $($addr.IPAddressToString)") | Out-Null
+                }
+            } else {
+                $sb.AppendLine("No addresses found.") | Out-Null
+            }
+
+            # Also try to get hostname info
+            try {
+                $hostEntry = [System.Net.Dns]::GetHostEntry($d)
+                if ($hostEntry.HostName -ne $d) {
+                    $sb.AppendLine("") | Out-Null
+                    $sb.AppendLine("Canonical name: $($hostEntry.HostName)") | Out-Null
+                }
+                if ($hostEntry.Aliases.Count -gt 0) {
+                    $sb.AppendLine("Aliases: $($hostEntry.Aliases -join ', ')") | Out-Null
+                }
+            } catch {}
+
+        } catch {
+            $sb.AppendLine("DNS lookup failed: $($_.Exception.Message)") | Out-Null
+        }
+
+        return $sb.ToString()
+    }).AddArgument($domain)
+
+    $handle = $ps.BeginInvoke()
+
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(300)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $result = $ps.EndInvoke($handle)
+                if ($result -and $result.Count -gt 0) {
+                    $script:txtDnsLookupOutput.Text = $result[0]
+                }
+            } catch {
+                $script:txtDnsLookupOutput.Text = "Error performing DNS lookup."
+            }
+            $ps.Dispose()
+            $script:btnDnsLookup.IsEnabled = $true
+            Update-Status "DNS lookup complete"
+            $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+# ============================================================================
 # DNS PRESET FUNCTIONS
 # ============================================================================
 function Refresh-DnsPresets {
     param([string]$Filter = "", [string]$Category = "All Categories")
-    
+
     $script:lstDnsPresets.Items.Clear()
-    
+
     foreach ($preset in $script:DnsPresets.GetEnumerator()) {
         $name = $preset.Key
         $data = $preset.Value
-        
+
         # Apply filters
         if ($Filter -and $name -notlike "*$Filter*" -and $data.Description -notlike "*$Filter*") { continue }
         if ($Category -ne "All Categories" -and $data.Category -ne $Category) { continue }
-        
+
         $item = New-Object System.Windows.Controls.StackPanel
         $item.Orientation = "Vertical"
         $item.Tag = @{ Name = $name; Data = $data }
-        
+
         $headerPanel = New-Object System.Windows.Controls.StackPanel
         $headerPanel.Orientation = "Horizontal"
-        
+
         $nameText = New-Object System.Windows.Controls.TextBlock
         $nameText.Text = $name
         $nameText.FontSize = 13
         $nameText.FontWeight = "Medium"
         $nameText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
-        
+
         $categoryBorder = New-Object System.Windows.Controls.Border
         $categoryBorder.CornerRadius = "4"
         $categoryBorder.Padding = "6,2"
         $categoryBorder.Margin = "10,0,0,0"
         $categoryBorder.VerticalAlignment = "Center"
-        
+
         $categoryColor = switch ($data.Category) {
             "Public"      { "#1f6feb" }
             "Security"    { "#f85149" }
@@ -1433,22 +2198,22 @@ function Refresh-DnsPresets {
             default       { "#6e7681" }
         }
         $categoryBorder.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("$categoryColor" + "30")
-        
+
         $categoryText = New-Object System.Windows.Controls.TextBlock
         $categoryText.Text = $data.Category
         $categoryText.FontSize = 10
         $categoryText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom($categoryColor)
         $categoryBorder.Child = $categoryText
-        
+
         $headerPanel.Children.Add($nameText) | Out-Null
         $headerPanel.Children.Add($categoryBorder) | Out-Null
-        
+
         $descText = New-Object System.Windows.Controls.TextBlock
         $descText.Text = $data.Description
         $descText.FontSize = 11
         $descText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
         $descText.Margin = "0,4,0,0"
-        
+
         $dnsText = New-Object System.Windows.Controls.TextBlock
         if ($data.Primary -eq "DHCP") {
             $dnsText.Text = "Automatic"
@@ -1460,11 +2225,11 @@ function Refresh-DnsPresets {
         $dnsText.FontFamily = New-Object System.Windows.Media.FontFamily("Consolas")
         $dnsText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#58a6ff")
         $dnsText.Margin = "0,4,0,0"
-        
+
         $item.Children.Add($headerPanel) | Out-Null
         $item.Children.Add($descText) | Out-Null
         $item.Children.Add($dnsText) | Out-Null
-        
+
         $script:lstDnsPresets.Items.Add($item) | Out-Null
     }
 }
@@ -1475,12 +2240,12 @@ function Update-SelectedDnsDisplay {
         $script:pnlSelectedDns.Visibility = "Collapsed"
         return
     }
-    
+
     $presetData = $selected.Tag
     $script:pnlSelectedDns.Visibility = "Visible"
     $script:txtSelectedDnsName.Text = $presetData.Name
     $script:txtSelectedDnsDesc.Text = $presetData.Data.Description
-    
+
     if ($presetData.Data.Primary -eq "DHCP") {
         $script:txtSelectedDnsPrimary.Text = "Automatic"
         $script:txtSelectedDnsSecondary.Text = "Automatic"
@@ -1488,7 +2253,7 @@ function Update-SelectedDnsDisplay {
         $script:txtSelectedDnsPrimary.Text = $presetData.Data.Primary
         $script:txtSelectedDnsSecondary.Text = if ($presetData.Data.Secondary) { $presetData.Data.Secondary } else { "Not set" }
     }
-    
+
     # Auto-fill custom fields
     if ($presetData.Data.Primary -ne "DHCP") {
         $script:txtDnsPrimary.Text = $presetData.Data.Primary
@@ -1515,27 +2280,27 @@ function Get-Profiles {
 function Refresh-ProfileList {
     $script:lstProfiles.Items.Clear()
     $profiles = Get-Profiles
-    
+
     foreach ($profile in $profiles) {
         $item = New-Object System.Windows.Controls.StackPanel
         $item.Orientation = "Vertical"
         $item.Tag = $profile
-        
+
         $nameText = New-Object System.Windows.Controls.TextBlock
         $nameText.Text = $profile.Name
         $nameText.FontSize = 13
         $nameText.FontWeight = "Medium"
         $nameText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
-        
+
         $descText = New-Object System.Windows.Controls.TextBlock
         $descText.Text = if ($profile.Description) { $profile.Description } else { "No description" }
         $descText.FontSize = 11
         $descText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
         $descText.Margin = "0,4,0,0"
-        
+
         $item.Children.Add($nameText) | Out-Null
         $item.Children.Add($descText) | Out-Null
-        
+
         $script:lstProfiles.Items.Add($item) | Out-Null
     }
 }
@@ -1543,7 +2308,7 @@ function Refresh-ProfileList {
 function Load-ProfileToEditor {
     $selected = $script:lstProfiles.SelectedItem
     if ($null -eq $selected) { return }
-    
+
     $profile = $selected.Tag
     $script:txtProfileName.Text = $profile.Name
     $script:txtProfileDesc.Text = $profile.Description
@@ -1563,7 +2328,7 @@ function Save-Profile {
         Show-MessageBox -Message "Please enter a profile name." -Title "Validation Error" -Icon Warning
         return
     }
-    
+
     $profile = @{
         Name = $name
         Description = $script:txtProfileDesc.Text
@@ -1577,11 +2342,11 @@ function Save-Profile {
         SecondaryDNS = $script:txtProfileDns2.Text
         CreatedAt = (Get-Date).ToString("o")
     }
-    
+
     $safeName = $name -replace '[^\w\-]', '_'
     $filePath = Join-Path $script:ProfilesPath "$safeName.json"
     $profile | ConvertTo-Json -Depth 10 | Set-Content -Path $filePath -Encoding UTF8
-    
+
     Update-Status "Profile '$name' saved successfully" -Type Success
     Refresh-ProfileList
 }
@@ -1592,10 +2357,10 @@ function Delete-Profile {
         Show-MessageBox -Message "Please select a profile to delete." -Title "No Selection" -Icon Warning
         return
     }
-    
+
     $profile = $selected.Tag
     $result = Show-MessageBox -Message "Are you sure you want to delete profile '$($profile.Name)'?" -Title "Confirm Delete" -Buttons YesNo -Icon Question
-    
+
     if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
         $safeName = $profile.Name -replace '[^\w\-]', '_'
         $filePath = Join-Path $script:ProfilesPath "$safeName.json"
@@ -1616,54 +2381,54 @@ function Apply-IPConfiguration {
         Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
         return
     }
-    
+
     $result = Show-MessageBox -Message "Apply IP configuration to '$($adapter.Name)'?" -Title "Confirm" -Buttons YesNo -Icon Question
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
-    
+
     Update-Status "Applying IP configuration..."
-    
+
     try {
         if ($script:rbDHCP.IsChecked) {
             # Enable DHCP
             Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -Dhcp Enabled -ErrorAction Stop
-            
+
             # Remove static IP addresses
-            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | 
-                Where-Object { $_.PrefixOrigin -eq "Manual" } | 
+            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.PrefixOrigin -eq "Manual" } |
                 Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            
+
             # Remove static gateway
-            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | 
+            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
                 Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-            
+
             Update-Status "DHCP enabled on $($adapter.Name)" -Type Success
         } else {
             # Static IP configuration
             $ip = $script:txtIPAddress.Text.Trim()
             $gateway = $script:txtGateway.Text.Trim()
             $prefix = [int]$script:txtPrefix.Text.Trim()
-            
+
             if (-not (Test-ValidIP $ip)) {
                 Show-MessageBox -Message "Invalid IP address format." -Title "Validation Error" -Icon Error
                 return
             }
-            
+
             # Remove existing configuration
-            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | 
+            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
                 Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | 
+            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
                 Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-            
+
             # Apply new configuration
             New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $ip -PrefixLength $prefix -ErrorAction Stop | Out-Null
-            
+
             if (Test-ValidIP $gateway) {
                 New-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $gateway -ErrorAction Stop | Out-Null
             }
-            
+
             Update-Status "Static IP $ip configured on $($adapter.Name)" -Type Success
         }
-        
+
         Start-Sleep -Milliseconds 500
         Update-AdapterDisplay
     } catch {
@@ -1678,12 +2443,12 @@ function Apply-DNSConfiguration {
         Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
         return
     }
-    
+
     $result = Show-MessageBox -Message "Apply DNS configuration to '$($adapter.Name)'?" -Title "Confirm" -Buttons YesNo -Icon Question
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
-    
+
     Update-Status "Applying DNS configuration..."
-    
+
     try {
         if ($script:rbDnsDHCP.IsChecked) {
             # Use DHCP for DNS
@@ -1696,7 +2461,7 @@ function Apply-DNSConfiguration {
                 Show-MessageBox -Message "Please select a DNS preset." -Title "No Selection" -Icon Warning
                 return
             }
-            
+
             $preset = $selected.Tag.Data
             if ($preset.Primary -eq "DHCP") {
                 Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
@@ -1711,19 +2476,19 @@ function Apply-DNSConfiguration {
             # Custom DNS
             $primary = $script:txtDnsPrimary.Text.Trim()
             $secondary = $script:txtDnsSecondary.Text.Trim()
-            
+
             if (-not (Test-ValidIP $primary)) {
                 Show-MessageBox -Message "Invalid primary DNS address." -Title "Validation Error" -Icon Error
                 return
             }
-            
+
             $dnsServers = @($primary)
             if (Test-ValidIP $secondary) { $dnsServers += $secondary }
-            
+
             Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dnsServers -ErrorAction Stop
             Update-Status "Custom DNS applied to $($adapter.Name)" -Type Success
         }
-        
+
         Update-AdapterDetails
     } catch {
         Update-Status "Error: $($_.Exception.Message)" -Type Error
@@ -1734,46 +2499,46 @@ function Apply-DNSConfiguration {
 function Apply-Profile {
     $adapter = Get-SelectedAdapter
     $selected = $script:lstProfiles.SelectedItem
-    
+
     if ($null -eq $adapter) {
         Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
         return
     }
-    
+
     if ($null -eq $selected) {
         Show-MessageBox -Message "Please select a profile to apply." -Title "No Profile Selected" -Icon Warning
         return
     }
-    
+
     $profile = $selected.Tag
     $result = Show-MessageBox -Message "Apply profile '$($profile.Name)' to adapter '$($adapter.Name)'?" -Title "Confirm" -Buttons YesNo -Icon Question
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
-    
+
     Update-Status "Applying profile '$($profile.Name)'..."
-    
+
     try {
         # Apply IP configuration
         if ($profile.UseDHCP) {
             Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -Dhcp Enabled -ErrorAction Stop
-            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | 
-                Where-Object { $_.PrefixOrigin -eq "Manual" } | 
+            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.PrefixOrigin -eq "Manual" } |
                 Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | 
+            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
                 Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
         } else {
-            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | 
+            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
                 Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | 
+            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
                 Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-            
+
             $prefix = if ($profile.PrefixLength) { [int]$profile.PrefixLength } else { 24 }
             New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $profile.IPAddress -PrefixLength $prefix -ErrorAction Stop | Out-Null
-            
+
             if (Test-ValidIP $profile.Gateway) {
                 New-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $profile.Gateway -ErrorAction Stop | Out-Null
             }
         }
-        
+
         # Apply DNS configuration
         if ($profile.UseDHCPForDNS) {
             Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
@@ -1785,7 +2550,7 @@ function Apply-Profile {
                 Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dnsServers -ErrorAction Stop
             }
         }
-        
+
         Update-Status "Profile '$($profile.Name)' applied successfully" -Type Success
         Start-Sleep -Milliseconds 500
         Update-AdapterDisplay
@@ -1815,7 +2580,7 @@ function Invoke-ReleaseIP {
         Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
         return
     }
-    
+
     Update-Status "Releasing IP address..."
     try {
         $output = ipconfig /release $adapter.Name 2>&1
@@ -1833,7 +2598,7 @@ function Invoke-RenewIP {
         Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
         return
     }
-    
+
     Update-Status "Renewing IP address..."
     try {
         $output = ipconfig /renew $adapter.Name 2>&1
@@ -1848,7 +2613,7 @@ function Invoke-RenewIP {
 function Invoke-ResetWinsock {
     $result = Show-MessageBox -Message "This will reset Winsock catalog. A restart may be required.`n`nContinue?" -Title "Confirm Winsock Reset" -Buttons YesNo -Icon Warning
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
-    
+
     Update-Status "Resetting Winsock..."
     try {
         $output = netsh winsock reset 2>&1
@@ -1862,7 +2627,7 @@ function Invoke-ResetWinsock {
 function Invoke-ResetTCP {
     $result = Show-MessageBox -Message "This will reset TCP/IP stack. A restart may be required.`n`nContinue?" -Title "Confirm TCP/IP Reset" -Buttons YesNo -Icon Warning
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
-    
+
     Update-Status "Resetting TCP/IP stack..."
     try {
         $output = netsh int ip reset 2>&1
@@ -1876,7 +2641,7 @@ function Invoke-ResetTCP {
 function Invoke-NetworkReset {
     $result = Show-MessageBox -Message "This will perform a full network reset including:`n- Winsock reset`n- TCP/IP reset`n- Firewall reset`n`nA restart WILL be required.`n`nContinue?" -Title "Full Network Reset" -Buttons YesNo -Icon Warning
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
-    
+
     Update-Status "Performing full network reset..."
     try {
         $output = @()
@@ -1886,10 +2651,10 @@ function Invoke-NetworkReset {
         $output += netsh int ip reset 2>&1
         $output += "`n=== Firewall Reset ==="
         $output += netsh advfirewall reset 2>&1
-        
+
         $script:txtDiagOutput.Text = $output | Out-String
         Update-Status "Full network reset complete - RESTART REQUIRED" -Type Warning
-        
+
         Show-MessageBox -Message "Network reset complete.`n`nPlease restart your computer for changes to take effect." -Title "Restart Required" -Icon Information
     } catch {
         Update-Status "Error during network reset: $($_.Exception.Message)" -Type Error
@@ -1902,15 +2667,15 @@ function Invoke-Ping {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
         return
     }
-    
+
     Update-Status "Pinging $target..."
     $script:txtDiagOutput.Text = "Pinging $target...`n"
-    
+
     $job = Start-Job -ScriptBlock {
         param($t)
         ping -n 4 $t 2>&1
     } -ArgumentList $target
-    
+
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(500)
     $timer.Add_Tick({
@@ -1931,15 +2696,15 @@ function Invoke-Traceroute {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
         return
     }
-    
+
     Update-Status "Running traceroute to $target..."
     $script:txtDiagOutput.Text = "Tracing route to $target...`n(This may take a moment)`n"
-    
+
     $job = Start-Job -ScriptBlock {
         param($t)
         tracert -d -h 15 $t 2>&1
     } -ArgumentList $target
-    
+
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(500)
     $timer.Add_Tick({
@@ -1960,7 +2725,7 @@ function Invoke-Nslookup {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
         return
     }
-    
+
     Update-Status "Running NSLookup for $target..."
     try {
         $output = nslookup $target 2>&1
@@ -1980,7 +2745,7 @@ function Enable-SelectedAdapter {
         Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
         return
     }
-    
+
     Update-Status "Enabling $($adapter.Name)..."
     try {
         Enable-NetAdapter -Name $adapter.Name -Confirm:$false -ErrorAction Stop
@@ -1998,10 +2763,10 @@ function Disable-SelectedAdapter {
         Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
         return
     }
-    
+
     $result = Show-MessageBox -Message "Disable network adapter '$($adapter.Name)'?`n`nThis will disconnect the network connection." -Title "Confirm" -Buttons YesNo -Icon Warning
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
-    
+
     Update-Status "Disabling $($adapter.Name)..."
     try {
         Disable-NetAdapter -Name $adapter.Name -Confirm:$false -ErrorAction Stop
@@ -2021,7 +2786,7 @@ function Export-AllConfiguration {
     $saveDialog.Filter = "JSON Files (*.json)|*.json"
     $saveDialog.FileName = "NetForge_Export_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
     $saveDialog.Title = "Export Configuration"
-    
+
     if ($saveDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         try {
             $export = @{
@@ -2030,7 +2795,7 @@ function Export-AllConfiguration {
                 Profiles = Get-Profiles
                 DnsPresets = $script:DnsPresets
             }
-            
+
             $export | ConvertTo-Json -Depth 10 | Set-Content -Path $saveDialog.FileName -Encoding UTF8
             Update-Status "Configuration exported to $($saveDialog.FileName)" -Type Success
         } catch {
@@ -2043,11 +2808,11 @@ function Import-Configuration {
     $openDialog = New-Object System.Windows.Forms.OpenFileDialog
     $openDialog.Filter = "JSON Files (*.json)|*.json"
     $openDialog.Title = "Import Configuration"
-    
+
     if ($openDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         try {
             $import = Get-Content $openDialog.FileName -Raw | ConvertFrom-Json
-            
+
             if ($import.Profiles) {
                 foreach ($profile in $import.Profiles) {
                     $safeName = $profile.Name -replace '[^\w\-]', '_'
@@ -2055,7 +2820,7 @@ function Import-Configuration {
                     $profile | ConvertTo-Json -Depth 10 | Set-Content -Path $filePath -Encoding UTF8
                 }
             }
-            
+
             Refresh-ProfileList
             Update-Status "Configuration imported successfully" -Type Success
         } catch {
@@ -2147,12 +2912,41 @@ $btnPing.Add_Click({ Invoke-Ping })
 $btnTraceroute.Add_Click({ Invoke-Traceroute })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
 
+# New v1.1.0 button handlers
+$btnDiagPing.Add_Click({ Invoke-DiagPingTest })
+$btnContinuousPing.Add_Click({ Toggle-ContinuousPing })
+$btnSpeedTest.Add_Click({ Invoke-SpeedTest })
+$btnDnsLookup.Add_Click({ Invoke-DnsLookup })
+
+# ============================================================================
+# CONNECTION STATUS TIMER (auto-refresh every 30 seconds)
+# ============================================================================
+$script:ConnStatusTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:ConnStatusTimer.Interval = [TimeSpan]::FromSeconds(30)
+$script:ConnStatusTimer.Add_Tick({
+    Update-ConnectionStatus
+})
+$script:ConnStatusTimer.Start()
+
+# ============================================================================
+# CLEANUP ON WINDOW CLOSE
+# ============================================================================
+$window.Add_Closing({
+    $script:ContinuousPingRunning = $false
+    if ($script:ContinuousPingTimer) {
+        $script:ContinuousPingTimer.Stop()
+    }
+    $script:ConnStatusTimer.Stop()
+})
+
 # ============================================================================
 # INITIALIZATION
 # ============================================================================
 Refresh-AdapterList
 Refresh-DnsPresets
 Refresh-ProfileList
+Update-ConnectionStatus
+Update-PublicIP
 
 # Select first adapter if available
 if ($lstAdapters.Items.Count -gt 0) {
