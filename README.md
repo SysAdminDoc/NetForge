@@ -17,6 +17,9 @@
 
 ---
 
+
+![Screenshot](screenshot.png)
+
 ## Features
 
 ### Connection Status Bar
