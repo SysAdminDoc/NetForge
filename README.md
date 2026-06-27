@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.3.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.4.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -34,6 +34,7 @@
 ### Network Adapter Control
 - View all physical network adapters with real-time status
 - Enumerate Bluetooth PAN and cellular/mobile broadband adapters
+- Advanced switch for Hyper-V, VMware, VirtualBox, VPN, TAP, and other virtual adapters
 - Enable/disable adapters with one click
 - Display detailed adapter information (MAC, speed, driver, media state)
 - Auto-refresh capability

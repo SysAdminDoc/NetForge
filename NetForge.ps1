@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.3.0
+    Version: 1.4.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.3.0"
+$script:AppVersion = "1.4.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -55,6 +55,7 @@ $script:SpeedTestRunning = $false
 $script:WifiScanRunning = $false
 $script:WifiNetworks = @()
 $script:WifiInterfaceName = $null
+$script:ShowAdvancedAdapters = $false
 
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
@@ -699,7 +700,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.3.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.4.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -815,7 +816,14 @@ $script:DnsPresets = [ordered]@{
                     </Grid.RowDefinitions>
 
                     <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
-                        <TextBlock Text="NETWORK ADAPTERS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="NETWORK ADAPTERS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                            <CheckBox x:Name="chkAdvancedAdapters" Grid.Column="1" Content="Advanced" Style="{StaticResource ModernCheckBox}" FontSize="11" VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
 
                     <ListBox x:Name="lstAdapters" Grid.Row="1" Style="{StaticResource ModernListBox}" BorderThickness="0" Background="Transparent"/>
@@ -1483,7 +1491,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.3.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.4.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1606,8 +1614,20 @@ function Get-AdapterConnectionKind {
     if ($text -match "VPN|TAP|TUN|WireGuard|OpenVPN") {
         return "VPN"
     }
+    if ($text -match "Hyper-V|vEthernet|Default Switch") {
+        return "Hyper-V"
+    }
+    if ($text -match "VMware|VMnet") {
+        return "VMware"
+    }
+    if ($text -match "VirtualBox|VBox") {
+        return "VirtualBox"
+    }
     if ($text -match "Ethernet|802\.3" -or $Adapter.InterfaceType -eq 6) {
         return "Ethernet"
+    }
+    if ($Adapter.Virtual -eq $true) {
+        return "Virtual"
     }
 
     return "Unknown"
@@ -1620,7 +1640,10 @@ function Test-NetForgeAdapter {
     if ($Adapter.Virtual -eq $false) { return $true }
 
     $kind = Get-AdapterConnectionKind -Adapter $Adapter
-    return $kind -in @("Bluetooth PAN", "Cellular")
+    if ($kind -in @("Bluetooth PAN", "Cellular")) { return $true }
+    if ($script:ShowAdvancedAdapters -and $kind -in @("VPN", "Hyper-V", "VMware", "VirtualBox", "Virtual")) { return $true }
+
+    return $false
 }
 
 function Get-NetworkAdapters {
@@ -3561,6 +3584,16 @@ function Import-Configuration {
 # ============================================================================
 $lstAdapters.Add_SelectionChanged({
     Update-AdapterDisplay
+})
+
+$chkAdvancedAdapters.Add_Checked({
+    $script:ShowAdvancedAdapters = $true
+    Refresh-AdapterList
+})
+
+$chkAdvancedAdapters.Add_Unchecked({
+    $script:ShowAdvancedAdapters = $false
+    Refresh-AdapterList
 })
 
 $rbDHCP.Add_Checked({
