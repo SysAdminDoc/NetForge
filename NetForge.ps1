@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.2.0
+    Version: 1.3.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.2.0"
+$script:AppVersion = "1.3.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -699,7 +699,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.2.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.3.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1483,7 +1483,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.2.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.3.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1574,9 +1574,58 @@ function Get-PrefixFromSubnet {
 # ============================================================================
 # NETWORK ADAPTER FUNCTIONS
 # ============================================================================
+function Get-AdapterSearchText {
+    param($Adapter)
+
+    $parts = @($Adapter.Name, $Adapter.InterfaceDescription, $Adapter.InterfaceAlias, $Adapter.MediaType, $Adapter.InterfaceType)
+    foreach ($propertyName in @("NdisPhysicalMedium", "PhysicalMediaType", "ComponentID", "PnPDeviceID")) {
+        $property = $Adapter.PSObject.Properties[$propertyName]
+        if ($property -and $property.Value) {
+            $parts += $property.Value
+        }
+    }
+
+    return ($parts | Where-Object { $_ }) -join " "
+}
+
+function Get-AdapterConnectionKind {
+    param($Adapter)
+
+    if ($null -eq $Adapter) { return "Unknown" }
+
+    $text = Get-AdapterSearchText -Adapter $Adapter
+    if ($text -match "Bluetooth|Personal Area Network|\bPAN\b|BthPan") {
+        return "Bluetooth PAN"
+    }
+    if ($text -match "Cellular|WWAN|Mobile Broadband|LTE|5G|4G|MBIM|Modem|Broadband") {
+        return "Cellular"
+    }
+    if ($text -match "Wi-Fi|WiFi|Wireless|802\.11|WLAN") {
+        return "WiFi"
+    }
+    if ($text -match "VPN|TAP|TUN|WireGuard|OpenVPN") {
+        return "VPN"
+    }
+    if ($text -match "Ethernet|802\.3" -or $Adapter.InterfaceType -eq 6) {
+        return "Ethernet"
+    }
+
+    return "Unknown"
+}
+
+function Test-NetForgeAdapter {
+    param($Adapter)
+
+    if ($null -eq $Adapter) { return $false }
+    if ($Adapter.Virtual -eq $false) { return $true }
+
+    $kind = Get-AdapterConnectionKind -Adapter $Adapter
+    return $kind -in @("Bluetooth PAN", "Cellular")
+}
+
 function Get-NetworkAdapters {
     try {
-        $adapters = Get-NetAdapter | Where-Object { $_.Virtual -eq $false -or $_.Name -like "*Ethernet*" -or $_.Name -like "*Wi-Fi*" } | Sort-Object Name
+        $adapters = Get-NetAdapter | Where-Object { Test-NetForgeAdapter -Adapter $_ } | Sort-Object Name
         return $adapters
     } catch {
         return @()
@@ -1616,7 +1665,8 @@ function Refresh-AdapterList {
         $namePanel.Children.Add($nameText) | Out-Null
 
         $descText = New-Object System.Windows.Controls.TextBlock
-        $descText.Text = $adapter.InterfaceDescription
+        $adapterKind = Get-AdapterConnectionKind -Adapter $adapter
+        $descText.Text = "$adapterKind | $($adapter.InterfaceDescription)"
         $descText.FontSize = 11
         $descText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
         $descText.Margin = "22,4,0,0"
@@ -1695,7 +1745,8 @@ function Update-AdapterDetails {
 
     try {
         $script:txtInfoIndex.Text = $adapter.ifIndex.ToString()
-        $script:txtInfoType.Text = $adapter.InterfaceType
+        $adapterKind = Get-AdapterConnectionKind -Adapter $adapter
+        $script:txtInfoType.Text = "$adapterKind ($($adapter.InterfaceType))"
 
         $speed = $adapter.LinkSpeed
         $script:txtInfoSpeed.Text = $speed
@@ -1730,7 +1781,7 @@ function Update-AdapterDetails {
 function Update-ConnectionStatus {
     try {
         # Determine connection type and status
-        $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and ($_.Virtual -eq $false -or $_.Name -like "*Ethernet*" -or $_.Name -like "*Wi-Fi*") } | Select-Object -First 1
+        $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
 
         if ($null -eq $activeAdapter) {
             $script:connStatusDot.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
@@ -1754,14 +1805,7 @@ function Update-ConnectionStatus {
         $script:txtConnGateway.Text = if ($gw) { $gw.NextHop } else { "--" }
 
         # Connection type
-        $connType = "Unknown"
-        if ($activeAdapter.Name -like "*Wi-Fi*" -or $activeAdapter.Name -like "*Wireless*" -or $activeAdapter.InterfaceDescription -like "*Wireless*" -or $activeAdapter.InterfaceDescription -like "*Wi-Fi*") {
-            $connType = "WiFi"
-        } elseif ($activeAdapter.Name -like "*Ethernet*" -or $activeAdapter.InterfaceType -eq 6) {
-            $connType = "Ethernet"
-        } elseif ($activeAdapter.Name -like "*VPN*" -or $activeAdapter.InterfaceDescription -like "*VPN*" -or $activeAdapter.InterfaceDescription -like "*TAP*" -or $activeAdapter.InterfaceDescription -like "*TUN*") {
-            $connType = "VPN"
-        }
+        $connType = Get-AdapterConnectionKind -Adapter $activeAdapter
         $script:txtConnType.Text = $connType
 
         # WiFi info
