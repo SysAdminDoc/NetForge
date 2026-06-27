@@ -1,4 +1,4 @@
-<p align="center"><img src="icon.svg" width="128" height="128" alt="NetForge"></p>
+<p align="center"><img src="icon.png" width="128" height="128" alt="NetForge"></p>
 
 # NetForge
 
@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.1.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.2.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -36,6 +36,12 @@
 - Enable/disable adapters with one click
 - Display detailed adapter information (MAC, speed, driver, media state)
 - Auto-refresh capability
+
+### WiFi Network Manager
+- Scan nearby WiFi networks with signal, channel, band, security, and BSSID counts
+- Connect to saved Windows WLAN profiles without opening Settings
+- Create WLAN profiles for open or secured personal networks from the app
+- Disconnect the active WiFi interface from the same tab
 
 ### IP Configuration
 - **DHCP Mode**: Obtain IP address automatically
@@ -118,14 +124,14 @@
 
 ### Option 2: Clone Repository
 ```powershell
-git clone https://github.com/yourusername/NetForge.git
+git clone https://github.com/SysAdminDoc/NetForge.git
 cd NetForge
 .\NetForge.ps1
 ```
 
 ### Option 3: One-Line Install
 ```powershell
-irm https://raw.githubusercontent.com/yourusername/NetForge/main/NetForge.ps1 -OutFile NetForge.ps1; .\NetForge.ps1
+irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -OutFile NetForge.ps1; .\NetForge.ps1
 ```
 
 ---
@@ -153,6 +159,10 @@ irm https://raw.githubusercontent.com/yourusername/NetForge/main/NetForge.ps1 -O
    - Go to Profiles tab
    - Click "Create New Profile"
    - Fill in details and save
+5. **Manage WiFi**:
+   - Go to the WiFi tab
+   - Click "Scan Networks"
+   - Select a network and click "Connect" or "Disconnect"
 
 ### DNS Presets Quick Reference
 
@@ -171,20 +181,9 @@ irm https://raw.githubusercontent.com/yourusername/NetForge/main/NetForge.ps1 -O
 NetForge stores its configuration in:
 ```
 %APPDATA%\NetForge\
-├── Profiles\          # Saved network profiles (.json)
-└── settings.json      # Application settings
+|-- Profiles\          # Saved network profiles (.json)
+`-- settings.json      # Application settings
 ```
-
----
-
-## Keyboard Shortcuts
-
-| Action | Shortcut |
-|--------|----------|
-| Refresh Adapters | Click "Refresh Adapters" button |
-| Apply Settings | Enter (when in text field) |
-
----
 
 ## Troubleshooting
 

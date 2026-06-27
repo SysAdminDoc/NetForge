@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.1.0
+    Version: 1.2.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.1.0"
+$script:AppVersion = "1.2.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -52,6 +52,9 @@ $script:ContinuousPingRunning = $false
 $script:ContinuousPingPS = $null
 $script:CachedPublicIP = $null
 $script:SpeedTestRunning = $false
+$script:WifiScanRunning = $false
+$script:WifiNetworks = @()
+$script:WifiInterfaceName = $null
 
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
@@ -494,6 +497,34 @@ $script:DnsPresets = [ordered]@{
             </Setter>
         </Style>
 
+        <!-- PasswordBox Style -->
+        <Style x:Key="ModernPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Background" Value="{StaticResource BgPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,10"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="CaretBrush" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Border x:Name="border" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ComboBox Style -->
         <Style x:Key="ModernComboBox" TargetType="ComboBox">
             <Setter Property="Background" Value="{StaticResource BgPrimaryBrush}"/>
@@ -668,7 +699,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.1.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.2.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1004,6 +1035,95 @@ $script:DnsPresets = [ordered]@{
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button x:Name="btnApplyDns" Content="Apply DNS Configuration" Style="{StaticResource PrimaryButton}" Padding="24,12"/>
                                 </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <!-- WiFi Tab -->
+                    <TabItem Header="WiFi">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel Margin="24">
+                                <TextBlock Text="WIFI NETWORKS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="360"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                    <TextBlock x:Name="txtWifiScanSummary" Text="Click Scan Networks to find nearby wireless networks." FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                    <TextBlock Text="Saved Windows WLAN profiles can connect immediately. Unsaved secured networks require a password." FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,0"/>
+                                                </StackPanel>
+
+                                                <Button x:Name="btnWifiRefresh" Grid.Column="1" Content="Scan Networks" Style="{StaticResource ModernButton}" Margin="12,0,0,0" Padding="16,8"/>
+                                                <Button x:Name="btnWifiConnect" Grid.Column="2" Content="Connect" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" Padding="16,8" IsEnabled="False"/>
+                                                <Button x:Name="btnWifiDisconnect" Grid.Column="3" Content="Disconnect" Style="{StaticResource DangerButton}" Margin="8,0,0,0" Padding="16,8"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <ListBox x:Name="lstWifiNetworks" Grid.Row="1" Style="{StaticResource ModernListBox}" BorderThickness="0" Background="Transparent"/>
+                                    </Grid>
+                                </Border>
+
+                                <TextBlock Text="SELECTED NETWORK" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border x:Name="pnlWifiDetails" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,16">
+                                            <TextBlock Text="SSID" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailSsid" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,16">
+                                            <TextBlock Text="PROFILE" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailProfile" Text="--" FontSize="14" Foreground="{StaticResource AccentBlueBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,16">
+                                            <TextBlock Text="SECURITY" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailSecurity" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,16">
+                                            <TextBlock Text="SIGNAL" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailSignal" Text="--" FontSize="13" Foreground="{StaticResource AccentGreenBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,16,16">
+                                            <TextBlock Text="RADIO / BAND" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailRadio" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,16">
+                                            <TextBlock Text="CHANNELS / BSSIDS" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailBssids" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="3" Grid.ColumnSpan="2">
+                                            <TextBlock Text="Password for unsaved secured networks" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <PasswordBox x:Name="txtWifiPassword" Style="{StaticResource ModernPasswordBox}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -1363,7 +1483,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.1.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.2.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1376,7 +1496,6 @@ $script:DnsPresets = [ordered]@{
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
-# codex-branding:start
                 try {
                     $brandingIconPath = Join-Path $PSScriptRoot 'icon.ico'
                     if (Test-Path $brandingIconPath) {
@@ -1384,7 +1503,7 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
                     }
                 } catch {
                 }
-                # codex-branding:end
+
 # Get all named controls
 $xaml.SelectNodes("//*[@*[contains(translate(name(.),'n','N'),'Name')]]") | ForEach-Object {
     $name = $_.Name
@@ -1723,19 +1842,574 @@ function Update-WifiInfo {
     }
 }
 
+function Get-WifiSignalColor {
+    param([string]$Signal)
+
+    $signalNum = 0
+    if ($Signal -match '(\d+)') { $signalNum = [int]$Matches[1] }
+    if ($signalNum -ge 70) { return "#3fb950" }
+    if ($signalNum -ge 40) { return "#d29922" }
+    return "#f85149"
+}
+
+function Get-WifiBadgeElement {
+    param(
+        [string]$Text,
+        [string]$Color
+    )
+
+    $border = New-Object System.Windows.Controls.Border
+    $border.CornerRadius = "4"
+    $border.Padding = "6,2"
+    $border.Margin = "8,0,0,0"
+    $border.VerticalAlignment = "Center"
+    $border.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("$Color" + "30")
+
+    $textBlock = New-Object System.Windows.Controls.TextBlock
+    $textBlock.Text = $Text
+    $textBlock.FontSize = 10
+    $textBlock.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom($Color)
+    $border.Child = $textBlock
+
+    return $border
+}
+
+function Get-WifiNetworkListItem {
+    param($Network)
+
+    $item = New-Object System.Windows.Controls.StackPanel
+    $item.Orientation = "Vertical"
+    $item.Tag = $Network
+
+    $headerPanel = New-Object System.Windows.Controls.StackPanel
+    $headerPanel.Orientation = "Horizontal"
+
+    $signalText = New-Object System.Windows.Controls.TextBlock
+    $signalText.Text = if ($Network.Signal) { "[$($Network.Signal)]" } else { "[--]" }
+    $signalText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom((Get-WifiSignalColor -Signal $Network.Signal))
+    $signalText.FontFamily = New-Object System.Windows.Media.FontFamily("Consolas")
+    $signalText.FontSize = 12
+    $signalText.Margin = "0,0,8,0"
+    $signalText.VerticalAlignment = "Center"
+
+    $ssidText = New-Object System.Windows.Controls.TextBlock
+    $ssidText.Text = $Network.SSID
+    $ssidText.FontSize = 13
+    $ssidText.FontWeight = "Medium"
+    $ssidText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
+
+    $authColor = if ($Network.Authentication -match "Open") { "#d29922" } else { "#58a6ff" }
+    $profileColor = if ($Network.HasProfile) { "#3fb950" } else { "#8b949e" }
+    $profileText = if ($Network.HasProfile) { "Saved" } else { "New" }
+
+    $headerPanel.Children.Add($signalText) | Out-Null
+    $headerPanel.Children.Add($ssidText) | Out-Null
+    $headerPanel.Children.Add((Get-WifiBadgeElement -Text $Network.Authentication -Color $authColor)) | Out-Null
+    $headerPanel.Children.Add((Get-WifiBadgeElement -Text $profileText -Color $profileColor)) | Out-Null
+
+    $detailsText = New-Object System.Windows.Controls.TextBlock
+    $channels = if ($Network.Channels -and $Network.Channels.Count -gt 0) { $Network.Channels -join ", " } else { "--" }
+    $bands = if ($Network.Bands -and $Network.Bands.Count -gt 0) { $Network.Bands -join ", " } else { "--" }
+    $detailsText.Text = "$($Network.Encryption) | $bands | Ch $channels | $($Network.BssidCount) BSSID(s)"
+    $detailsText.FontSize = 11
+    $detailsText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
+    $detailsText.Margin = "22,4,0,0"
+
+    $item.Children.Add($headerPanel) | Out-Null
+    $item.Children.Add($detailsText) | Out-Null
+
+    return $item
+}
+
+function Show-WifiActionState {
+    $hasSelection = $null -ne $script:lstWifiNetworks.SelectedItem
+    $script:btnWifiConnect.IsEnabled = $hasSelection -and (-not $script:WifiScanRunning)
+    $script:btnWifiDisconnect.IsEnabled = -not $script:WifiScanRunning
+}
+
+function Show-WifiSelection {
+    $selected = $script:lstWifiNetworks.SelectedItem
+    if ($null -eq $selected) {
+        $script:pnlWifiDetails.Visibility = "Collapsed"
+        Show-WifiActionState
+        return
+    }
+
+    $network = $selected.Tag
+    $script:pnlWifiDetails.Visibility = "Visible"
+    $script:txtWifiDetailSsid.Text = $network.SSID
+    $script:txtWifiDetailProfile.Text = if ($network.HasProfile) { "Saved Windows profile" } else { "No saved profile" }
+    $script:txtWifiDetailSecurity.Text = "$($network.Authentication) / $($network.Encryption)"
+    $script:txtWifiDetailSignal.Text = $network.Signal
+    $script:txtWifiDetailSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom((Get-WifiSignalColor -Signal $network.Signal))
+
+    $radio = if ($network.RadioTypes -and $network.RadioTypes.Count -gt 0) { $network.RadioTypes -join ", " } else { "--" }
+    $bands = if ($network.Bands -and $network.Bands.Count -gt 0) { $network.Bands -join ", " } else { "--" }
+    $channels = if ($network.Channels -and $network.Channels.Count -gt 0) { $network.Channels -join ", " } else { "--" }
+    $script:txtWifiDetailRadio.Text = "$radio / $bands"
+    $script:txtWifiDetailBssids.Text = "Channels $channels / $($network.BssidCount)"
+
+    $needsPassword = (-not $network.HasProfile) -and ($network.Authentication -notmatch "Open")
+    $script:txtWifiPassword.IsEnabled = $needsPassword
+    if (-not $needsPassword) {
+        $script:txtWifiPassword.Password = ""
+    }
+
+    Show-WifiActionState
+}
+
+function Show-WifiNetworkList {
+    param(
+        [object[]]$Networks,
+        [string]$InterfaceName,
+        [string]$Message
+    )
+
+    $script:lstWifiNetworks.Items.Clear()
+    $script:WifiNetworks = @($Networks)
+    $script:WifiInterfaceName = $InterfaceName
+
+    foreach ($network in $script:WifiNetworks) {
+        $script:lstWifiNetworks.Items.Add((Get-WifiNetworkListItem -Network $network)) | Out-Null
+    }
+
+    $interfaceLabel = if ($script:WifiInterfaceName) { $script:WifiInterfaceName } else { "default WiFi interface" }
+    if ($script:WifiNetworks.Count -gt 0) {
+        $script:txtWifiScanSummary.Text = "Found $($script:WifiNetworks.Count) network(s) on $interfaceLabel."
+        Update-Status "WiFi scan found $($script:WifiNetworks.Count) network(s)" -Type Success
+    } elseif ($Message) {
+        $script:txtWifiScanSummary.Text = $Message
+        Update-Status $Message -Type Warning
+    } else {
+        $script:txtWifiScanSummary.Text = "No WiFi networks found."
+        Update-Status "No WiFi networks found" -Type Warning
+    }
+
+    $script:pnlWifiDetails.Visibility = "Collapsed"
+    Show-WifiActionState
+}
+
+function Invoke-WifiNetworkScan {
+    if ($script:WifiScanRunning) { return }
+
+    $script:WifiScanRunning = $true
+    $script:btnWifiRefresh.IsEnabled = $false
+    $script:btnWifiConnect.IsEnabled = $false
+    $script:btnWifiDisconnect.IsEnabled = $false
+    $script:txtWifiScanSummary.Text = "Scanning nearby WiFi networks..."
+    Update-Status "Scanning WiFi networks..."
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        function ConvertTo-NetworkObject {
+            param(
+                [hashtable]$Data,
+                [string[]]$Profiles
+            )
+
+            $signals = @($Data.Signals | Where-Object { $_ })
+            $signalValues = @()
+            foreach ($signal in $signals) {
+                if ($signal -match '(\d+)') { $signalValues += [int]$Matches[1] }
+            }
+            $bestSignal = if ($signalValues.Count -gt 0) { ($signalValues | Measure-Object -Maximum).Maximum } else { 0 }
+            $signalText = if ($bestSignal -gt 0) { "$bestSignal%" } else { "--" }
+            $channels = @($Data.Channels | Where-Object { $_ } | Sort-Object -Unique)
+            $bands = @($Data.Bands | Where-Object { $_ } | Sort-Object -Unique)
+            $radioTypes = @($Data.RadioTypes | Where-Object { $_ } | Sort-Object -Unique)
+            $bssids = @($Data.Bssids | Where-Object { $_ } | Sort-Object -Unique)
+            $profileMatches = @($Profiles | Where-Object { $_ -eq $Data.SSID })
+
+            [pscustomobject]@{
+                SSID = $Data.SSID
+                Authentication = $Data.Authentication
+                Encryption = $Data.Encryption
+                Signal = $signalText
+                Channels = $channels
+                Bands = $bands
+                RadioTypes = $radioTypes
+                Bssids = $bssids
+                BssidCount = $bssids.Count
+                HasProfile = $profileMatches.Count -gt 0
+                ProfileName = if ($profileMatches.Count -gt 0) { $profileMatches[0] } else { $null }
+            }
+        }
+
+        try {
+            $profiles = @()
+            $profileOutput = netsh wlan show profiles 2>&1 | Out-String
+            foreach ($line in ($profileOutput -split "`n")) {
+                if ($line -match '^\s*(All User Profile|User Profile|Group Policy Profile)\s*:\s*(.+)$') {
+                    $profiles += $Matches[2].Trim()
+                }
+            }
+
+            $netOutput = netsh wlan show networks mode=bssid 2>&1 | Out-String
+            $netExit = $LASTEXITCODE
+            $interfaceName = $null
+            $networks = @()
+            $current = $null
+
+            foreach ($rawLine in ($netOutput -split "`n")) {
+                $line = $rawLine.Trim()
+                if ($line -match '^Interface name\s*:\s*(.+)$') {
+                    $interfaceName = $Matches[1].Trim()
+                    continue
+                }
+
+                if ($line -match '^SSID\s+\d+\s*:\s*(.*)$') {
+                    if ($null -ne $current) {
+                        $networks += ConvertTo-NetworkObject -Data $current -Profiles $profiles
+                    }
+
+                    $ssid = $Matches[1].Trim()
+                    if ([string]::IsNullOrWhiteSpace($ssid)) { $ssid = "<hidden network>" }
+                    $current = @{
+                        SSID = $ssid
+                        Authentication = "--"
+                        Encryption = "--"
+                        Signals = @()
+                        Channels = @()
+                        Bands = @()
+                        RadioTypes = @()
+                        Bssids = @()
+                    }
+                    continue
+                }
+
+                if ($null -eq $current) { continue }
+
+                if ($line -match '^Authentication\s*:\s*(.+)$') {
+                    $current.Authentication = $Matches[1].Trim()
+                } elseif ($line -match '^Encryption\s*:\s*(.+)$') {
+                    $current.Encryption = $Matches[1].Trim()
+                } elseif ($line -match '^BSSID\s+\d+\s*:\s*(.+)$') {
+                    $current.Bssids += $Matches[1].Trim()
+                } elseif ($line -match '^Signal\s*:\s*(.+)$') {
+                    $current.Signals += $Matches[1].Trim()
+                } elseif ($line -match '^Channel\s*:\s*(.+)$') {
+                    $current.Channels += $Matches[1].Trim()
+                } elseif ($line -match '^Band\s*:\s*(.+)$') {
+                    $current.Bands += $Matches[1].Trim()
+                } elseif ($line -match '^Radio type\s*:\s*(.+)$') {
+                    $current.RadioTypes += $Matches[1].Trim()
+                }
+            }
+
+            if ($null -ne $current) {
+                $networks += ConvertTo-NetworkObject -Data $current -Profiles $profiles
+            }
+
+            $message = ""
+            if ($networks.Count -eq 0) {
+                $messageLines = @($netOutput -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch '^Interface name\s*:' })
+                if ($netExit -ne 0 -and $messageLines.Count -gt 0) {
+                    $message = $messageLines[0]
+                } elseif ($messageLines.Count -gt 0) {
+                    $message = $messageLines[0]
+                } else {
+                    $message = "No WiFi networks found."
+                }
+            }
+            ,([pscustomobject]@{
+                Success = $true
+                InterfaceName = $interfaceName
+                Networks = @($networks)
+                Message = $message
+            })
+        } catch {
+            ,([pscustomobject]@{
+                Success = $false
+                InterfaceName = $null
+                Networks = @()
+                Message = $_.Exception.Message
+            })
+        }
+    })
+
+    $handle = $ps.BeginInvoke()
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $result = $ps.EndInvoke($handle) | Select-Object -First 1
+                if ($result.Success) {
+                    Show-WifiNetworkList -Networks $result.Networks -InterfaceName $result.InterfaceName -Message $result.Message
+                } else {
+                    Show-WifiNetworkList -Networks @() -InterfaceName $null -Message "WiFi scan failed: $($result.Message)"
+                }
+            } catch {
+                Show-WifiNetworkList -Networks @() -InterfaceName $null -Message "WiFi scan failed: $($_.Exception.Message)"
+            }
+
+            $script:WifiScanRunning = $false
+            $script:btnWifiRefresh.IsEnabled = $true
+            Show-WifiActionState
+            $ps.Dispose()
+            $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+function Invoke-WifiConnect {
+    $selected = $script:lstWifiNetworks.SelectedItem
+    if ($null -eq $selected) {
+        Show-MessageBox -Message "Please select a WiFi network first." -Title "No Network Selected" -Icon Warning
+        return
+    }
+
+    $network = $selected.Tag
+    if ($network.SSID -eq "<hidden network>") {
+        Show-MessageBox -Message "Hidden networks cannot be connected from scan results because the SSID is not advertised." -Title "Hidden Network" -Icon Warning
+        return
+    }
+
+    $wifiKey = $script:txtWifiPassword.Password
+    if ((-not $network.HasProfile) -and ($network.Authentication -notmatch "Open") -and [string]::IsNullOrWhiteSpace($wifiKey)) {
+        Show-MessageBox -Message "Enter the WiFi password or choose a network that already has a saved Windows profile." -Title "Password Required" -Icon Warning
+        return
+    }
+
+    $script:btnWifiConnect.IsEnabled = $false
+    $script:btnWifiRefresh.IsEnabled = $false
+    Update-Status "Connecting to WiFi network '$($network.SSID)'..."
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        param($ssid, $profileName, $hasProfile, $authentication, $encryption, $wifiKey, $interfaceName)
+
+        function ConvertTo-XmlText {
+            param([string]$Text)
+            return [System.Security.SecurityElement]::Escape($Text)
+        }
+
+        function Get-WlanSecurityProfile {
+            param(
+                [string]$Authentication,
+                [string]$Encryption,
+                [string]$KeyMaterial
+            )
+
+            if ($Authentication -match "Open") {
+                return @{
+                    Authentication = "open"
+                    Encryption = "none"
+                    SharedKey = ""
+                }
+            }
+
+            if ($Authentication -match "WEP") {
+                throw "WEP profile generation is not supported. Import a saved Windows WLAN profile first."
+            }
+
+            $authValue = "WPA2PSK"
+            if ($Authentication -match "WPA3") {
+                $authValue = "WPA3SAE"
+            } elseif ($Authentication -match "WPA2") {
+                $authValue = "WPA2PSK"
+            } elseif ($Authentication -match "WPA") {
+                $authValue = "WPAPSK"
+            }
+
+            $encryptionValue = "AES"
+            if ($Encryption -match "TKIP") {
+                $encryptionValue = "TKIP"
+            } elseif ($Encryption -match "none") {
+                $encryptionValue = "none"
+            }
+
+            return @{
+                Authentication = $authValue
+                Encryption = $encryptionValue
+                SharedKey = @"
+                <sharedKey>
+                    <keyType>passPhrase</keyType>
+                    <protected>false</protected>
+                    <keyMaterial>$(ConvertTo-XmlText $KeyMaterial)</keyMaterial>
+                </sharedKey>
+"@
+            }
+        }
+
+        function Get-WlanProfileXml {
+            param(
+                [string]$Ssid,
+                [string]$Authentication,
+                [string]$Encryption,
+                [string]$KeyMaterial
+            )
+
+            $security = Get-WlanSecurityProfile -Authentication $Authentication -Encryption $Encryption -KeyMaterial $KeyMaterial
+            $escapedSsid = ConvertTo-XmlText $Ssid
+            return @"
+<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+    <name>$escapedSsid</name>
+    <SSIDConfig>
+        <SSID>
+            <name>$escapedSsid</name>
+        </SSID>
+    </SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>manual</connectionMode>
+    <MSM>
+        <security>
+            <authEncryption>
+                <authentication>$($security.Authentication)</authentication>
+                <encryption>$($security.Encryption)</encryption>
+                <useOneX>false</useOneX>
+            </authEncryption>
+$($security.SharedKey)
+        </security>
+    </MSM>
+</WLANProfile>
+"@
+        }
+
+        try {
+            $targetProfile = if ($profileName) { $profileName } else { $ssid }
+            $output = @()
+
+            if (-not $hasProfile) {
+                $xml = Get-WlanProfileXml -Ssid $ssid -Authentication $authentication -Encryption $encryption -KeyMaterial $wifiKey
+                $tempFile = Join-Path $env:TEMP ("NetForge_WiFi_{0}.xml" -f ([guid]::NewGuid().ToString("N")))
+                Set-Content -LiteralPath $tempFile -Value $xml -Encoding UTF8
+
+                $addArgs = @("wlan", "add", "profile", "filename=$tempFile", "user=current")
+                if ($interfaceName) { $addArgs += "interface=$interfaceName" }
+                $output += netsh @addArgs 2>&1
+                $addExit = $LASTEXITCODE
+                Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+
+                if ($addExit -ne 0) {
+                    throw ($output | Out-String)
+                }
+            }
+
+            $connectArgs = @("wlan", "connect", "name=$targetProfile", "ssid=$ssid")
+            if ($interfaceName) { $connectArgs += "interface=$interfaceName" }
+            $output += netsh @connectArgs 2>&1
+            $connectExit = $LASTEXITCODE
+            $outputText = $output | Out-String
+
+            if ($connectExit -ne 0 -or $outputText -match "failed|error|There is no profile") {
+                throw $outputText
+            }
+
+            ,([pscustomobject]@{
+                Success = $true
+                Message = "Connection request sent for '$ssid'."
+                Output = $outputText
+            })
+        } catch {
+            ,([pscustomobject]@{
+                Success = $false
+                Message = $_.Exception.Message
+                Output = ""
+            })
+        }
+    }).AddArgument($network.SSID).AddArgument($network.ProfileName).AddArgument([bool]$network.HasProfile).AddArgument($network.Authentication).AddArgument($network.Encryption).AddArgument($wifiKey).AddArgument($script:WifiInterfaceName)
+
+    $handle = $ps.BeginInvoke()
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $result = $ps.EndInvoke($handle) | Select-Object -First 1
+                if ($result.Success) {
+                    $script:txtWifiPassword.Password = ""
+                    Update-Status $result.Message -Type Success
+                    Update-ConnectionStatus
+                    Invoke-WifiNetworkScan
+                } else {
+                    Update-Status "WiFi connect failed: $($result.Message)" -Type Error
+                    Show-MessageBox -Message "Failed to connect to WiFi network:`n$($result.Message)" -Title "WiFi Connect Failed" -Icon Error
+                }
+            } catch {
+                Update-Status "WiFi connect failed: $($_.Exception.Message)" -Type Error
+            }
+
+            $script:btnWifiRefresh.IsEnabled = $true
+            Show-WifiActionState
+            $ps.Dispose()
+            $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+function Invoke-WifiDisconnect {
+    $script:btnWifiDisconnect.IsEnabled = $false
+    Update-Status "Disconnecting WiFi..."
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        param($interfaceName)
+
+        try {
+            $netshArgs = @("wlan", "disconnect")
+            if ($interfaceName) { $netshArgs += "interface=$interfaceName" }
+            $output = netsh @netshArgs 2>&1 | Out-String
+            $exitCode = $LASTEXITCODE
+            if ($exitCode -ne 0 -or $output -match "failed|error") {
+                throw $output
+            }
+
+            ,([pscustomobject]@{
+                Success = $true
+                Message = "WiFi disconnect request sent."
+            })
+        } catch {
+            ,([pscustomobject]@{
+                Success = $false
+                Message = $_.Exception.Message
+            })
+        }
+    }).AddArgument($script:WifiInterfaceName)
+
+    $handle = $ps.BeginInvoke()
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $result = $ps.EndInvoke($handle) | Select-Object -First 1
+                if ($result.Success) {
+                    Update-Status $result.Message -Type Success
+                    Update-ConnectionStatus
+                    Invoke-WifiNetworkScan
+                } else {
+                    Update-Status "WiFi disconnect failed: $($result.Message)" -Type Error
+                    Show-MessageBox -Message "Failed to disconnect WiFi:`n$($result.Message)" -Title "WiFi Disconnect Failed" -Icon Error
+                }
+            } catch {
+                Update-Status "WiFi disconnect failed: $($_.Exception.Message)" -Type Error
+            }
+
+            Show-WifiActionState
+            $ps.Dispose()
+            $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
 function Update-PublicIP {
     $ps = [PowerShell]::Create()
     $ps.AddScript({
         try {
             $wc = New-Object System.Net.WebClient
-            $wc.Headers.Add("User-Agent", "NetForge/1.1.0")
+            $wc.Headers.Add("User-Agent", "NetForge/$script:AppVersion")
             $ip = $wc.DownloadString("https://api.ipify.org").Trim()
             $wc.Dispose()
             return $ip
         } catch {
             try {
                 $wc2 = New-Object System.Net.WebClient
-                $wc2.Headers.Add("User-Agent", "NetForge/1.1.0")
+                $wc2.Headers.Add("User-Agent", "NetForge/$script:AppVersion")
                 $ip = $wc2.DownloadString("https://icanhazip.com").Trim()
                 $wc2.Dispose()
                 return $ip
@@ -1996,7 +2670,7 @@ function Invoke-SpeedTest {
             # Use a ~10MB test file from a reliable CDN
             $url = "http://speedtest.tele2.net/10MB.zip"
             $wc = New-Object System.Net.WebClient
-            $wc.Headers.Add("User-Agent", "NetForge/1.1.0")
+            $wc.Headers.Add("User-Agent", "NetForge/$script:AppVersion")
 
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
             $data = $wc.DownloadData($url)
@@ -2019,7 +2693,7 @@ function Invoke-SpeedTest {
             try {
                 $url2 = "http://proof.ovh.net/files/1Mb.dat"
                 $wc2 = New-Object System.Net.WebClient
-                $wc2.Headers.Add("User-Agent", "NetForge/1.1.0")
+                $wc2.Headers.Add("User-Agent", "NetForge/$script:AppVersion")
 
                 $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
                 $data2 = $wc2.DownloadData($url2)
@@ -2874,6 +3548,10 @@ $lstDnsPresets.Add_SelectionChanged({
     Update-SelectedDnsDisplay
 })
 
+$lstWifiNetworks.Add_SelectionChanged({
+    Show-WifiSelection
+})
+
 $lstProfiles.Add_SelectionChanged({
     Load-ProfileToEditor
 })
@@ -2896,6 +3574,9 @@ $btnEnableAdapter.Add_Click({ Enable-SelectedAdapter })
 $btnDisableAdapter.Add_Click({ Disable-SelectedAdapter })
 $btnApplyIP.Add_Click({ Apply-IPConfiguration })
 $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
+$btnWifiRefresh.Add_Click({ Invoke-WifiNetworkScan })
+$btnWifiConnect.Add_Click({ Invoke-WifiConnect })
+$btnWifiDisconnect.Add_Click({ Invoke-WifiDisconnect })
 $btnNewProfile.Add_Click({
     $script:txtProfileName.Text = "New Profile"
     $script:txtProfileDesc.Text = ""
@@ -2921,7 +3602,7 @@ $btnPing.Add_Click({ Invoke-Ping })
 $btnTraceroute.Add_Click({ Invoke-Traceroute })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
 
-# New v1.1.0 button handlers
+# Diagnostics button handlers
 $btnDiagPing.Add_Click({ Invoke-DiagPingTest })
 $btnContinuousPing.Add_Click({ Toggle-ContinuousPing })
 $btnSpeedTest.Add_Click({ Invoke-SpeedTest })
@@ -2956,6 +3637,8 @@ Refresh-DnsPresets
 Refresh-ProfileList
 Update-ConnectionStatus
 Update-PublicIP
+Show-WifiActionState
+Invoke-WifiNetworkScan
 
 # Select first adapter if available
 if ($lstAdapters.Items.Count -gt 0) {

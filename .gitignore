@@ -1,6 +1,7 @@
 *.bak
 *.log
 *.tmp
+dist/
 .vs/
 CLAUDE.md
 
