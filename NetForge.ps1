@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.4.0
+    Version: 1.5.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.4.0"
+$script:AppVersion = "1.5.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -700,7 +700,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.4.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.5.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -883,6 +883,44 @@ $script:DnsPresets = [ordered]@{
                                                 <TextBlock x:Name="txtStatus" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
                                             </StackPanel>
                                         </Grid>
+                                    </Grid>
+                                </Border>
+
+                                <!-- MAC Address Override -->
+                                <TextBlock Text="MAC ADDRESS OVERRIDE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,16">
+                                            <TextBlock Text="Current MAC" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtMacOverrideCurrent" Text="--" FontSize="13" Foreground="{StaticResource AccentBlueBrush}" FontFamily="Consolas"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,12,16">
+                                            <TextBlock Text="Override Status" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtMacOverrideStatus" Text="No override" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,12,0">
+                                            <TextBlock Text="New MAC (12 hex characters)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtMacOverride" Style="{StaticResource ModernTextBox}" Text=""/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Width="150">
+                                            <Button x:Name="btnGenerateMac" Content="Generate" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnApplyMac" Content="Apply MAC" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnRevertMac" Content="Revert MAC" Style="{StaticResource DangerButton}" Padding="14,8"/>
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
 
@@ -1491,7 +1529,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.4.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.5.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1553,6 +1591,175 @@ function Test-ValidIP {
         return $true
     } catch {
         return $false
+    }
+}
+
+function ConvertTo-CleanMacAddress {
+    param([string]$MacAddress)
+
+    if ([string]::IsNullOrWhiteSpace($MacAddress)) { return "" }
+    return ($MacAddress -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+}
+
+function Test-ValidMacAddress {
+    param([string]$MacAddress)
+
+    $clean = ConvertTo-CleanMacAddress -MacAddress $MacAddress
+    if ($clean.Length -ne 12) { return $false }
+    if ($clean -notmatch '^[0-9A-F]{12}$') { return $false }
+    if ($clean -match '^(00){6}$' -or $clean -match '^(FF){6}$') { return $false }
+
+    $firstOctet = [Convert]::ToInt32($clean.Substring(0, 2), 16)
+    return (($firstOctet -band 1) -eq 0)
+}
+
+function Get-RandomMacAddress {
+    $bytes = New-Object byte[] 6
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
+
+    $bytes[0] = [byte](($bytes[0] -bor 0x02) -band 0xFE)
+    return (($bytes | ForEach-Object { $_.ToString("X2") }) -join "")
+}
+
+function Get-AdapterRegistryPath {
+    param($Adapter)
+
+    if ($null -eq $Adapter) { return $null }
+
+    $adapterGuid = $Adapter.InterfaceGuid
+    if (-not $adapterGuid) {
+        $cimAdapter = Get-CimInstance -ClassName Win32_NetworkAdapter -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceIndex -eq $Adapter.ifIndex } | Select-Object -First 1
+        if ($cimAdapter) {
+            $adapterGuid = $cimAdapter.GUID
+        }
+    }
+
+    if (-not $adapterGuid) { return $null }
+
+    $classPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}"
+    $registryKey = Get-ChildItem -LiteralPath $classPath -ErrorAction SilentlyContinue | Where-Object {
+        $properties = Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue
+        $properties.NetCfgInstanceId -eq $adapterGuid
+    } | Select-Object -First 1
+
+    if ($registryKey) { return $registryKey.PSPath }
+    return $null
+}
+
+function Get-MacOverride {
+    param($Adapter)
+
+    $registryPath = Get-AdapterRegistryPath -Adapter $Adapter
+    if (-not $registryPath) { return $null }
+
+    $properties = Get-ItemProperty -LiteralPath $registryPath -Name NetworkAddress -ErrorAction SilentlyContinue
+    if ($properties -and $properties.NetworkAddress) {
+        return $properties.NetworkAddress
+    }
+
+    return $null
+}
+
+function Show-MacOverrideDisplay {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        $script:txtMacOverrideCurrent.Text = "--"
+        $script:txtMacOverrideStatus.Text = "No adapter selected"
+        $script:txtMacOverride.Text = ""
+        return
+    }
+
+    $script:txtMacOverrideCurrent.Text = if ($adapter.MacAddress) { $adapter.MacAddress } else { "--" }
+    $override = Get-MacOverride -Adapter $adapter
+    if ($override) {
+        $script:txtMacOverrideStatus.Text = "Override active: $override"
+        $script:txtMacOverrideStatus.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#d29922")
+        $script:txtMacOverride.Text = $override
+    } else {
+        $script:txtMacOverrideStatus.Text = "No override"
+        $script:txtMacOverrideStatus.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
+        $script:txtMacOverride.Text = ""
+    }
+}
+
+function Invoke-AdapterRestartForMac {
+    param($Adapter)
+
+    if ($null -eq $Adapter) { return "No adapter selected." }
+    if ($Adapter.Status -ne "Up") {
+        return "Adapter is not active; change applies next time it is enabled."
+    }
+
+    Disable-NetAdapter -Name $Adapter.Name -Confirm:$false -ErrorAction Stop
+    Start-Sleep -Milliseconds 1200
+    Enable-NetAdapter -Name $Adapter.Name -Confirm:$false -ErrorAction Stop
+    Start-Sleep -Milliseconds 1200
+    return "Adapter restarted."
+}
+
+function Invoke-GenerateMacAddress {
+    $script:txtMacOverride.Text = Get-RandomMacAddress
+    Update-Status "Generated locally administered unicast MAC address"
+}
+
+function Invoke-MacOverride {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    $cleanMac = ConvertTo-CleanMacAddress -MacAddress $script:txtMacOverride.Text
+    if (-not (Test-ValidMacAddress -MacAddress $cleanMac)) {
+        Show-MessageBox -Message "Enter a valid 12-character unicast MAC address." -Title "Invalid MAC Address" -Icon Error
+        return
+    }
+
+    $registryPath = Get-AdapterRegistryPath -Adapter $adapter
+    if (-not $registryPath) {
+        Show-MessageBox -Message "Could not locate the Windows registry key for '$($adapter.Name)'." -Title "MAC Override Failed" -Icon Error
+        return
+    }
+
+    Update-Status "Applying MAC override to $($adapter.Name)..."
+    try {
+        New-ItemProperty -LiteralPath $registryPath -Name NetworkAddress -Value $cleanMac -PropertyType String -Force -ErrorAction Stop | Out-Null
+        $restartMessage = Invoke-AdapterRestartForMac -Adapter $adapter
+        Update-Status "MAC override $cleanMac applied. $restartMessage" -Type Success
+        Refresh-AdapterList
+    } catch {
+        Update-Status "MAC override failed: $($_.Exception.Message)" -Type Error
+        Show-MessageBox -Message "Failed to apply MAC override:`n$($_.Exception.Message)" -Title "MAC Override Failed" -Icon Error
+    }
+}
+
+function Invoke-MacRevert {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    $registryPath = Get-AdapterRegistryPath -Adapter $adapter
+    if (-not $registryPath) {
+        Show-MessageBox -Message "Could not locate the Windows registry key for '$($adapter.Name)'." -Title "MAC Revert Failed" -Icon Error
+        return
+    }
+
+    Update-Status "Reverting MAC override on $($adapter.Name)..."
+    try {
+        Remove-ItemProperty -LiteralPath $registryPath -Name NetworkAddress -ErrorAction SilentlyContinue
+        $restartMessage = Invoke-AdapterRestartForMac -Adapter $adapter
+        Update-Status "MAC override removed. $restartMessage" -Type Success
+        Refresh-AdapterList
+    } catch {
+        Update-Status "MAC revert failed: $($_.Exception.Message)" -Type Error
+        Show-MessageBox -Message "Failed to revert MAC override:`n$($_.Exception.Message)" -Title "MAC Revert Failed" -Icon Error
     }
 }
 
@@ -1717,6 +1924,7 @@ function Update-AdapterDisplay {
         $script:txtMAC.Text = "--"
         $script:txtStatus.Text = "--"
         $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#6e7681")
+        Show-MacOverrideDisplay
         return
     }
 
@@ -1760,6 +1968,7 @@ function Update-AdapterDisplay {
     }
 
     Update-AdapterDetails
+    Show-MacOverrideDisplay
 }
 
 function Update-AdapterDetails {
@@ -3649,6 +3858,9 @@ $btnExport.Add_Click({ Export-AllConfiguration })
 $btnImport.Add_Click({ Import-Configuration })
 $btnEnableAdapter.Add_Click({ Enable-SelectedAdapter })
 $btnDisableAdapter.Add_Click({ Disable-SelectedAdapter })
+$btnGenerateMac.Add_Click({ Invoke-GenerateMacAddress })
+$btnApplyMac.Add_Click({ Invoke-MacOverride })
+$btnRevertMac.Add_Click({ Invoke-MacRevert })
 $btnApplyIP.Add_Click({ Apply-IPConfiguration })
 $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
 $btnWifiRefresh.Add_Click({ Invoke-WifiNetworkScan })
