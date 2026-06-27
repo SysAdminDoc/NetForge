@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.5.0
+    Version: 1.6.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.5.0"
+$script:AppVersion = "1.6.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -700,7 +700,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.5.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.6.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -920,6 +920,48 @@ $script:DnsPresets = [ordered]@{
                                             <Button x:Name="btnGenerateMac" Content="Generate" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
                                             <Button x:Name="btnApplyMac" Content="Apply MAC" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
                                             <Button x:Name="btnRevertMac" Content="Revert MAC" Style="{StaticResource DangerButton}" Padding="14,8"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Interface Metric / Priority -->
+                                <TextBlock Text="ADAPTER PRIORITY / INTERFACE METRIC" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,16">
+                                            <TextBlock Text="IPv4 Metric" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtMetricIPv4Current" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,12,16">
+                                            <TextBlock Text="IPv6 Metric" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtMetricIPv6Current" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,12,0">
+                                            <TextBlock Text="Manual Metric (lower wins)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtInterfaceMetric" Style="{StaticResource ModernTextBox}" Text="25"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom" Margin="0,0,12,0">
+                                            <CheckBox x:Name="chkMetricIPv4" Content="IPv4" Style="{StaticResource ModernCheckBox}" IsChecked="True" Margin="0,0,16,0"/>
+                                            <CheckBox x:Name="chkMetricIPv6" Content="IPv6" Style="{StaticResource ModernCheckBox}" IsChecked="True"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Width="150">
+                                            <Button x:Name="btnApplyMetric" Content="Apply Metric" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnAutoMetric" Content="Auto Metric" Style="{StaticResource ModernButton}" Padding="14,8"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -1529,7 +1571,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.5.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.6.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1763,6 +1805,116 @@ function Invoke-MacRevert {
     }
 }
 
+function Get-InterfaceMetricSummary {
+    param(
+        $Adapter,
+        [string]$AddressFamily
+    )
+
+    if ($null -eq $Adapter) { return "--" }
+
+    $ipInterface = Get-NetIPInterface -InterfaceIndex $Adapter.ifIndex -AddressFamily $AddressFamily -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $ipInterface) { return "--" }
+
+    $mode = if ($ipInterface.AutomaticMetric -eq "Enabled") { "Auto" } else { "Manual" }
+    return "$($ipInterface.InterfaceMetric) ($mode)"
+}
+
+function Show-InterfaceMetricDisplay {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        $script:txtMetricIPv4Current.Text = "--"
+        $script:txtMetricIPv6Current.Text = "--"
+        $script:txtInterfaceMetric.Text = "25"
+        return
+    }
+
+    $script:txtMetricIPv4Current.Text = Get-InterfaceMetricSummary -Adapter $adapter -AddressFamily IPv4
+    $script:txtMetricIPv6Current.Text = Get-InterfaceMetricSummary -Adapter $adapter -AddressFamily IPv6
+
+    $ipv4 = Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($ipv4 -and $ipv4.InterfaceMetric) {
+        $script:txtInterfaceMetric.Text = $ipv4.InterfaceMetric.ToString()
+    }
+}
+
+function Test-ValidInterfaceMetric {
+    param([string]$Metric)
+
+    $value = 0
+    if (-not [int]::TryParse($Metric, [ref]$value)) { return $false }
+    return ($value -ge 1 -and $value -le 9999)
+}
+
+function Invoke-ApplyInterfaceMetric {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    $metricText = $script:txtInterfaceMetric.Text.Trim()
+    if (-not (Test-ValidInterfaceMetric -Metric $metricText)) {
+        Show-MessageBox -Message "Enter a metric from 1 to 9999. Lower metrics take priority." -Title "Invalid Metric" -Icon Error
+        return
+    }
+
+    if (-not $script:chkMetricIPv4.IsChecked -and -not $script:chkMetricIPv6.IsChecked) {
+        Show-MessageBox -Message "Choose IPv4, IPv6, or both before applying a metric." -Title "No Address Family Selected" -Icon Warning
+        return
+    }
+
+    $metric = [int]$metricText
+    Update-Status "Applying interface metric $metric to $($adapter.Name)..."
+
+    try {
+        if ($script:chkMetricIPv4.IsChecked) {
+            Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -AutomaticMetric Disabled -InterfaceMetric $metric -ErrorAction Stop
+        }
+        if ($script:chkMetricIPv6.IsChecked) {
+            Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv6 -AutomaticMetric Disabled -InterfaceMetric $metric -ErrorAction Stop
+        }
+
+        Show-InterfaceMetricDisplay
+        Update-AdapterDetails
+        Update-Status "Interface metric $metric applied to $($adapter.Name)" -Type Success
+    } catch {
+        Update-Status "Metric update failed: $($_.Exception.Message)" -Type Error
+        Show-MessageBox -Message "Failed to apply interface metric:`n$($_.Exception.Message)" -Title "Metric Update Failed" -Icon Error
+    }
+}
+
+function Invoke-AutomaticInterfaceMetric {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    if (-not $script:chkMetricIPv4.IsChecked -and -not $script:chkMetricIPv6.IsChecked) {
+        Show-MessageBox -Message "Choose IPv4, IPv6, or both before restoring automatic metrics." -Title "No Address Family Selected" -Icon Warning
+        return
+    }
+
+    Update-Status "Restoring automatic interface metric on $($adapter.Name)..."
+
+    try {
+        if ($script:chkMetricIPv4.IsChecked) {
+            Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -AutomaticMetric Enabled -ErrorAction Stop
+        }
+        if ($script:chkMetricIPv6.IsChecked) {
+            Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv6 -AutomaticMetric Enabled -ErrorAction Stop
+        }
+
+        Show-InterfaceMetricDisplay
+        Update-AdapterDetails
+        Update-Status "Automatic interface metric restored on $($adapter.Name)" -Type Success
+    } catch {
+        Update-Status "Automatic metric restore failed: $($_.Exception.Message)" -Type Error
+        Show-MessageBox -Message "Failed to restore automatic metric:`n$($_.Exception.Message)" -Title "Metric Restore Failed" -Icon Error
+    }
+}
+
 function Get-SubnetFromPrefix {
     param([int]$Prefix)
     $mask = [uint32]([math]::Pow(2, 32) - [math]::Pow(2, 32 - $Prefix))
@@ -1925,6 +2077,7 @@ function Update-AdapterDisplay {
         $script:txtStatus.Text = "--"
         $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#6e7681")
         Show-MacOverrideDisplay
+        Show-InterfaceMetricDisplay
         return
     }
 
@@ -1969,6 +2122,7 @@ function Update-AdapterDisplay {
 
     Update-AdapterDetails
     Show-MacOverrideDisplay
+    Show-InterfaceMetricDisplay
 }
 
 function Update-AdapterDetails {
@@ -3861,6 +4015,8 @@ $btnDisableAdapter.Add_Click({ Disable-SelectedAdapter })
 $btnGenerateMac.Add_Click({ Invoke-GenerateMacAddress })
 $btnApplyMac.Add_Click({ Invoke-MacOverride })
 $btnRevertMac.Add_Click({ Invoke-MacRevert })
+$btnApplyMetric.Add_Click({ Invoke-ApplyInterfaceMetric })
+$btnAutoMetric.Add_Click({ Invoke-AutomaticInterfaceMetric })
 $btnApplyIP.Add_Click({ Apply-IPConfiguration })
 $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
 $btnWifiRefresh.Add_Click({ Invoke-WifiNetworkScan })
