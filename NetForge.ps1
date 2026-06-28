@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.9.0
+    Version: 1.10.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.9.0"
+$script:AppVersion = "1.10.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -59,6 +59,7 @@ $script:ShowAdvancedAdapters = $false
 $script:EncryptedDnsHealthRunning = $false
 $script:EncryptedDnsHealthJob = $null
 $script:EncryptedDnsHealthTimer = $null
+$script:DoqProxyProcess = $null
 
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
@@ -715,7 +716,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.9.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.10.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1181,6 +1182,67 @@ $script:DnsPresets = [ordered]@{
                                     </Grid>
                                 </Border>
 
+                                <!-- DoQ Local Proxy -->
+                                <TextBlock Text="DOQ LOCAL PROXY" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="180"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,14,14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <TextBlock Text="dnsproxy.exe Path" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBox x:Name="txtDoqProxyPath" Style="{StaticResource ModernTextBox}" Text="dnsproxy.exe"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                                <TextBlock Text="DoQ Upstream" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBox x:Name="txtDoqUpstream" Style="{StaticResource ModernTextBox}" Text="quic://dns.adguard.com"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <Grid Grid.Row="1" Grid.Column="0" Margin="0,0,14,14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                <TextBlock Text="Listen Address" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBox x:Name="txtDoqListenAddress" Style="{StaticResource ModernTextBox}" Text="127.0.0.1"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" Margin="10,0,10,0">
+                                                <TextBlock Text="Port" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBox x:Name="txtDoqListenPort" Style="{StaticResource ModernTextBox}" Text="53"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" Margin="10,0,0,0">
+                                                <TextBlock Text="Bootstrap DNS" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBox x:Name="txtDoqBootstrap" Style="{StaticResource ModernTextBox}" Text="1.1.1.1:53"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <TextBlock x:Name="txtDoqProxyStatus" Grid.Row="2" Grid.Column="0" Text="Requires AdGuard dnsproxy or a compatible DNS proxy binary." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,2,14,0"/>
+
+                                        <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="1">
+                                            <Button x:Name="btnValidateDoqProxy" Content="Validate Proxy" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnStartDoqProxy" Content="Start Proxy" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnStopDoqProxy" Content="Stop Proxy" Style="{StaticResource DangerButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnApplyDoqLocalDns" Content="Apply Local DNS" Style="{StaticResource ModernButton}" Padding="14,8"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Apply Button -->
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button x:Name="btnApplyDns" Content="Apply DNS Configuration" Style="{StaticResource PrimaryButton}" Padding="24,12"/>
@@ -1633,7 +1695,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.9.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.10.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3962,6 +4024,176 @@ function Invoke-EncryptedDnsHealthTest {
     $script:EncryptedDnsHealthTimer.Start()
 }
 
+function Resolve-DoqProxyPath {
+    $pathText = $script:txtDoqProxyPath.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($pathText)) { return $null }
+
+    if (Test-Path -LiteralPath $pathText -PathType Leaf) {
+        return (Resolve-Path -LiteralPath $pathText).Path
+    }
+
+    $command = Get-Command $pathText -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+
+    return $null
+}
+
+function Get-DoqProxyConfiguration {
+    $port = 0
+    [void][int]::TryParse($script:txtDoqListenPort.Text.Trim(), [ref]$port)
+
+    return [pscustomobject]@{
+        ProxyPathText = $script:txtDoqProxyPath.Text.Trim()
+        ProxyPath = Resolve-DoqProxyPath
+        Upstream = $script:txtDoqUpstream.Text.Trim()
+        ListenAddress = $script:txtDoqListenAddress.Text.Trim()
+        ListenPort = $port
+        Bootstrap = $script:txtDoqBootstrap.Text.Trim()
+    }
+}
+
+function Test-DoqProxyConfiguration {
+    param([pscustomobject]$Config)
+
+    $errors = @()
+
+    if ([string]::IsNullOrWhiteSpace($Config.ProxyPath)) {
+        $errors += "dnsproxy.exe was not found. Enter a full path or place it on PATH."
+    }
+    if ($Config.Upstream -notmatch '^quic://[^\s]+$') {
+        $errors += "DoQ upstream must start with quic://."
+    }
+    if (-not (Test-ValidIP -IP $Config.ListenAddress)) {
+        $errors += "Listen address must be a valid local IP address."
+    }
+    if ($Config.ListenPort -lt 1 -or $Config.ListenPort -gt 65535) {
+        $errors += "Listen port must be between 1 and 65535."
+    }
+    if ($Config.Bootstrap -and $Config.Bootstrap -notmatch '^[^\s:]+(?::\d{1,5})?$') {
+        $errors += "Bootstrap DNS must be a host or host:port value."
+    }
+
+    return $errors
+}
+
+function Invoke-ValidateDoqProxy {
+    $config = Get-DoqProxyConfiguration
+    $errors = Test-DoqProxyConfiguration -Config $config
+
+    if ($errors.Count -gt 0) {
+        $script:txtDoqProxyStatus.Text = $errors -join "`n"
+        Update-Status "DoQ proxy configuration needs attention" -Type Warning
+        return $false
+    }
+
+    try {
+        $versionOutput = & $config.ProxyPath --version 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            throw $versionOutput.Trim()
+        }
+
+        $summary = if ([string]::IsNullOrWhiteSpace($versionOutput.Trim())) { "dnsproxy found." } else { $versionOutput.Trim() }
+        $script:txtDoqProxyStatus.Text = "Ready: $summary"
+        Update-Status "DoQ proxy configuration validated" -Type Success
+        return $true
+    } catch {
+        $script:txtDoqProxyStatus.Text = "dnsproxy validation failed: $($_.Exception.Message)"
+        Update-Status "DoQ proxy validation failed" -Type Error
+        return $false
+    }
+}
+
+function Invoke-StartDoqProxy {
+    if ($script:DoqProxyProcess -and -not $script:DoqProxyProcess.HasExited) {
+        $script:txtDoqProxyStatus.Text = "DoQ proxy already running. PID $($script:DoqProxyProcess.Id)."
+        Update-Status "DoQ proxy already running" -Type Warning
+        return
+    }
+
+    $config = Get-DoqProxyConfiguration
+    $errors = Test-DoqProxyConfiguration -Config $config
+    if ($errors.Count -gt 0) {
+        $script:txtDoqProxyStatus.Text = $errors -join "`n"
+        Update-Status "DoQ proxy configuration needs attention" -Type Warning
+        return
+    }
+
+    $arguments = @(
+        "-l", $config.ListenAddress,
+        "-p", $config.ListenPort.ToString(),
+        "-u", $config.Upstream
+    )
+    if (-not [string]::IsNullOrWhiteSpace($config.Bootstrap)) {
+        $arguments += @("-b", $config.Bootstrap)
+    }
+
+    try {
+        $script:DoqProxyProcess = Start-Process -FilePath $config.ProxyPath -ArgumentList $arguments -WindowStyle Hidden -PassThru
+        Start-Sleep -Milliseconds 600
+
+        if ($script:DoqProxyProcess.HasExited) {
+            $exitCode = $script:DoqProxyProcess.ExitCode
+            $script:DoqProxyProcess = $null
+            throw "dnsproxy exited immediately with code $exitCode."
+        }
+
+        $script:txtDoqProxyStatus.Text = "DoQ proxy running on $($config.ListenAddress):$($config.ListenPort). PID $($script:DoqProxyProcess.Id)."
+        Update-Status "DoQ proxy started" -Type Success
+    } catch {
+        $script:txtDoqProxyStatus.Text = "Failed to start DoQ proxy: $($_.Exception.Message)"
+        Update-Status "DoQ proxy start failed" -Type Error
+    }
+}
+
+function Invoke-StopDoqProxy {
+    if (-not $script:DoqProxyProcess -or $script:DoqProxyProcess.HasExited) {
+        $script:txtDoqProxyStatus.Text = "No NetForge-managed DoQ proxy is running."
+        Update-Status "No DoQ proxy process to stop" -Type Warning
+        return
+    }
+
+    try {
+        Stop-Process -Id $script:DoqProxyProcess.Id -Force -ErrorAction Stop
+        $script:txtDoqProxyStatus.Text = "DoQ proxy stopped."
+        Update-Status "DoQ proxy stopped" -Type Success
+    } catch {
+        $script:txtDoqProxyStatus.Text = "Failed to stop DoQ proxy: $($_.Exception.Message)"
+        Update-Status "DoQ proxy stop failed" -Type Error
+    } finally {
+        $script:DoqProxyProcess = $null
+    }
+}
+
+function Invoke-ApplyDoqLocalResolver {
+    $adapter = Get-SelectedAdapter
+    $config = Get-DoqProxyConfiguration
+
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    if (-not (Test-ValidIP -IP $config.ListenAddress)) {
+        Show-MessageBox -Message "Enter a valid local proxy listen address before applying local DNS." -Title "Invalid Listen Address" -Icon Error
+        return
+    }
+
+    if ($config.ListenPort -ne 53) {
+        Show-MessageBox -Message "Windows DNS client settings cannot include a custom DNS port. Use listen port 53 before applying local DNS." -Title "Port 53 Required" -Icon Warning
+        return
+    }
+
+    try {
+        Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses @($config.ListenAddress) -ErrorAction Stop
+        $script:txtDoqProxyStatus.Text = "Adapter '$($adapter.Name)' now uses local DoQ proxy DNS at $($config.ListenAddress)."
+        Update-Status "Local DoQ proxy DNS applied to $($adapter.Name)" -Type Success
+        Update-AdapterDetails
+    } catch {
+        $script:txtDoqProxyStatus.Text = "Failed to apply local DNS: $($_.Exception.Message)"
+        Update-Status "Local DoQ proxy DNS apply failed" -Type Error
+    }
+}
+
 # ============================================================================
 # PROFILE FUNCTIONS
 # ============================================================================
@@ -4621,6 +4853,10 @@ $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
 $btnRegisterDoh.Add_Click({ Register-DohEncryption })
 $btnRegisterDot.Add_Click({ Register-DotEncryption })
 $btnTestEncryptedDns.Add_Click({ Invoke-EncryptedDnsHealthTest })
+$btnValidateDoqProxy.Add_Click({ Invoke-ValidateDoqProxy })
+$btnStartDoqProxy.Add_Click({ Invoke-StartDoqProxy })
+$btnStopDoqProxy.Add_Click({ Invoke-StopDoqProxy })
+$btnApplyDoqLocalDns.Add_Click({ Invoke-ApplyDoqLocalResolver })
 $btnWifiRefresh.Add_Click({ Invoke-WifiNetworkScan })
 $btnWifiConnect.Add_Click({ Invoke-WifiConnect })
 $btnWifiDisconnect.Add_Click({ Invoke-WifiDisconnect })
@@ -4679,6 +4915,9 @@ $window.Add_Closing({
     if ($script:EncryptedDnsHealthJob) {
         Stop-Job $script:EncryptedDnsHealthJob -ErrorAction SilentlyContinue
         Remove-Job $script:EncryptedDnsHealthJob -Force -ErrorAction SilentlyContinue
+    }
+    if ($script:DoqProxyProcess -and -not $script:DoqProxyProcess.HasExited) {
+        Stop-Process -Id $script:DoqProxyProcess.Id -Force -ErrorAction SilentlyContinue
     }
     $script:ConnStatusTimer.Stop()
 })
