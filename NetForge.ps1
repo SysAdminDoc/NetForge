@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.15.0
+    Version: 1.16.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,9 +44,10 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.15.0"
+$script:AppVersion = "1.16.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
+$script:LogsPath = Join-Path $script:ConfigPath "Logs"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
 $script:ProfileSchemaVersion = 1
 $script:ContinuousPingRunning = $false
@@ -69,6 +70,7 @@ $script:AutoProfileTimer = $null
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
 if (-not (Test-Path $script:ProfilesPath)) { New-Item -Path $script:ProfilesPath -ItemType Directory -Force | Out-Null }
+if (-not (Test-Path $script:LogsPath)) { New-Item -Path $script:LogsPath -ItemType Directory -Force | Out-Null }
 
 # ============================================================================
 # DNS PRESETS DATABASE
@@ -721,7 +723,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.15.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.16.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1524,6 +1526,7 @@ $script:DnsPresets = [ordered]@{
                                         <Button x:Name="btnReleaseIP" Content="Release IP" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnRenewIP" Content="Renew IP" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnRestoreNetworkState" Content="Restore Last Network State" Style="{StaticResource ModernButton}" Margin="0,0,12,12" IsEnabled="False"/>
+                                        <Button x:Name="btnExportDiagnostics" Content="Export Diagnostics" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnResetWinsock" Content="Reset Winsock" Style="{StaticResource DangerButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnResetTCP" Content="Reset TCP/IP Stack" Style="{StaticResource DangerButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnNetworkReset" Content="Full Network Reset" Style="{StaticResource DangerButton}" Margin="0,0,0,12"/>
@@ -1754,7 +1757,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.15.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.16.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1773,6 +1776,7 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
                         $window.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create((New-Object System.Uri($brandingIconPath)))
                     }
                 } catch {
+                    Write-Warning "NetForge icon load failed: $($_.Exception.Message)"
                 }
 
 # Get all named controls
@@ -1784,6 +1788,74 @@ $xaml.SelectNodes("//*[@*[contains(translate(name(.),'n','N'),'Name')]]") | ForE
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
+function Get-OperationLogPath {
+    return (Join-Path $script:LogsPath "operations-$(Get-Date -Format 'yyyyMMdd').log")
+}
+
+function Write-OperationLog {
+    param(
+        [string]$Action,
+        [string]$Result = "Info",
+        [string]$Detail = ""
+    )
+
+    try {
+        if (-not (Test-Path -LiteralPath $script:LogsPath)) {
+            New-Item -Path $script:LogsPath -ItemType Directory -Force | Out-Null
+        }
+
+        $line = "{0}`t{1}`t{2}`t{3}" -f (Get-Date).ToString("o"), $Result, $Action, (($Detail -replace "`r?`n", " ") -replace "`t", " ")
+        Add-Content -LiteralPath (Get-OperationLogPath) -Value $line -Encoding UTF8
+    } catch {
+        Write-Warning "NetForge operation log write failed: $($_.Exception.Message)"
+    }
+}
+
+function Write-CrashLog {
+    param(
+        $Exception,
+        [string]$Context = "Unhandled"
+    )
+
+    try {
+        if (-not (Test-Path -LiteralPath $script:LogsPath)) {
+            New-Item -Path $script:LogsPath -ItemType Directory -Force | Out-Null
+        }
+
+        $path = Join-Path $script:LogsPath "crash-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+        $exceptionText = if ($Exception -is [System.Exception]) { $Exception.ToString() } else { [string]$Exception }
+        $lines = @(
+            "NetForge crash log",
+            "Version: $script:AppVersion",
+            "Time: $((Get-Date).ToString('o'))",
+            "Context: $Context",
+            "",
+            $exceptionText
+        )
+        Set-Content -LiteralPath $path -Value $lines -Encoding UTF8
+        Write-OperationLog -Action "CrashLog" -Result "Error" -Detail "$Context -> $path"
+        return $path
+    } catch {
+        Write-Warning "NetForge crash log write failed: $($_.Exception.Message)"
+        return ""
+    }
+}
+
+function Register-CrashHandler {
+    [System.AppDomain]::CurrentDomain.add_UnhandledException({
+        param($eventSource, $exceptionEvent)
+        [void](Write-CrashLog -Exception $exceptionEvent.ExceptionObject -Context "AppDomain unhandled exception")
+    })
+
+    $window.Dispatcher.add_UnhandledException({
+        param($eventSource, $dispatcherEvent)
+        $path = Write-CrashLog -Exception $dispatcherEvent.Exception -Context "WPF dispatcher unhandled exception"
+        Update-Status "Unexpected error logged to $path" -Type Error
+        Show-MessageBox -Message "An unexpected error was logged to:`n$path" -Title "NetForge Error" -Icon Error
+        $dispatcherEvent.Handled = $true
+    })
+}
+
 function Update-Status {
     param([string]$Message, [string]$Type = "Info")
 
@@ -1796,6 +1868,7 @@ function Update-Status {
             default   { $script:txtStatusBar.Foreground = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(139,148,158))) }
         }
     })
+    Write-OperationLog -Action "Status" -Result $Type -Detail $Message
 }
 
 function Show-MessageBox {
@@ -1807,6 +1880,8 @@ function Show-MessageBox {
     )
     return [System.Windows.MessageBox]::Show($Message, $Title, $Buttons, $Icon)
 }
+
+Register-CrashHandler
 
 function Test-ValidIP {
     param([string]$IP)
@@ -2057,13 +2132,16 @@ function Invoke-NetworkMutation {
     try {
         $snapshot = Get-AdapterNetworkSnapshot -Adapter $Adapter -Reason $ActionName
         Register-LastNetworkSnapshot -Snapshot $snapshot
+        Write-OperationLog -Action $ActionName -Result "Started" -Detail "Adapter=$($Adapter.Name); Snapshot=$($snapshot.CapturedAt)"
         & $ScriptBlock
+        Write-OperationLog -Action $ActionName -Result "Succeeded" -Detail "Adapter=$($Adapter.Name)"
         return $true
     } catch {
         $changeError = $_.Exception.Message
 
         if ($null -eq $snapshot) {
             Update-Status "$ActionName failed before a rollback snapshot was captured" -Type Error
+            Write-OperationLog -Action $ActionName -Result "Failed" -Detail "Snapshot capture failed: $changeError"
             if (-not $Quiet) {
                 Show-MessageBox -Message "$ActionName failed before a rollback snapshot was captured:`n$changeError" -Title "Network Change Failed" -Icon Error
             }
@@ -2073,11 +2151,13 @@ function Invoke-NetworkMutation {
         $restoreResult = Restore-NetworkSnapshot -Snapshot $snapshot
         if ($restoreResult.Restored) {
             Update-Status "$ActionName failed; previous network state restored" -Type Error
+            Write-OperationLog -Action $ActionName -Result "RolledBack" -Detail "$changeError; $($restoreResult.Message)"
             if (-not $Quiet) {
                 Show-MessageBox -Message "$ActionName failed:`n$changeError`n`nPrevious network state was restored." -Title "Network Change Rolled Back" -Icon Error
             }
         } else {
             Update-Status "$ActionName failed; restore failed" -Type Error
+            Write-OperationLog -Action $ActionName -Result "RollbackFailed" -Detail "$changeError; Restore failed: $($restoreResult.Message)"
             if (-not $Quiet) {
                 Show-MessageBox -Message "$ActionName failed:`n$changeError`n`nRestore failed:`n$($restoreResult.Message)" -Title "Network Change Failed" -Icon Error
             }
@@ -2812,7 +2892,7 @@ function Update-AdapterDetails {
         $script:txtInfoDriver.Text = $adapter.DriverDescription
         $script:txtInfoMAC.Text = $adapter.MacAddress
     } catch {
-        # Ignore errors
+        Write-OperationLog -Action "Update adapter details" -Result "Warning" -Detail $_.Exception.Message
     }
 }
 
@@ -2857,7 +2937,7 @@ function Update-ConnectionStatus {
             $script:pnlWifiInfo.Visibility = "Collapsed"
         }
     } catch {
-        # Ignore errors in status refresh
+        Write-OperationLog -Action "Update connection status" -Result "Warning" -Detail $_.Exception.Message
     }
 }
 
@@ -2923,7 +3003,7 @@ function Update-WifiInfo {
             $script:txtWifiSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
         }
     } catch {
-        # Ignore wifi info errors
+        Write-OperationLog -Action "Update WiFi info" -Result "Warning" -Detail $_.Exception.Message
     }
 }
 
@@ -3634,7 +3714,9 @@ function Toggle-ContinuousPing {
             try {
                 $script:ContinuousPingPS.Stop()
                 $script:ContinuousPingPS.Dispose()
-            } catch {}
+            } catch {
+                Write-OperationLog -Action "Stop continuous ping" -Result "Warning" -Detail $_.Exception.Message
+            }
             $script:ContinuousPingPS = $null
         }
         Update-Status "Continuous ping stopped"
@@ -3722,7 +3804,9 @@ function Toggle-ContinuousPing {
                         # Auto-scroll
                         $script:svPingLog.ScrollToEnd()
                     }
-                } catch {}
+                } catch {
+                    Write-OperationLog -Action "Continuous ping result" -Result "Warning" -Detail $_.Exception.Message
+                }
                 $ps.Dispose()
                 $resultTimer.Stop()
             }
@@ -3890,7 +3974,9 @@ function Invoke-DnsLookup {
                 if ($hostEntry.Aliases.Count -gt 0) {
                     $sb.AppendLine("Aliases: $($hostEntry.Aliases -join ', ')") | Out-Null
                 }
-            } catch {}
+            } catch {
+                $sb.AppendLine("Canonical lookup failed: $($_.Exception.Message)") | Out-Null
+            }
 
         } catch {
             $sb.AppendLine("DNS lookup failed: $($_.Exception.Message)") | Out-Null
@@ -5599,6 +5685,73 @@ function Disable-SelectedAdapter {
 # ============================================================================
 # EXPORT/IMPORT FUNCTIONS
 # ============================================================================
+function Export-DiagnosticsBundle {
+    $saveDialog = New-Object System.Windows.Forms.SaveFileDialog
+    $saveDialog.Filter = "Zip Files (*.zip)|*.zip"
+    $saveDialog.FileName = "NetForge_Diagnostics_$(Get-Date -Format 'yyyyMMdd_HHmmss').zip"
+    $saveDialog.Title = "Export Diagnostics"
+
+    if ($saveDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+    $tempRoot = Join-Path $env:TEMP "NetForgeDiag-$([guid]::NewGuid().ToString('N'))"
+    try {
+        Write-OperationLog -Action "Export diagnostics" -Result "Started" -Detail $saveDialog.FileName
+        New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
+
+        $logsTarget = Join-Path $tempRoot "Logs"
+        $profilesTarget = Join-Path $tempRoot "Profiles"
+        New-Item -Path $logsTarget -ItemType Directory -Force | Out-Null
+        New-Item -Path $profilesTarget -ItemType Directory -Force | Out-Null
+
+        if (Test-Path -LiteralPath $script:LogsPath) {
+            Copy-Item -Path (Join-Path $script:LogsPath "*") -Destination $logsTarget -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath $script:ProfilesPath) {
+            Copy-Item -Path (Join-Path $script:ProfilesPath "*.json") -Destination $profilesTarget -Force -ErrorAction SilentlyContinue
+        }
+
+        $adapter = Get-SelectedAdapter
+        $adapterSnapshot = $null
+        if ($adapter) {
+            try {
+                $adapterSnapshot = Get-AdapterNetworkSnapshot -Adapter $adapter -Reason "Diagnostics export"
+            } catch {
+                $adapterSnapshot = [pscustomobject]@{ Error = $_.Exception.Message }
+            }
+        }
+
+        $state = [ordered]@{
+            ExportedAt = (Get-Date).ToString("o")
+            Version = $script:AppVersion
+            ConfigPath = $script:ConfigPath
+            ProfilesPath = $script:ProfilesPath
+            LogsPath = $script:LogsPath
+            SelectedAdapter = if ($adapter) { $adapter | Select-Object Name, InterfaceDescription, ifIndex, Status, MacAddress, LinkSpeed } else { $null }
+            AdapterSnapshot = $adapterSnapshot
+            Profiles = Get-Profiles
+            RecentProfileLoadWarnings = $script:LastProfileLoadWarnings
+        }
+
+        $state | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $tempRoot "adapter-state.json") -Encoding UTF8
+
+        if (Test-Path -LiteralPath $saveDialog.FileName) {
+            Remove-Item -LiteralPath $saveDialog.FileName -Force
+        }
+        Compress-Archive -Path (Join-Path $tempRoot "*") -DestinationPath $saveDialog.FileName -Force
+
+        Write-OperationLog -Action "Export diagnostics" -Result "Succeeded" -Detail $saveDialog.FileName
+        Update-Status "Diagnostics exported to $($saveDialog.FileName)" -Type Success
+    } catch {
+        Write-OperationLog -Action "Export diagnostics" -Result "Failed" -Detail $_.Exception.Message
+        Update-Status "Diagnostics export failed: $($_.Exception.Message)" -Type Error
+        Show-MessageBox -Message "Diagnostics export failed:`n$($_.Exception.Message)" -Title "Export Failed" -Icon Error
+    } finally {
+        if ((Test-Path -LiteralPath $tempRoot) -and $tempRoot.StartsWith($env:TEMP, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Export-AllConfiguration {
     $saveDialog = New-Object System.Windows.Forms.SaveFileDialog
     $saveDialog.Filter = "JSON Files (*.json)|*.json"
@@ -5836,6 +5989,7 @@ $btnFlushDns.Add_Click({ Invoke-FlushDns })
 $btnReleaseIP.Add_Click({ Invoke-ReleaseIP })
 $btnRenewIP.Add_Click({ Invoke-RenewIP })
 $btnRestoreNetworkState.Add_Click({ Invoke-RestoreLastNetworkState })
+$btnExportDiagnostics.Add_Click({ Export-DiagnosticsBundle })
 $btnResetWinsock.Add_Click({ Invoke-ResetWinsock })
 $btnResetTCP.Add_Click({ Invoke-ResetTCP })
 $btnNetworkReset.Add_Click({ Invoke-NetworkReset })

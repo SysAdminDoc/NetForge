@@ -80,14 +80,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 
 ## Research-Driven Additions
 
-### P0
-- [ ] P0 - Add persistent operation log, crash log, and diagnostic export
-  Why: Network repair tools need traceability; current failures are mostly status text/message boxes and several catches are empty.
-  Evidence: `NetForge.ps1:75`, `NetForge.ps1:2366`, `NetForge.ps1:4393`, NetAdapter Repair recovery workflow, PSScriptAnalyzer findings.
-  Touches: `Update-Status`, `Show-MessageBox`, all catch blocks, diagnostics tab, `%APPDATA%\NetForge\Logs`.
-  Acceptance: State-changing actions append timestamped command/result records, unhandled exceptions write a crash log, diagnostics can export logs/profiles/current adapter state to one zip, and empty catches are removed.
-  Complexity: M
-
 ### P1
 - [ ] P1 - Replace profile polling with network-change events
   Why: Auto-apply currently checks every 60 seconds, which delays roaming and repeats network probes.

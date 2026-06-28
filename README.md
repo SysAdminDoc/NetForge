@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.15.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.16.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -110,6 +110,7 @@
 - Professional dark theme with orange accents
 - Tabbed interface for organized navigation
 - Real-time status updates
+- Persistent operation/crash logs and a diagnostics zip export
 - Responsive design
 - Native Windows look and feel
 
@@ -203,6 +204,7 @@ NetForge stores its configuration in:
 ```
 %APPDATA%\NetForge\
 |-- Profiles\          # Saved network profiles (.json)
+|-- Logs\              # Operation and crash logs
 `-- settings.json      # Application settings
 ```
 
