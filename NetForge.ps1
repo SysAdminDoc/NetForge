@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.16.0
+    Version: 1.17.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.16.0"
+$script:AppVersion = "1.17.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:LogsPath = Join-Path $script:ConfigPath "Logs"
@@ -63,9 +63,13 @@ $script:EncryptedDnsHealthJob = $null
 $script:EncryptedDnsHealthTimer = $null
 $script:DoqProxyProcess = $null
 $script:LastAutoAppliedProfile = ""
+$script:LastAutoApplySignature = ""
+$script:LastAutoApplyAttemptKey = ""
 $script:LastNetworkSnapshot = $null
 $script:LastProfileLoadWarnings = @()
 $script:AutoProfileTimer = $null
+$script:NetworkChangeHandlers = @{}
+$script:NetworkChangeSubscribed = $false
 
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
@@ -723,7 +727,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.16.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.17.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1757,7 +1761,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.16.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.17.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1844,11 +1848,13 @@ function Write-CrashLog {
 function Register-CrashHandler {
     [System.AppDomain]::CurrentDomain.add_UnhandledException({
         param($eventSource, $exceptionEvent)
+        [void]$eventSource
         [void](Write-CrashLog -Exception $exceptionEvent.ExceptionObject -Context "AppDomain unhandled exception")
     })
 
     $window.Dispatcher.add_UnhandledException({
         param($eventSource, $dispatcherEvent)
+        [void]$eventSource
         $path = Write-CrashLog -Exception $dispatcherEvent.Exception -Context "WPF dispatcher unhandled exception"
         Update-Status "Unexpected error logged to $path" -Type Error
         Show-MessageBox -Message "An unexpected error was logged to:`n$path" -Title "NetForge Error" -Icon Error
@@ -5274,6 +5280,14 @@ function Test-ProfileAutoApplyMatch {
     return ($ssidMatches -or $gatewayMatches)
 }
 
+function Get-NetworkSignatureKey {
+    param([pscustomobject]$Signature)
+
+    if ($null -eq $Signature) { return "" }
+    $adapterIndex = if ($Signature.Adapter) { [string]$Signature.Adapter.ifIndex } else { "" }
+    return (@($adapterIndex, $Signature.SSID, $Signature.Gateway, $Signature.GatewayMac) | ForEach-Object { [string]$_ }) -join "|"
+}
+
 function Invoke-ApplyProfileObject {
     param(
         [pscustomobject]$ProfileData,
@@ -5310,22 +5324,98 @@ function Invoke-ApplyProfileObject {
 }
 
 function Invoke-AutoApplyProfile {
+    param([string]$Trigger = "FallbackTimer")
+
     $signature = Get-CurrentNetworkSignature
     if ($null -eq $signature) {
         $script:LastAutoAppliedProfile = ""
+        $script:LastAutoApplySignature = ""
+        $script:LastAutoApplyAttemptKey = ""
+        Write-OperationLog -Action "Profile auto-apply" -Result "NoActiveNetwork" -Detail "Trigger=$Trigger"
         return
     }
 
+    $signatureKey = Get-NetworkSignatureKey -Signature $signature
     $profiles = Get-Profiles
     foreach ($candidate in $profiles) {
         if (-not (Test-ProfileAutoApplyMatch -ProfileData $candidate -Signature $signature)) { continue }
-        if ($script:LastAutoAppliedProfile -eq $candidate.Name) { return }
 
-        [void](Invoke-ApplyProfileObject -ProfileData $candidate -Adapter $signature.Adapter -Source "Auto")
+        $attemptKey = "$($candidate.Name)|$signatureKey"
+        if ($script:LastAutoApplyAttemptKey -eq $attemptKey) {
+            Write-OperationLog -Action "Profile auto-apply" -Result "Skipped" -Detail "Trigger=$Trigger; Profile=$($candidate.Name); unchanged signature"
+            return
+        }
+
+        Write-OperationLog -Action "Profile auto-apply" -Result "Matched" -Detail "Trigger=$Trigger; Profile=$($candidate.Name); Signature=$signatureKey"
+        $applied = Invoke-ApplyProfileObject -ProfileData $candidate -Adapter $signature.Adapter -Source "Auto"
+        if ($applied) {
+            $script:LastAutoApplyAttemptKey = $attemptKey
+            $script:LastAutoApplySignature = $signatureKey
+        }
         return
     }
 
     $script:LastAutoAppliedProfile = ""
+    $script:LastAutoApplySignature = ""
+    $script:LastAutoApplyAttemptKey = ""
+    Write-OperationLog -Action "Profile auto-apply" -Result "NoMatch" -Detail "Trigger=$Trigger; Signature=$signatureKey"
+}
+
+function Register-NetworkChangeAutoApply {
+    if ($script:NetworkChangeSubscribed) { return }
+
+    try {
+        $addressHandler = [System.Net.NetworkInformation.NetworkAddressChangedEventHandler]{
+            $window.Dispatcher.BeginInvoke([action]{
+                Invoke-AutoApplyProfile -Trigger "NetworkAddressChanged"
+            }) | Out-Null
+        }.GetNewClosure()
+
+        $availabilityHandler = [System.Net.NetworkInformation.NetworkAvailabilityChangedEventHandler]{
+            param($eventSource, $networkEvent)
+            [void]$eventSource
+            $availabilityTrigger = "NetworkAvailabilityChanged"
+            if ($networkEvent) {
+                $availabilityTrigger = "NetworkAvailabilityChanged:$($networkEvent.IsAvailable)"
+            }
+            $triggerText = $availabilityTrigger
+            $window.Dispatcher.BeginInvoke(([action]{
+                Invoke-AutoApplyProfile -Trigger $triggerText
+            }).GetNewClosure()) | Out-Null
+        }.GetNewClosure()
+
+        [System.Net.NetworkInformation.NetworkChange]::add_NetworkAddressChanged($addressHandler)
+        [System.Net.NetworkInformation.NetworkChange]::add_NetworkAvailabilityChanged($availabilityHandler)
+        $script:NetworkChangeHandlers = @{
+            Address = $addressHandler
+            Availability = $availabilityHandler
+        }
+        $script:NetworkChangeSubscribed = $true
+        Write-OperationLog -Action "Profile auto-apply events" -Result "Subscribed" -Detail "NetworkChange handlers registered"
+    } catch {
+        $script:NetworkChangeSubscribed = $false
+        Write-OperationLog -Action "Profile auto-apply events" -Result "Failed" -Detail $_.Exception.Message
+        Update-Status "Network change event subscription failed; timer fallback remains active" -Type Warning
+    }
+}
+
+function Unregister-NetworkChangeAutoApply {
+    if (-not $script:NetworkChangeSubscribed) { return }
+
+    try {
+        if ($script:NetworkChangeHandlers.Address) {
+            [System.Net.NetworkInformation.NetworkChange]::remove_NetworkAddressChanged($script:NetworkChangeHandlers.Address)
+        }
+        if ($script:NetworkChangeHandlers.Availability) {
+            [System.Net.NetworkInformation.NetworkChange]::remove_NetworkAvailabilityChanged($script:NetworkChangeHandlers.Availability)
+        }
+        Write-OperationLog -Action "Profile auto-apply events" -Result "Unsubscribed" -Detail "NetworkChange handlers removed"
+    } catch {
+        Write-OperationLog -Action "Profile auto-apply events" -Result "UnsubscribeWarning" -Detail $_.Exception.Message
+    } finally {
+        $script:NetworkChangeHandlers = @{}
+        $script:NetworkChangeSubscribed = $false
+    }
 }
 
 function Show-ProfileDiff {
@@ -6014,11 +6104,12 @@ $script:ConnStatusTimer.Add_Tick({
 $script:ConnStatusTimer.Start()
 
 $script:AutoProfileTimer = New-Object System.Windows.Threading.DispatcherTimer
-$script:AutoProfileTimer.Interval = [TimeSpan]::FromSeconds(60)
+$script:AutoProfileTimer.Interval = [TimeSpan]::FromMinutes(5)
 $script:AutoProfileTimer.Add_Tick({
-    Invoke-AutoApplyProfile
+    Invoke-AutoApplyProfile -Trigger "FallbackTimer"
 })
 $script:AutoProfileTimer.Start()
+Register-NetworkChangeAutoApply
 
 # ============================================================================
 # CLEANUP ON WINDOW CLOSE
@@ -6041,6 +6132,7 @@ $window.Add_Closing({
     if ($script:AutoProfileTimer) {
         $script:AutoProfileTimer.Stop()
     }
+    Unregister-NetworkChangeAutoApply
     $script:ConnStatusTimer.Stop()
 })
 
@@ -6057,6 +6149,7 @@ Update-ConnectionStatus
 Update-PublicIP
 Show-WifiActionState
 Invoke-WifiNetworkScan
+Invoke-AutoApplyProfile -Trigger "Startup"
 
 # Select first adapter if available
 if ($lstAdapters.Items.Count -gt 0) {

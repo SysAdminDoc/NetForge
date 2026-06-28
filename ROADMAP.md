@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P1
-- [ ] P1 - Replace profile polling with network-change events
-  Why: Auto-apply currently checks every 60 seconds, which delays roaming and repeats network probes.
-  Evidence: `NetForge.ps1:5260-5265`, Microsoft Network List Manager events, Windows.Networking.Connectivity `NetworkStatusChanged`.
-  Touches: `Invoke-AutoApplyProfile`, `Get-CurrentNetworkSignature`, startup/shutdown timer wiring.
-  Acceptance: Profile matching runs on connection/profile change events with a timer fallback, logs the trigger source, and does not reapply the same unchanged profile repeatedly.
-  Complexity: L
-
 - [ ] P1 - Add Pester and PSScriptAnalyzer quality gates
   Why: The app is a single high-privilege script and currently has no tracked tests; parser check passed but analyzer found maintainability and reliability warnings.
   Evidence: `NetForge.ps1` parse OK, PSScriptAnalyzer warnings for empty catches, `$profile` automatic-variable shadowing, and runspace variable scope.
