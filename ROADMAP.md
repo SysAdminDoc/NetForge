@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P1
-- [ ] P1 - Add Pester and PSScriptAnalyzer quality gates
-  Why: The app is a single high-privilege script and currently has no tracked tests; parser check passed but analyzer found maintainability and reliability warnings.
-  Evidence: `NetForge.ps1` parse OK, PSScriptAnalyzer warnings for empty catches, `$profile` automatic-variable shadowing, and runspace variable scope.
-  Touches: `tests/`, `NetForge.ps1`, local build/test scripts, README test instructions.
-  Acceptance: Local test command runs parser validation, PSScriptAnalyzer with a committed baseline/allowlist, and Pester tests for validation, profile migration, endpoint parsing, and command-plan generation.
-  Complexity: M
-
 - [ ] P1 - Add accessibility names, focus order, and high-contrast checks
   Why: The WPF UI has many custom controls but no `AutomationProperties.Name`, making Narrator/UI Automation coverage weak.
   Evidence: `NetForge.ps1:407-1780`, Microsoft WPF accessibility guidance.

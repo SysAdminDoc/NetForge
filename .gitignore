@@ -1,6 +1,8 @@
 *.bak
 *.log
 *.tmp
+testResults.xml
+coverage.xml
 dist/
 .vs/
 CLAUDE.md
