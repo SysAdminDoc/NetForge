@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.18.0
+    Version: 1.19.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.18.0"
+$script:AppVersion = "1.19.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:LogsPath = Join-Path $script:ConfigPath "Logs"
@@ -70,6 +70,81 @@ $script:LastProfileLoadWarnings = @()
 $script:AutoProfileTimer = $null
 $script:NetworkChangeHandlers = @{}
 $script:NetworkChangeSubscribed = $false
+$script:AccessibilityNames = @{
+    lstAdapters = "Network adapter list"
+    btnRefresh = "Refresh adapters"
+    chkAdvancedAdapters = "Show advanced adapters"
+    btnEnableAdapter = "Enable selected adapter"
+    btnDisableAdapter = "Disable selected adapter"
+    txtMacOverride = "MAC address override"
+    btnGenerateMac = "Generate random MAC address"
+    btnApplyMac = "Apply MAC address override"
+    btnRevertMac = "Revert MAC address override"
+    txtMetricValue = "Interface metric value"
+    btnApplyMetric = "Apply interface metric"
+    btnAutoMetric = "Restore automatic interface metric"
+    rbDHCP = "Use DHCP IP configuration"
+    rbStatic = "Use static IP configuration"
+    txtIPAddress = "Static IP address"
+    txtSubnet = "Subnet mask"
+    txtGateway = "Default gateway"
+    txtPrefix = "CIDR prefix length"
+    btnApplyIP = "Apply IP configuration"
+    rbDnsDHCP = "Use automatic DNS"
+    rbDnsPreset = "Use DNS preset"
+    rbDnsCustom = "Use custom DNS"
+    txtDnsSearch = "Search DNS presets"
+    cmbDnsCategory = "DNS category"
+    lstDnsPresets = "DNS preset list"
+    chkIPv6Dns = "Also configure IPv6 DNS"
+    txtDnsPrimary = "Primary DNS server"
+    txtDnsSecondary = "Secondary DNS server"
+    btnApplyDns = "Apply DNS configuration"
+    btnRegisterDoh = "Register DNS over HTTPS"
+    btnRegisterDot = "Register DNS over TLS"
+    btnTestEncryptedDns = "Test encrypted DNS health"
+    txtNextDnsConfigId = "NextDNS configuration ID"
+    btnApplyNextDnsEndpoints = "Apply NextDNS endpoints"
+    btnValidateDoqProxy = "Validate DoQ proxy"
+    btnStartDoqProxy = "Start DoQ proxy"
+    btnStopDoqProxy = "Stop DoQ proxy"
+    btnApplyDoqLocalDns = "Apply local DoQ DNS"
+    btnWifiRefresh = "Scan WiFi networks"
+    lstWifiNetworks = "WiFi network list"
+    btnWifiConnect = "Connect WiFi network"
+    btnWifiDisconnect = "Disconnect WiFi"
+    lstProfiles = "Saved profile list"
+    btnNewProfile = "Create new profile"
+    btnDeleteProfile = "Delete selected profile"
+    txtProfileName = "Profile name"
+    txtProfileDesc = "Profile description"
+    chkProfileAutoApply = "Enable profile auto-apply"
+    txtProfileMatchSsid = "Profile match SSID"
+    txtProfileGatewayMac = "Profile gateway MAC"
+    btnCaptureProfileMatch = "Capture current network match"
+    btnSaveProfile = "Save profile"
+    btnProfileDiff = "Preview profile differences"
+    btnApplyProfile = "Apply selected profile"
+    btnFlushDns = "Flush DNS cache"
+    btnReleaseIP = "Release IP address"
+    btnRenewIP = "Renew IP address"
+    btnRestoreNetworkState = "Restore last network state"
+    btnExportDiagnostics = "Export diagnostics"
+    btnResetWinsock = "Reset Winsock"
+    btnResetTCP = "Reset TCP IP stack"
+    btnNetworkReset = "Full network reset"
+    txtPingTarget = "Network diagnostic target"
+    btnPing = "Run ping"
+    btnTraceroute = "Run traceroute"
+    btnNslookup = "Run NSLookup"
+}
+$script:AccessibilityTabOrder = @(
+    "lstAdapters", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
+    "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "btnApplyIP",
+    "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
+    "lstProfiles", "btnNewProfile", "txtProfileName", "chkProfileAutoApply", "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
+    "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics"
+)
 
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
@@ -727,7 +802,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.18.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.19.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1761,7 +1836,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.18.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.19.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1888,6 +1963,28 @@ function Show-MessageBox {
 }
 
 Register-CrashHandler
+
+function Initialize-AccessibilityMetadata {
+    foreach ($controlName in $script:AccessibilityNames.Keys) {
+        $control = $window.FindName($controlName)
+        if ($null -eq $control) { continue }
+        [System.Windows.Automation.AutomationProperties]::SetName($control, $script:AccessibilityNames[$controlName])
+    }
+
+    $tabIndex = 0
+    foreach ($controlName in $script:AccessibilityTabOrder) {
+        $control = $window.FindName($controlName)
+        if ($null -eq $control) { continue }
+        if ($control -is [System.Windows.Controls.Control]) {
+            $control.TabIndex = $tabIndex
+            $tabIndex++
+        }
+    }
+
+    if ([System.Windows.SystemParameters]::HighContrast) {
+        Write-OperationLog -Action "Accessibility" -Result "HighContrast" -Detail "Windows high contrast mode detected; native system contrast remains active."
+    }
+}
 
 function Test-ValidIP {
     param([string]$IP)
@@ -6144,6 +6241,7 @@ Refresh-DnsPresets
 Show-DohConfiguration
 Show-DotConfiguration
 Refresh-ProfileList
+Initialize-AccessibilityMetadata
 Show-RestoreSnapshotButtonState
 Update-ConnectionStatus
 Update-PublicIP

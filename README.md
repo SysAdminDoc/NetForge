@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.18.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.19.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -109,6 +109,7 @@
 ### Modern Interface
 - Professional dark theme with orange accents
 - Tabbed interface for organized navigation
+- Automation names and explicit focus order for primary workflows
 - Real-time status updates
 - Persistent operation/crash logs and a diagnostics zip export
 - Responsive design

@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P1
-- [ ] P1 - Add accessibility names, focus order, and high-contrast checks
-  Why: The WPF UI has many custom controls but no `AutomationProperties.Name`, making Narrator/UI Automation coverage weak.
-  Evidence: `NetForge.ps1:407-1780`, Microsoft WPF accessibility guidance.
-  Touches: XAML styles, adapter/DNS/profile/diagnostics controls, screenshot capture process.
-  Acceptance: Primary controls have automation names, tab order follows visual workflow, high-contrast mode preserves readable labels/status, and an accessibility smoke script verifies key controls by automation ID/name.
-  Complexity: M
-
 - [ ] P1 - Add encrypted DNS leak, fallback, and resolver latency checks
   Why: DoH/DoT registration and DoQ proxy start are not enough to prove queries are encrypted, non-leaking, or performant.
   Evidence: `NetForge.ps1:3748-4304`, YogaDNS, Simple DNSCrypt, DNS Jumper, RFC 8484/RFC 7858/RFC 9250.

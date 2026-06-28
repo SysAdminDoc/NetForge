@@ -153,3 +153,27 @@ Describe 'Network signature keys' {
         Get-NetworkSignatureKey -Signature $signature | Should -Be '12|Clinic|192.168.50.1|001122334455'
     }
 }
+
+Describe 'Accessibility metadata' {
+    It 'lists automation names for primary workflows' {
+        $source = Get-Content -Raw $script:NetForgePath
+        $requiredControls = @(
+            'lstAdapters',
+            'btnApplyIP',
+            'lstDnsPresets',
+            'btnApplyDns',
+            'lstProfiles',
+            'btnApplyProfile',
+            'btnRestoreNetworkState',
+            'btnExportDiagnostics'
+        )
+
+        foreach ($controlName in $requiredControls) {
+            $source | Should -Match "$controlName\s*="
+        }
+
+        $source | Should -Match 'Initialize-AccessibilityMetadata'
+        $source | Should -Match 'AutomationProperties'
+        $source | Should -Match 'AccessibilityTabOrder'
+    }
+}
