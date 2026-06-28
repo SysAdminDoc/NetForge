@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.6.0
+    Version: 1.7.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.6.0"
+$script:AppVersion = "1.7.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -76,6 +76,7 @@ $script:DnsPresets = [ordered]@{
         Secondary = "8.8.4.4"
         PrimaryV6 = "2001:4860:4860::8888"
         SecondaryV6 = "2001:4860:4860::8844"
+        DoHTemplate = "https://dns.google/dns-query"
         Description = "Fast, reliable DNS by Google"
         Category = "Public"
     }
@@ -84,6 +85,7 @@ $script:DnsPresets = [ordered]@{
         Secondary = "1.0.0.1"
         PrimaryV6 = "2606:4700:4700::1111"
         SecondaryV6 = "2606:4700:4700::1001"
+        DoHTemplate = "https://cloudflare-dns.com/dns-query"
         Description = "Privacy-focused, fastest DNS resolver"
         Category = "Public"
     }
@@ -92,6 +94,7 @@ $script:DnsPresets = [ordered]@{
         Secondary = "1.0.0.2"
         PrimaryV6 = "2606:4700:4700::1112"
         SecondaryV6 = "2606:4700:4700::1002"
+        DoHTemplate = "https://security.cloudflare-dns.com/dns-query"
         Description = "Cloudflare with malware protection"
         Category = "Security"
     }
@@ -100,6 +103,7 @@ $script:DnsPresets = [ordered]@{
         Secondary = "1.0.0.3"
         PrimaryV6 = "2606:4700:4700::1113"
         SecondaryV6 = "2606:4700:4700::1003"
+        DoHTemplate = "https://family.cloudflare-dns.com/dns-query"
         Description = "Cloudflare with malware + adult content blocking"
         Category = "Family"
     }
@@ -108,6 +112,7 @@ $script:DnsPresets = [ordered]@{
         Secondary = "149.112.112.112"
         PrimaryV6 = "2620:fe::fe"
         SecondaryV6 = "2620:fe::9"
+        DoHTemplate = "https://dns.quad9.net/dns-query"
         Description = "Security-focused with threat blocking"
         Category = "Security"
     }
@@ -138,6 +143,7 @@ $script:DnsPresets = [ordered]@{
         Secondary = "94.140.15.15"
         PrimaryV6 = "2a10:50c0::ad1:ff"
         SecondaryV6 = "2a10:50c0::ad2:ff"
+        DoHTemplate = "https://dns.adguard-dns.com/dns-query"
         Description = "Ad-blocking DNS service"
         Category = "Ad-Blocking"
     }
@@ -700,7 +706,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.6.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.7.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1117,6 +1123,43 @@ $script:DnsPresets = [ordered]@{
                                             </StackPanel>
                                         </Grid>
                                     </StackPanel>
+                                </Border>
+
+                                <!-- Encrypted DNS -->
+                                <TextBlock Text="ENCRYPTED DNS (DOH)" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,16">
+                                            <TextBlock Text="Servers to register" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtDohServers" Text="Select a DNS preset or enter custom DNS servers." FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,16">
+                                            <TextBlock Text="DoH Template" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtDohTemplate" Style="{StaticResource ModernTextBox}" Text=""/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <CheckBox x:Name="chkDohAutoUpgrade" Content="Auto-upgrade DNS queries" Style="{StaticResource ModernCheckBox}" IsChecked="True" Margin="0,0,20,0"/>
+                                            <CheckBox x:Name="chkDohUdpFallback" Content="Allow UDP fallback" Style="{StaticResource ModernCheckBox}" IsChecked="True"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" Width="180">
+                                            <Button x:Name="btnRegisterDoh" Content="Register DoH" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <TextBlock x:Name="txtDohStatus" Text="Uses netsh dns add encryption." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </Border>
 
                                 <!-- Apply Button -->
@@ -1571,7 +1614,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.6.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.7.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3351,6 +3394,7 @@ function Update-SelectedDnsDisplay {
     $selected = $script:lstDnsPresets.SelectedItem
     if ($null -eq $selected) {
         $script:pnlSelectedDns.Visibility = "Collapsed"
+        Show-DohConfiguration
         return
     }
 
@@ -3371,6 +3415,133 @@ function Update-SelectedDnsDisplay {
     if ($presetData.Data.Primary -ne "DHCP") {
         $script:txtDnsPrimary.Text = $presetData.Data.Primary
         $script:txtDnsSecondary.Text = if ($presetData.Data.Secondary) { $presetData.Data.Secondary } else { "" }
+    }
+
+    Show-DohConfiguration
+}
+
+function Test-DohTemplate {
+    param([string]$Template)
+
+    if ([string]::IsNullOrWhiteSpace($Template)) { return $false }
+
+    $uri = $null
+    if (-not [System.Uri]::TryCreate($Template, [System.UriKind]::Absolute, [ref]$uri)) { return $false }
+    return ($uri.Scheme -eq "https")
+}
+
+function Get-DohConfigurationTarget {
+    $servers = @()
+    $template = $script:txtDohTemplate.Text.Trim()
+    $source = "Custom DNS"
+
+    if ($script:rbDnsPreset.IsChecked) {
+        $selected = $script:lstDnsPresets.SelectedItem
+        if ($selected) {
+            $preset = $selected.Tag.Data
+            $source = $selected.Tag.Name
+            if ($preset.Primary -and $preset.Primary -ne "DHCP") { $servers += $preset.Primary }
+            if ($preset.Secondary -and $preset.Secondary -ne "DHCP") { $servers += $preset.Secondary }
+            if ($script:chkIPv6Dns.IsChecked) {
+                if ($preset.PrimaryV6) { $servers += $preset.PrimaryV6 }
+                if ($preset.SecondaryV6) { $servers += $preset.SecondaryV6 }
+            }
+            if ([string]::IsNullOrWhiteSpace($template) -and $preset.DoHTemplate) {
+                $template = $preset.DoHTemplate
+            }
+        }
+    } elseif ($script:rbDnsCustom.IsChecked) {
+        $primary = $script:txtDnsPrimary.Text.Trim()
+        $secondary = $script:txtDnsSecondary.Text.Trim()
+        if (Test-ValidIP $primary) { $servers += $primary }
+        if (Test-ValidIP $secondary) { $servers += $secondary }
+    }
+
+    $servers = @($servers | Where-Object { $_ } | Select-Object -Unique)
+    return [pscustomobject]@{
+        Source = $source
+        Servers = $servers
+        Template = $template
+    }
+}
+
+function Show-DohConfiguration {
+    if (-not $script:txtDohServers -or -not $script:txtDohTemplate) { return }
+
+    $target = Get-DohConfigurationTarget
+    if ($script:rbDnsPreset.IsChecked) {
+        $selected = $script:lstDnsPresets.SelectedItem
+        if ($selected -and $selected.Tag.Data.DoHTemplate) {
+            $script:txtDohTemplate.Text = $selected.Tag.Data.DoHTemplate
+            $target = Get-DohConfigurationTarget
+        }
+    }
+
+    if ($target.Servers.Count -gt 0) {
+        $script:txtDohServers.Text = "$($target.Source): $($target.Servers -join ', ')"
+    } else {
+        $script:txtDohServers.Text = "Select a DNS preset or enter custom DNS servers."
+    }
+}
+
+function Register-DohEncryption {
+    $target = Get-DohConfigurationTarget
+    if ($target.Servers.Count -eq 0) {
+        Show-MessageBox -Message "Select a DNS preset or enter valid custom DNS servers before registering DoH." -Title "No DNS Servers" -Icon Warning
+        return
+    }
+
+    if (-not (Test-DohTemplate -Template $target.Template)) {
+        Show-MessageBox -Message "Enter a valid HTTPS DoH template URL." -Title "Invalid DoH Template" -Icon Error
+        return
+    }
+
+    $autoUpgrade = if ($script:chkDohAutoUpgrade.IsChecked) { "yes" } else { "no" }
+    $udpFallback = if ($script:chkDohUdpFallback.IsChecked) { "yes" } else { "no" }
+    $outputs = @()
+    $failures = @()
+
+    Update-Status "Registering DoH encryption for $($target.Servers.Count) DNS server(s)..."
+
+    foreach ($server in $target.Servers) {
+        $commonArgs = @(
+            "dns", "add", "encryption",
+            "server=$server",
+            "dohtemplate=$($target.Template)",
+            "autoupgrade=$autoUpgrade",
+            "udpfallback=$udpFallback"
+        )
+
+        $output = netsh @commonArgs 2>&1 | Out-String
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0 -or $output -match "already exists|cannot create|failed|error") {
+            $setArgs = @(
+                "dns", "set", "encryption",
+                "server=$server",
+                "dohtemplate=$($target.Template)",
+                "autoupgrade=$autoUpgrade",
+                "udpfallback=$udpFallback"
+            )
+            $output = netsh @setArgs 2>&1 | Out-String
+            $exitCode = $LASTEXITCODE
+        }
+
+        if ($exitCode -eq 0 -and $output -notmatch "failed|error") {
+            $outputs += "$server registered."
+        } else {
+            $failures += "$server`: $($output.Trim())"
+        }
+    }
+
+    if ($failures.Count -gt 0) {
+        $message = $failures -join "`n"
+        $script:txtDohStatus.Text = "Registration failed for $($failures.Count) server(s)."
+        Update-Status "DoH registration failed for $($failures.Count) server(s)" -Type Error
+        Show-MessageBox -Message $message -Title "DoH Registration Failed" -Icon Error
+    } else {
+        $script:txtDohStatus.Text = "Registered: $($target.Servers -join ', ')"
+        Update-Status "DoH encryption registered for $($target.Servers.Count) DNS server(s)" -Type Success
     }
 }
 
@@ -3972,16 +4143,19 @@ $rbStatic.Add_Checked({
 $rbDnsDHCP.Add_Checked({
     $script:pnlCustomDns.IsEnabled = $false
     $script:pnlCustomDns.Opacity = 0.6
+    Show-DohConfiguration
 })
 
 $rbDnsPreset.Add_Checked({
     $script:pnlCustomDns.IsEnabled = $false
     $script:pnlCustomDns.Opacity = 0.6
+    Show-DohConfiguration
 })
 
 $rbDnsCustom.Add_Checked({
     $script:pnlCustomDns.IsEnabled = $true
     $script:pnlCustomDns.Opacity = 1.0
+    Show-DohConfiguration
 })
 
 $lstDnsPresets.Add_SelectionChanged({
@@ -4006,6 +4180,11 @@ $cmbDnsCategory.Add_SelectionChanged({
     Refresh-DnsPresets -Filter $script:txtDnsSearch.Text -Category $category
 })
 
+$txtDnsPrimary.Add_TextChanged({ Show-DohConfiguration })
+$txtDnsSecondary.Add_TextChanged({ Show-DohConfiguration })
+$chkIPv6Dns.Add_Checked({ Show-DohConfiguration })
+$chkIPv6Dns.Add_Unchecked({ Show-DohConfiguration })
+
 # Button event handlers
 $btnRefresh.Add_Click({ Refresh-AdapterList })
 $btnExport.Add_Click({ Export-AllConfiguration })
@@ -4019,6 +4198,7 @@ $btnApplyMetric.Add_Click({ Invoke-ApplyInterfaceMetric })
 $btnAutoMetric.Add_Click({ Invoke-AutomaticInterfaceMetric })
 $btnApplyIP.Add_Click({ Apply-IPConfiguration })
 $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
+$btnRegisterDoh.Add_Click({ Register-DohEncryption })
 $btnWifiRefresh.Add_Click({ Invoke-WifiNetworkScan })
 $btnWifiConnect.Add_Click({ Invoke-WifiConnect })
 $btnWifiDisconnect.Add_Click({ Invoke-WifiDisconnect })
@@ -4079,6 +4259,7 @@ $window.Add_Closing({
 # ============================================================================
 Refresh-AdapterList
 Refresh-DnsPresets
+Show-DohConfiguration
 Refresh-ProfileList
 Update-ConnectionStatus
 Update-PublicIP

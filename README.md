@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.6.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.7.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -65,6 +65,7 @@
   - **Ad-Blocking**: AdGuard DNS, Alternate DNS
 - Custom DNS server configuration
 - IPv6 DNS support for compatible presets
+- Windows DoH encryption registration through `netsh dns add encryption`
 - Search and filter DNS presets
 
 ### Profile System
