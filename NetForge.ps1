@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.8.0
+    Version: 1.9.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.8.0"
+$script:AppVersion = "1.9.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -56,6 +56,9 @@ $script:WifiScanRunning = $false
 $script:WifiNetworks = @()
 $script:WifiInterfaceName = $null
 $script:ShowAdvancedAdapters = $false
+$script:EncryptedDnsHealthRunning = $false
+$script:EncryptedDnsHealthJob = $null
+$script:EncryptedDnsHealthTimer = $null
 
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
@@ -712,7 +715,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.8.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.9.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1172,6 +1175,8 @@ $script:DnsPresets = [ordered]@{
                                             <TextBlock x:Name="txtDohStatus" Text="Uses netsh dns add encryption." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                                             <Button x:Name="btnRegisterDot" Content="Register DoT" Style="{StaticResource ModernButton}" Margin="0,14,0,8" Padding="14,8"/>
                                             <TextBlock x:Name="txtDotStatus" Text="Uses netsh dns add encryption dothost." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                            <Button x:Name="btnTestEncryptedDns" Content="Test Health" Style="{StaticResource ModernButton}" Margin="0,14,0,8" Padding="14,8"/>
+                                            <TextBlock x:Name="txtEncryptedDnsHealthStatus" Text="Validates DoH/DoT handshake." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -1628,7 +1633,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.8.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.9.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3711,6 +3716,252 @@ function Register-DotEncryption {
     }
 }
 
+function Invoke-EncryptedDnsHealthTest {
+    if ($script:EncryptedDnsHealthRunning) { return }
+
+    $dohTarget = Get-DohConfigurationTarget
+    $dotTarget = Get-DotConfigurationTarget
+    $dohTemplate = if (Test-DohTemplate -Template $dohTarget.Template) { $dohTarget.Template } else { "" }
+    $dotHost = if (Test-DotHost -HostName $dotTarget.RawDoTHost) { $dotTarget.DoTHost } else { "" }
+
+    if ([string]::IsNullOrWhiteSpace($dohTemplate) -and [string]::IsNullOrWhiteSpace($dotHost)) {
+        Show-MessageBox -Message "Select a preset with DoH/DoT metadata or enter a valid custom DoH template or DoT host before testing encrypted DNS health." -Title "No Encrypted DNS Target" -Icon Warning
+        return
+    }
+
+    $script:EncryptedDnsHealthRunning = $true
+    $script:btnTestEncryptedDns.IsEnabled = $false
+    $script:txtEncryptedDnsHealthStatus.Text = "Testing encrypted DNS..."
+    Update-Status "Testing encrypted DNS health..."
+
+    $healthScript = {
+        param($DohTemplate, $DotHost)
+
+        function ConvertTo-DnsQueryMessage {
+            $bytes = New-Object 'System.Collections.Generic.List[byte]'
+
+            function Add-UInt16BytePair {
+                param([int]$Value)
+                $bytes.Add([byte](($Value -shr 8) -band 0xff))
+                $bytes.Add([byte]($Value -band 0xff))
+            }
+
+            Add-UInt16BytePair 0x4e46
+            Add-UInt16BytePair 0x0100
+            Add-UInt16BytePair 1
+            Add-UInt16BytePair 0
+            Add-UInt16BytePair 0
+            Add-UInt16BytePair 0
+
+            foreach ($label in "example.com".Split(".")) {
+                $labelBytes = [System.Text.Encoding]::ASCII.GetBytes($label)
+                $bytes.Add([byte]$labelBytes.Length)
+                foreach ($labelByte in $labelBytes) {
+                    $bytes.Add($labelByte)
+                }
+            }
+
+            $bytes.Add([byte]0)
+            Add-UInt16BytePair 1
+            Add-UInt16BytePair 1
+
+            return $bytes.ToArray()
+        }
+
+        function ConvertTo-DnsBase64Url {
+            param([byte[]]$Bytes)
+            return [Convert]::ToBase64String($Bytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
+        }
+
+        function Invoke-DohHealthProbe {
+            param([string]$Template)
+
+            try {
+                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+                $query = ConvertTo-DnsBase64Url -Bytes (ConvertTo-DnsQueryMessage)
+                $separator = if ($Template.Contains("?")) { "&" } else { "?" }
+                $uri = "$Template$separator" + "dns=$query"
+
+                $request = [System.Net.HttpWebRequest]::Create($uri)
+                $request.Method = "GET"
+                $request.Accept = "application/dns-message"
+                $request.UserAgent = "NetForge"
+                $request.Timeout = 7000
+                $request.ReadWriteTimeout = 7000
+
+                $response = $request.GetResponse()
+                try {
+                    $stream = $response.GetResponseStream()
+                    $memory = New-Object System.IO.MemoryStream
+                    $stream.CopyTo($memory)
+                    $length = $memory.Length
+
+                    if ([int]$response.StatusCode -ne 200) {
+                        throw "HTTP $([int]$response.StatusCode)"
+                    }
+                    if ($length -lt 12) {
+                        throw "short DNS response ($length bytes)"
+                    }
+
+                    return [pscustomobject]@{
+                        Protocol = "DoH"
+                        Success = $true
+                        Message = "HTTPS 200, DNS response $length bytes"
+                    }
+                } finally {
+                    if ($response) { $response.Close() }
+                }
+            } catch {
+                return [pscustomobject]@{
+                    Protocol = "DoH"
+                    Success = $false
+                    Message = $_.Exception.Message
+                }
+            }
+        }
+
+        function Get-DotHostEndpoint {
+            param([string]$HostValue)
+
+            if ($HostValue -match '^\[(?<host>[^\]]+)\]:(?<port>\d+)$') {
+                return [pscustomobject]@{ Host = $Matches.host; Port = [int]$Matches.port }
+            }
+            if ($HostValue -match '^(?<host>.+):(?<port>\d+)$') {
+                return [pscustomobject]@{ Host = $Matches.host; Port = [int]$Matches.port }
+            }
+            throw "Invalid DoT host."
+        }
+
+        function Get-StreamByteBlock {
+            param(
+                [System.IO.Stream]$Stream,
+                [int]$Count
+            )
+
+            $buffer = New-Object byte[] $Count
+            $offset = 0
+            while ($offset -lt $Count) {
+                $read = $Stream.Read($buffer, $offset, $Count - $offset)
+                if ($read -le 0) { throw "connection closed before DNS response" }
+                $offset += $read
+            }
+            return $buffer
+        }
+
+        function Invoke-DotHealthProbe {
+            param([string]$HostValue)
+
+            $client = $null
+            $sslStream = $null
+
+            try {
+                $endpoint = Get-DotHostEndpoint -HostValue $HostValue
+                $client = New-Object System.Net.Sockets.TcpClient
+                $connect = $client.BeginConnect($endpoint.Host, $endpoint.Port, $null, $null)
+                if (-not $connect.AsyncWaitHandle.WaitOne(7000)) {
+                    $client.Close()
+                    throw "TCP connect timed out"
+                }
+                $client.EndConnect($connect)
+                $client.ReceiveTimeout = 7000
+                $client.SendTimeout = 7000
+
+                $callback = [System.Net.Security.RemoteCertificateValidationCallback]{
+                    param($certSender, $serverCertificate, $certificateChain, $policyErrors)
+                    [void]$certSender
+                    [void]$serverCertificate
+                    [void]$certificateChain
+                    return ($policyErrors -eq [System.Net.Security.SslPolicyErrors]::None)
+                }
+                $sslStream = New-Object System.Net.Security.SslStream($client.GetStream(), $false, $callback)
+                $sslStream.AuthenticateAsClient($endpoint.Host)
+
+                $query = ConvertTo-DnsQueryMessage
+                $prefix = [byte[]]@(
+                    [byte](($query.Length -shr 8) -band 0xff),
+                    [byte]($query.Length -band 0xff)
+                )
+                $sslStream.Write($prefix, 0, $prefix.Length)
+                $sslStream.Write($query, 0, $query.Length)
+                $sslStream.Flush()
+
+                $lengthBytes = Get-StreamByteBlock -Stream $sslStream -Count 2
+                $responseLength = ([int]$lengthBytes[0] -shl 8) -bor [int]$lengthBytes[1]
+                if ($responseLength -lt 12) {
+                    throw "short DNS response ($responseLength bytes)"
+                }
+                [void](Get-StreamByteBlock -Stream $sslStream -Count $responseLength)
+
+                return [pscustomobject]@{
+                    Protocol = "DoT"
+                    Success = $true
+                    Message = "TLS handshake and DNS response $responseLength bytes"
+                }
+            } catch {
+                return [pscustomobject]@{
+                    Protocol = "DoT"
+                    Success = $false
+                    Message = $_.Exception.Message
+                }
+            } finally {
+                if ($sslStream) { $sslStream.Dispose() }
+                if ($client) { $client.Close() }
+            }
+        }
+
+        $results = @()
+        if (-not [string]::IsNullOrWhiteSpace($DohTemplate)) {
+            $results += Invoke-DohHealthProbe -Template $DohTemplate
+        }
+        if (-not [string]::IsNullOrWhiteSpace($DotHost)) {
+            $results += Invoke-DotHealthProbe -HostValue $DotHost
+        }
+        return $results
+    }
+
+    $script:EncryptedDnsHealthJob = Start-Job -ScriptBlock $healthScript -ArgumentList $dohTemplate, $dotHost
+
+    $script:EncryptedDnsHealthTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $script:EncryptedDnsHealthTimer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $script:EncryptedDnsHealthTimer.Add_Tick({
+        if ($script:EncryptedDnsHealthJob.State -notin @("Completed", "Failed", "Stopped")) { return }
+
+        $script:EncryptedDnsHealthTimer.Stop()
+
+        try {
+            $results = @(Receive-Job $script:EncryptedDnsHealthJob -ErrorAction Stop)
+            $lines = @()
+            foreach ($result in $results) {
+                $prefix = if ($result.Success) { "OK" } else { "FAIL" }
+                $lines += "$($result.Protocol) $prefix`: $($result.Message)"
+            }
+
+            if ($lines.Count -eq 0) {
+                $script:txtEncryptedDnsHealthStatus.Text = "No health results returned."
+                Update-Status "Encrypted DNS health test returned no results" -Type Warning
+            } else {
+                $script:txtEncryptedDnsHealthStatus.Text = $lines -join "`n"
+                $failed = @($results | Where-Object { -not $_.Success })
+                if ($failed.Count -eq 0) {
+                    Update-Status "Encrypted DNS health test passed" -Type Success
+                } else {
+                    Update-Status "Encrypted DNS health test found $($failed.Count) failure(s)" -Type Warning
+                }
+            }
+        } catch {
+            $script:txtEncryptedDnsHealthStatus.Text = "Health test failed: $($_.Exception.Message)"
+            Update-Status "Encrypted DNS health test failed" -Type Error
+        } finally {
+            Remove-Job $script:EncryptedDnsHealthJob -Force -ErrorAction SilentlyContinue
+            $script:EncryptedDnsHealthJob = $null
+            $script:EncryptedDnsHealthTimer = $null
+            $script:EncryptedDnsHealthRunning = $false
+            $script:btnTestEncryptedDns.IsEnabled = $true
+        }
+    })
+    $script:EncryptedDnsHealthTimer.Start()
+}
+
 # ============================================================================
 # PROFILE FUNCTIONS
 # ============================================================================
@@ -4369,6 +4620,7 @@ $btnApplyIP.Add_Click({ Apply-IPConfiguration })
 $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
 $btnRegisterDoh.Add_Click({ Register-DohEncryption })
 $btnRegisterDot.Add_Click({ Register-DotEncryption })
+$btnTestEncryptedDns.Add_Click({ Invoke-EncryptedDnsHealthTest })
 $btnWifiRefresh.Add_Click({ Invoke-WifiNetworkScan })
 $btnWifiConnect.Add_Click({ Invoke-WifiConnect })
 $btnWifiDisconnect.Add_Click({ Invoke-WifiDisconnect })
@@ -4420,6 +4672,13 @@ $window.Add_Closing({
     $script:ContinuousPingRunning = $false
     if ($script:ContinuousPingTimer) {
         $script:ContinuousPingTimer.Stop()
+    }
+    if ($script:EncryptedDnsHealthTimer) {
+        $script:EncryptedDnsHealthTimer.Stop()
+    }
+    if ($script:EncryptedDnsHealthJob) {
+        Stop-Job $script:EncryptedDnsHealthJob -ErrorAction SilentlyContinue
+        Remove-Job $script:EncryptedDnsHealthJob -Force -ErrorAction SilentlyContinue
     }
     $script:ConnStatusTimer.Stop()
 })
