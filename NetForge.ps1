@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.7.0
+    Version: 1.8.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.7.0"
+$script:AppVersion = "1.8.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -77,6 +77,7 @@ $script:DnsPresets = [ordered]@{
         PrimaryV6 = "2001:4860:4860::8888"
         SecondaryV6 = "2001:4860:4860::8844"
         DoHTemplate = "https://dns.google/dns-query"
+        DoTHost = "dns.google:853"
         Description = "Fast, reliable DNS by Google"
         Category = "Public"
     }
@@ -86,6 +87,7 @@ $script:DnsPresets = [ordered]@{
         PrimaryV6 = "2606:4700:4700::1111"
         SecondaryV6 = "2606:4700:4700::1001"
         DoHTemplate = "https://cloudflare-dns.com/dns-query"
+        DoTHost = "one.one.one.one:853"
         Description = "Privacy-focused, fastest DNS resolver"
         Category = "Public"
     }
@@ -95,6 +97,7 @@ $script:DnsPresets = [ordered]@{
         PrimaryV6 = "2606:4700:4700::1112"
         SecondaryV6 = "2606:4700:4700::1002"
         DoHTemplate = "https://security.cloudflare-dns.com/dns-query"
+        DoTHost = "security.cloudflare-dns.com:853"
         Description = "Cloudflare with malware protection"
         Category = "Security"
     }
@@ -104,6 +107,7 @@ $script:DnsPresets = [ordered]@{
         PrimaryV6 = "2606:4700:4700::1113"
         SecondaryV6 = "2606:4700:4700::1003"
         DoHTemplate = "https://family.cloudflare-dns.com/dns-query"
+        DoTHost = "family.cloudflare-dns.com:853"
         Description = "Cloudflare with malware + adult content blocking"
         Category = "Family"
     }
@@ -113,6 +117,7 @@ $script:DnsPresets = [ordered]@{
         PrimaryV6 = "2620:fe::fe"
         SecondaryV6 = "2620:fe::9"
         DoHTemplate = "https://dns.quad9.net/dns-query"
+        DoTHost = "dns.quad9.net:853"
         Description = "Security-focused with threat blocking"
         Category = "Security"
     }
@@ -144,6 +149,7 @@ $script:DnsPresets = [ordered]@{
         PrimaryV6 = "2a10:50c0::ad1:ff"
         SecondaryV6 = "2a10:50c0::ad2:ff"
         DoHTemplate = "https://dns.adguard-dns.com/dns-query"
+        DoTHost = "dns.adguard-dns.com:853"
         Description = "Ad-blocking DNS service"
         Category = "Ad-Blocking"
     }
@@ -706,7 +712,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.7.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.8.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1126,11 +1132,12 @@ $script:DnsPresets = [ordered]@{
                                 </Border>
 
                                 <!-- Encrypted DNS -->
-                                <TextBlock Text="ENCRYPTED DNS (DOH)" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="ENCRYPTED DNS (DOH / DOT)" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
 
                                 <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
@@ -1150,14 +1157,21 @@ $script:DnsPresets = [ordered]@{
                                             <TextBox x:Name="txtDohTemplate" Style="{StaticResource ModernTextBox}" Text=""/>
                                         </StackPanel>
 
-                                        <StackPanel Grid.Row="2" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,16">
+                                            <TextBlock Text="DoT Host" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtDotHost" Style="{StaticResource ModernTextBox}" Text=""/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="3" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                                             <CheckBox x:Name="chkDohAutoUpgrade" Content="Auto-upgrade DNS queries" Style="{StaticResource ModernCheckBox}" IsChecked="True" Margin="0,0,20,0"/>
                                             <CheckBox x:Name="chkDohUdpFallback" Content="Allow UDP fallback" Style="{StaticResource ModernCheckBox}" IsChecked="True"/>
                                         </StackPanel>
 
-                                        <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" Width="180">
+                                        <StackPanel Grid.Row="0" Grid.RowSpan="4" Grid.Column="1" Width="190">
                                             <Button x:Name="btnRegisterDoh" Content="Register DoH" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
                                             <TextBlock x:Name="txtDohStatus" Text="Uses netsh dns add encryption." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                            <Button x:Name="btnRegisterDot" Content="Register DoT" Style="{StaticResource ModernButton}" Margin="0,14,0,8" Padding="14,8"/>
+                                            <TextBlock x:Name="txtDotStatus" Text="Uses netsh dns add encryption dothost." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -1614,7 +1628,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.7.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.8.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3395,6 +3409,7 @@ function Update-SelectedDnsDisplay {
     if ($null -eq $selected) {
         $script:pnlSelectedDns.Visibility = "Collapsed"
         Show-DohConfiguration
+        Show-DotConfiguration
         return
     }
 
@@ -3418,6 +3433,7 @@ function Update-SelectedDnsDisplay {
     }
 
     Show-DohConfiguration
+    Show-DotConfiguration
 }
 
 function Test-DohTemplate {
@@ -3428,6 +3444,50 @@ function Test-DohTemplate {
     $uri = $null
     if (-not [System.Uri]::TryCreate($Template, [System.UriKind]::Absolute, [ref]$uri)) { return $false }
     return ($uri.Scheme -eq "https")
+}
+
+function ConvertTo-DotHostValue {
+    param([string]$HostName)
+
+    if ([string]::IsNullOrWhiteSpace($HostName)) { return "" }
+
+    $value = $HostName.Trim()
+    $hostPart = ""
+    $hostOutput = ""
+    $portText = ""
+
+    if ($value -match '^\[(?<host>[0-9A-Fa-f:]+)\](?::(?<port>\d+))?$') {
+        $hostPart = $Matches.host
+        $hostOutput = "[$hostPart]"
+        $portText = $Matches.port
+    } elseif ($value -match '^(?<host>[^:\s]+)(?::(?<port>\d+))?$') {
+        $hostPart = $Matches.host
+        $hostOutput = $hostPart
+        $portText = $Matches.port
+    } else {
+        return ""
+    }
+
+    $ipAddress = $null
+    $isIpAddress = [System.Net.IPAddress]::TryParse($hostPart, [ref]$ipAddress)
+    $isDnsName = $hostPart -match '^(?=.{1,253}$)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$'
+    if (-not $isIpAddress -and -not $isDnsName) { return "" }
+
+    if ([string]::IsNullOrWhiteSpace($portText)) {
+        $portText = "853"
+    }
+
+    $port = 0
+    if (-not [int]::TryParse($portText, [ref]$port)) { return "" }
+    if ($port -lt 1 -or $port -gt 65535) { return "" }
+
+    return "$hostOutput`:$port"
+}
+
+function Test-DotHost {
+    param([string]$HostName)
+
+    return (-not [string]::IsNullOrWhiteSpace((ConvertTo-DotHostValue -HostName $HostName)))
 }
 
 function Get-DohConfigurationTarget {
@@ -3465,14 +3525,40 @@ function Get-DohConfigurationTarget {
     }
 }
 
+function Get-DotConfigurationTarget {
+    $baseTarget = Get-DohConfigurationTarget
+    $dotHost = if ($script:txtDotHost) { $script:txtDotHost.Text.Trim() } else { "" }
+
+    if ($script:rbDnsPreset.IsChecked) {
+        $selected = $script:lstDnsPresets.SelectedItem
+        if ($selected) {
+            $preset = $selected.Tag.Data
+            if ([string]::IsNullOrWhiteSpace($dotHost) -and $preset.DoTHost) {
+                $dotHost = $preset.DoTHost
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Source = $baseTarget.Source
+        Servers = $baseTarget.Servers
+        RawDoTHost = $dotHost
+        DoTHost = ConvertTo-DotHostValue -HostName $dotHost
+    }
+}
+
 function Show-DohConfiguration {
     if (-not $script:txtDohServers -or -not $script:txtDohTemplate) { return }
 
     $target = Get-DohConfigurationTarget
     if ($script:rbDnsPreset.IsChecked) {
         $selected = $script:lstDnsPresets.SelectedItem
-        if ($selected -and $selected.Tag.Data.DoHTemplate) {
-            $script:txtDohTemplate.Text = $selected.Tag.Data.DoHTemplate
+        if ($selected) {
+            if ($selected.Tag.Data.DoHTemplate) {
+                $script:txtDohTemplate.Text = $selected.Tag.Data.DoHTemplate
+            } else {
+                $script:txtDohTemplate.Text = ""
+            }
             $target = Get-DohConfigurationTarget
         }
     }
@@ -3481,6 +3567,31 @@ function Show-DohConfiguration {
         $script:txtDohServers.Text = "$($target.Source): $($target.Servers -join ', ')"
     } else {
         $script:txtDohServers.Text = "Select a DNS preset or enter custom DNS servers."
+    }
+}
+
+function Show-DotConfiguration {
+    if (-not $script:txtDotHost -or -not $script:txtDotStatus) { return }
+
+    $target = Get-DotConfigurationTarget
+    if ($script:rbDnsPreset.IsChecked) {
+        $selected = $script:lstDnsPresets.SelectedItem
+        if ($selected) {
+            if ($selected.Tag.Data.DoTHost) {
+                $script:txtDotHost.Text = $selected.Tag.Data.DoTHost
+            } else {
+                $script:txtDotHost.Text = ""
+            }
+            $target = Get-DotConfigurationTarget
+        }
+    }
+
+    if ($target.Servers.Count -eq 0) {
+        $script:txtDotStatus.Text = "Select a DNS preset or enter custom DNS servers."
+    } elseif ([string]::IsNullOrWhiteSpace($target.DoTHost)) {
+        $script:txtDotStatus.Text = "Enter a DoT host such as dns.google:853."
+    } else {
+        $script:txtDotStatus.Text = "Ready: $($target.DoTHost)"
     }
 }
 
@@ -3498,7 +3609,6 @@ function Register-DohEncryption {
 
     $autoUpgrade = if ($script:chkDohAutoUpgrade.IsChecked) { "yes" } else { "no" }
     $udpFallback = if ($script:chkDohUdpFallback.IsChecked) { "yes" } else { "no" }
-    $outputs = @()
     $failures = @()
 
     Update-Status "Registering DoH encryption for $($target.Servers.Count) DNS server(s)..."
@@ -3527,9 +3637,7 @@ function Register-DohEncryption {
             $exitCode = $LASTEXITCODE
         }
 
-        if ($exitCode -eq 0 -and $output -notmatch "failed|error") {
-            $outputs += "$server registered."
-        } else {
+        if ($exitCode -ne 0 -or $output -match "failed|error") {
             $failures += "$server`: $($output.Trim())"
         }
     }
@@ -3542,6 +3650,64 @@ function Register-DohEncryption {
     } else {
         $script:txtDohStatus.Text = "Registered: $($target.Servers -join ', ')"
         Update-Status "DoH encryption registered for $($target.Servers.Count) DNS server(s)" -Type Success
+    }
+}
+
+function Register-DotEncryption {
+    $target = Get-DotConfigurationTarget
+    if ($target.Servers.Count -eq 0) {
+        Show-MessageBox -Message "Select a DNS preset or enter valid custom DNS servers before registering DoT." -Title "No DNS Servers" -Icon Warning
+        return
+    }
+
+    if (-not (Test-DotHost -HostName $target.RawDoTHost)) {
+        Show-MessageBox -Message "Enter a valid DoT hostname with optional port, such as dns.google:853." -Title "Invalid DoT Host" -Icon Error
+        return
+    }
+
+    $autoUpgrade = if ($script:chkDohAutoUpgrade.IsChecked) { "yes" } else { "no" }
+    $udpFallback = if ($script:chkDohUdpFallback.IsChecked) { "yes" } else { "no" }
+    $failures = @()
+
+    Update-Status "Registering DoT encryption for $($target.Servers.Count) DNS server(s)..."
+
+    foreach ($server in $target.Servers) {
+        $commonArgs = @(
+            "dns", "add", "encryption",
+            "server=$server",
+            "dothost=$($target.DoTHost)",
+            "autoupgrade=$autoUpgrade",
+            "udpfallback=$udpFallback"
+        )
+
+        $output = netsh @commonArgs 2>&1 | Out-String
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0 -or $output -match "already exists|cannot create|failed|error") {
+            $setArgs = @(
+                "dns", "set", "encryption",
+                "server=$server",
+                "dothost=$($target.DoTHost)",
+                "autoupgrade=$autoUpgrade",
+                "udpfallback=$udpFallback"
+            )
+            $output = netsh @setArgs 2>&1 | Out-String
+            $exitCode = $LASTEXITCODE
+        }
+
+        if ($exitCode -ne 0 -or $output -match "failed|error") {
+            $failures += "$server`: $($output.Trim())"
+        }
+    }
+
+    if ($failures.Count -gt 0) {
+        $message = $failures -join "`n"
+        $script:txtDotStatus.Text = "Registration failed for $($failures.Count) server(s)."
+        Update-Status "DoT registration failed for $($failures.Count) server(s)" -Type Error
+        Show-MessageBox -Message $message -Title "DoT Registration Failed" -Icon Error
+    } else {
+        $script:txtDotStatus.Text = "Registered: $($target.Servers -join ', ')"
+        Update-Status "DoT encryption registered for $($target.Servers.Count) DNS server(s)" -Type Success
     }
 }
 
@@ -4144,18 +4310,21 @@ $rbDnsDHCP.Add_Checked({
     $script:pnlCustomDns.IsEnabled = $false
     $script:pnlCustomDns.Opacity = 0.6
     Show-DohConfiguration
+    Show-DotConfiguration
 })
 
 $rbDnsPreset.Add_Checked({
     $script:pnlCustomDns.IsEnabled = $false
     $script:pnlCustomDns.Opacity = 0.6
     Show-DohConfiguration
+    Show-DotConfiguration
 })
 
 $rbDnsCustom.Add_Checked({
     $script:pnlCustomDns.IsEnabled = $true
     $script:pnlCustomDns.Opacity = 1.0
     Show-DohConfiguration
+    Show-DotConfiguration
 })
 
 $lstDnsPresets.Add_SelectionChanged({
@@ -4180,10 +4349,10 @@ $cmbDnsCategory.Add_SelectionChanged({
     Refresh-DnsPresets -Filter $script:txtDnsSearch.Text -Category $category
 })
 
-$txtDnsPrimary.Add_TextChanged({ Show-DohConfiguration })
-$txtDnsSecondary.Add_TextChanged({ Show-DohConfiguration })
-$chkIPv6Dns.Add_Checked({ Show-DohConfiguration })
-$chkIPv6Dns.Add_Unchecked({ Show-DohConfiguration })
+$txtDnsPrimary.Add_TextChanged({ Show-DohConfiguration; Show-DotConfiguration })
+$txtDnsSecondary.Add_TextChanged({ Show-DohConfiguration; Show-DotConfiguration })
+$chkIPv6Dns.Add_Checked({ Show-DohConfiguration; Show-DotConfiguration })
+$chkIPv6Dns.Add_Unchecked({ Show-DohConfiguration; Show-DotConfiguration })
 
 # Button event handlers
 $btnRefresh.Add_Click({ Refresh-AdapterList })
@@ -4199,6 +4368,7 @@ $btnAutoMetric.Add_Click({ Invoke-AutomaticInterfaceMetric })
 $btnApplyIP.Add_Click({ Apply-IPConfiguration })
 $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
 $btnRegisterDoh.Add_Click({ Register-DohEncryption })
+$btnRegisterDot.Add_Click({ Register-DotEncryption })
 $btnWifiRefresh.Add_Click({ Invoke-WifiNetworkScan })
 $btnWifiConnect.Add_Click({ Invoke-WifiConnect })
 $btnWifiDisconnect.Add_Click({ Invoke-WifiDisconnect })
@@ -4260,6 +4430,7 @@ $window.Add_Closing({
 Refresh-AdapterList
 Refresh-DnsPresets
 Show-DohConfiguration
+Show-DotConfiguration
 Refresh-ProfileList
 Update-ConnectionStatus
 Update-PublicIP
