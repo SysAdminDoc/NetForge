@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.10.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.11.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -70,6 +70,7 @@
 - Custom DoH template and DoT host entry for account-specific providers
 - Encrypted DNS health test with DoH HTTPS and DoT TCP/TLS DNS-message probes
 - DoQ local proxy controls for compatible `dnsproxy.exe` binaries
+- NextDNS config ID helper that fills account-specific DoH, DoT, and DoQ endpoints
 - Search and filter DNS presets
 
 ### Profile System
@@ -168,6 +169,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Click "Register DoH" or "Register DoT" to add Windows encrypted DNS metadata for compatible resolvers
    - Click "Test Health" to validate encrypted DNS handshakes and DNS-message responses
    - Configure the DoQ local proxy path/upstream and click "Start Proxy" when using DNS-over-QUIC
+   - Enter a NextDNS config ID and click "Apply NextDNS" to populate account-specific encrypted endpoints
 4. **Save as Profile** (optional):
    - Go to Profiles tab
    - Click "Create New Profile"

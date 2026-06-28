@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.10.0
+    Version: 1.11.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.10.0"
+$script:AppVersion = "1.11.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -716,7 +716,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.10.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.11.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1179,6 +1179,28 @@ $script:DnsPresets = [ordered]@{
                                             <Button x:Name="btnTestEncryptedDns" Content="Test Health" Style="{StaticResource ModernButton}" Margin="0,14,0,8" Padding="14,8"/>
                                             <TextBlock x:Name="txtEncryptedDnsHealthStatus" Text="Validates DoH/DoT handshake." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Account-Specific Endpoints -->
+                                <TextBlock Text="ACCOUNT-SPECIFIC ENDPOINTS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="260"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                                            <TextBlock Text="NextDNS Config ID" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtNextDnsConfigId" Style="{StaticResource ModernTextBox}" Text=""/>
+                                        </StackPanel>
+
+                                        <Button x:Name="btnApplyNextDnsEndpoints" Grid.Column="1" Content="Apply NextDNS" Style="{StaticResource ModernButton}" Margin="0,20,14,0" Padding="14,8" VerticalAlignment="Top"/>
+
+                                        <TextBlock x:Name="txtNextDnsEndpointStatus" Grid.Column="2" Text="Fills DoH, DoT, and DoQ fields from a NextDNS account configuration ID." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>
 
@@ -1695,7 +1717,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.10.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.11.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -4024,6 +4046,38 @@ function Invoke-EncryptedDnsHealthTest {
     $script:EncryptedDnsHealthTimer.Start()
 }
 
+function Test-NextDnsConfigId {
+    param([string]$ConfigId)
+
+    if ([string]::IsNullOrWhiteSpace($ConfigId)) { return $false }
+    $value = $ConfigId.Trim()
+    return ($value -match '^[A-Za-z0-9](?:[A-Za-z0-9-]{4,62}[A-Za-z0-9])$')
+}
+
+function Invoke-ApplyNextDnsEndpoint {
+    $configId = $script:txtNextDnsConfigId.Text.Trim().ToLowerInvariant()
+
+    if (-not (Test-NextDnsConfigId -ConfigId $configId)) {
+        Show-MessageBox -Message "Enter a valid NextDNS configuration ID before applying account-specific endpoints." -Title "Invalid NextDNS ID" -Icon Error
+        $script:txtNextDnsEndpointStatus.Text = "Invalid NextDNS configuration ID."
+        Update-Status "Invalid NextDNS configuration ID" -Type Error
+        return
+    }
+
+    $dohTemplate = "https://dns.nextdns.io/$configId"
+    $dotHost = "$configId.dns.nextdns.io:853"
+    $doqUpstream = "quic://$configId.dns.nextdns.io:853"
+
+    $script:txtDohTemplate.Text = $dohTemplate
+    $script:txtDotHost.Text = $dotHost
+    $script:txtDoqUpstream.Text = $doqUpstream
+    $script:txtNextDnsEndpointStatus.Text = "Applied NextDNS endpoints: DoH, DoT, and DoQ upstream."
+    $script:txtEncryptedDnsHealthStatus.Text = "NextDNS endpoints ready for health testing."
+    $script:txtDoqProxyStatus.Text = "NextDNS DoQ upstream applied. Validate dnsproxy before starting."
+
+    Update-Status "NextDNS encrypted endpoints applied" -Type Success
+}
+
 function Resolve-DoqProxyPath {
     $pathText = $script:txtDoqProxyPath.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($pathText)) { return $null }
@@ -4857,6 +4911,7 @@ $btnValidateDoqProxy.Add_Click({ Invoke-ValidateDoqProxy })
 $btnStartDoqProxy.Add_Click({ Invoke-StartDoqProxy })
 $btnStopDoqProxy.Add_Click({ Invoke-StopDoqProxy })
 $btnApplyDoqLocalDns.Add_Click({ Invoke-ApplyDoqLocalResolver })
+$btnApplyNextDnsEndpoints.Add_Click({ Invoke-ApplyNextDnsEndpoint })
 $btnWifiRefresh.Add_Click({ Invoke-WifiNetworkScan })
 $btnWifiConnect.Add_Click({ Invoke-WifiConnect })
 $btnWifiDisconnect.Add_Click({ Invoke-WifiDisconnect })
