@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.13.0
+    Version: 1.14.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.13.0"
+$script:AppVersion = "1.14.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -61,6 +61,7 @@ $script:EncryptedDnsHealthJob = $null
 $script:EncryptedDnsHealthTimer = $null
 $script:DoqProxyProcess = $null
 $script:LastAutoAppliedProfile = ""
+$script:LastNetworkSnapshot = $null
 $script:AutoProfileTimer = $null
 
 # Create directories
@@ -718,7 +719,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.13.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.14.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1520,6 +1521,7 @@ $script:DnsPresets = [ordered]@{
                                         <Button x:Name="btnFlushDns" Content="Flush DNS Cache" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnReleaseIP" Content="Release IP" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnRenewIP" Content="Renew IP" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
+                                        <Button x:Name="btnRestoreNetworkState" Content="Restore Last Network State" Style="{StaticResource ModernButton}" Margin="0,0,12,12" IsEnabled="False"/>
                                         <Button x:Name="btnResetWinsock" Content="Reset Winsock" Style="{StaticResource DangerButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnResetTCP" Content="Reset TCP/IP Stack" Style="{StaticResource DangerButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnNetworkReset" Content="Full Network Reset" Style="{StaticResource DangerButton}" Margin="0,0,0,12"/>
@@ -1750,7 +1752,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.13.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.14.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1813,6 +1815,478 @@ function Test-ValidIP {
     } catch {
         return $false
     }
+}
+
+function Test-ValidIPv4Address {
+    param([string]$IP)
+
+    if ([string]::IsNullOrWhiteSpace($IP)) { return $false }
+    try {
+        $parsed = [System.Net.IPAddress]::Parse($IP)
+        return ($parsed.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork)
+    } catch {
+        return $false
+    }
+}
+
+function Test-ValidIPv4PrefixLength {
+    param([int]$PrefixLength)
+
+    return ($PrefixLength -ge 1 -and $PrefixLength -le 32)
+}
+
+function Get-ApplyValidationResult {
+    param(
+        [bool]$IsValid,
+        [string]$Message,
+        [hashtable]$Data = @{}
+    )
+
+    $result = [ordered]@{
+        IsValid = $IsValid
+        Message = $Message
+    }
+
+    foreach ($key in $Data.Keys) {
+        $result[$key] = $Data[$key]
+    }
+
+    return [pscustomobject]$result
+}
+
+function Get-AdapterInterfaceRegistryPath {
+    param(
+        $Adapter,
+        [string]$AddressFamily
+    )
+
+    if (-not $Adapter -or -not $Adapter.InterfaceGuid) { return "" }
+
+    $basePath = if ($AddressFamily -eq "IPv6") {
+        "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters\Interfaces"
+    } else {
+        "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces"
+    }
+
+    $guidText = ([string]$Adapter.InterfaceGuid).Trim()
+    $guidTrimmed = $guidText.Trim("{}")
+    $candidateKeys = @($guidText, "{$guidTrimmed}", $guidTrimmed) | Select-Object -Unique
+
+    foreach ($candidate in $candidateKeys) {
+        $path = Join-Path $basePath $candidate
+        if (Test-Path -LiteralPath $path) { return $path }
+    }
+
+    return ""
+}
+
+function Get-StaticDnsServersFromRegistry {
+    param(
+        $Adapter,
+        [string]$AddressFamily
+    )
+
+    $path = Get-AdapterInterfaceRegistryPath -Adapter $Adapter -AddressFamily $AddressFamily
+    if ([string]::IsNullOrWhiteSpace($path)) { return @() }
+
+    try {
+        $nameServer = (Get-ItemProperty -LiteralPath $path -Name NameServer -ErrorAction SilentlyContinue).NameServer
+        if ([string]::IsNullOrWhiteSpace($nameServer)) { return @() }
+
+        return @($nameServer -split '[,\s]+' | Where-Object { Test-ValidIP $_ } | Select-Object -Unique)
+    } catch {
+        return @()
+    }
+}
+
+function Get-AdapterNetworkSnapshot {
+    param(
+        $Adapter,
+        [string]$Reason
+    )
+
+    if ($null -eq $Adapter) {
+        throw "No adapter was supplied for network snapshot."
+    }
+
+    $ipInterface = Get-NetIPInterface -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction Stop | Select-Object -First 1
+    $addresses = @(Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
+        ForEach-Object {
+            [pscustomobject]@{
+                IPAddress = $_.IPAddress
+                PrefixLength = [int]$_.PrefixLength
+                PrefixOrigin = [string]$_.PrefixOrigin
+            }
+        })
+
+    $routes = @(Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            [pscustomobject]@{
+                NextHop = $_.NextHop
+                RouteMetric = $_.RouteMetric
+            }
+        })
+
+    $staticDnsServers = @()
+    $staticDnsServers += Get-StaticDnsServersFromRegistry -Adapter $Adapter -AddressFamily IPv4
+    $staticDnsServers += Get-StaticDnsServersFromRegistry -Adapter $Adapter -AddressFamily IPv6
+    $staticDnsServers = @($staticDnsServers | Where-Object { Test-ValidIP $_ } | Select-Object -Unique)
+
+    $effectiveDnsServers = @()
+    $dnsRows = @(Get-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ErrorAction SilentlyContinue)
+    foreach ($row in $dnsRows) {
+        if ($row.ServerAddresses) {
+            $effectiveDnsServers += @($row.ServerAddresses | Where-Object { Test-ValidIP $_ })
+        }
+    }
+    $effectiveDnsServers = @($effectiveDnsServers | Select-Object -Unique)
+
+    return [pscustomobject]@{
+        CapturedAt = (Get-Date).ToString("o")
+        Reason = $Reason
+        InterfaceIndex = $Adapter.ifIndex
+        InterfaceAlias = $Adapter.Name
+        Dhcp = [string]$ipInterface.Dhcp
+        IPv4Addresses = $addresses
+        DefaultRoutes = $routes
+        DnsAutomatic = ($staticDnsServers.Count -eq 0)
+        StaticDnsServers = $staticDnsServers
+        EffectiveDnsServers = $effectiveDnsServers
+    }
+}
+
+function Show-RestoreSnapshotButtonState {
+    if ($script:btnRestoreNetworkState) {
+        $script:btnRestoreNetworkState.IsEnabled = ($null -ne $script:LastNetworkSnapshot)
+    }
+}
+
+function Register-LastNetworkSnapshot {
+    param([pscustomobject]$Snapshot)
+
+    $script:LastNetworkSnapshot = $Snapshot
+    Show-RestoreSnapshotButtonState
+}
+
+function Restore-NetworkSnapshot {
+    param([pscustomobject]$Snapshot)
+
+    if ($null -eq $Snapshot) {
+        return [pscustomobject]@{ Restored = $false; Message = "No network snapshot is available." }
+    }
+
+    try {
+        $adapter = Get-NetAdapter -InterfaceIndex $Snapshot.InterfaceIndex -ErrorAction Stop
+
+        Get-NetIPAddress -InterfaceIndex $Snapshot.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
+            Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+
+        Get-NetRoute -InterfaceIndex $Snapshot.InterfaceIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+            Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+
+        if ($Snapshot.Dhcp -eq "Enabled") {
+            Set-NetIPInterface -InterfaceIndex $Snapshot.InterfaceIndex -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop
+        } else {
+            Set-NetIPInterface -InterfaceIndex $Snapshot.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
+
+            foreach ($address in @($Snapshot.IPv4Addresses)) {
+                if ((Test-ValidIPv4Address -IP $address.IPAddress) -and (Test-ValidIPv4PrefixLength -PrefixLength ([int]$address.PrefixLength))) {
+                    New-NetIPAddress -InterfaceIndex $Snapshot.InterfaceIndex -IPAddress $address.IPAddress -PrefixLength ([int]$address.PrefixLength) -ErrorAction Stop | Out-Null
+                }
+            }
+
+            foreach ($route in @($Snapshot.DefaultRoutes)) {
+                if (Test-ValidIPv4Address -IP $route.NextHop) {
+                    $routeParams = @{
+                        InterfaceIndex = $Snapshot.InterfaceIndex
+                        DestinationPrefix = "0.0.0.0/0"
+                        NextHop = $route.NextHop
+                        ErrorAction = "Stop"
+                    }
+                    if ($null -ne $route.RouteMetric) {
+                        $routeParams.RouteMetric = [int]$route.RouteMetric
+                    }
+                    New-NetRoute @routeParams | Out-Null
+                }
+            }
+        }
+
+        if ($Snapshot.DnsAutomatic) {
+            Set-DnsClientServerAddress -InterfaceIndex $Snapshot.InterfaceIndex -ResetServerAddresses -ErrorAction Stop
+        } else {
+            $dnsServers = @($Snapshot.StaticDnsServers | Where-Object { Test-ValidIP $_ } | Select-Object -Unique)
+            if ($dnsServers.Count -gt 0) {
+                Set-DnsClientServerAddress -InterfaceIndex $Snapshot.InterfaceIndex -ServerAddresses $dnsServers -ErrorAction Stop
+            } else {
+                Set-DnsClientServerAddress -InterfaceIndex $Snapshot.InterfaceIndex -ResetServerAddresses -ErrorAction Stop
+            }
+        }
+
+        return [pscustomobject]@{ Restored = $true; Message = "Restored network state for $($adapter.Name)." }
+    } catch {
+        return [pscustomobject]@{ Restored = $false; Message = $_.Exception.Message }
+    }
+}
+
+function Invoke-RestoreLastNetworkState {
+    $result = Restore-NetworkSnapshot -Snapshot $script:LastNetworkSnapshot
+    if ($result.Restored) {
+        Update-Status $result.Message -Type Success
+        Start-Sleep -Milliseconds 500
+        Update-AdapterDisplay
+    } else {
+        Update-Status "Restore failed: $($result.Message)" -Type Error
+        Show-MessageBox -Message "Failed to restore the last network state:`n$($result.Message)" -Title "Restore Failed" -Icon Error
+    }
+}
+
+function Invoke-NetworkMutation {
+    param(
+        $Adapter,
+        [string]$ActionName,
+        [scriptblock]$ScriptBlock,
+        [switch]$Quiet
+    )
+
+    $snapshot = $null
+
+    try {
+        $snapshot = Get-AdapterNetworkSnapshot -Adapter $Adapter -Reason $ActionName
+        Register-LastNetworkSnapshot -Snapshot $snapshot
+        & $ScriptBlock
+        return $true
+    } catch {
+        $changeError = $_.Exception.Message
+
+        if ($null -eq $snapshot) {
+            Update-Status "$ActionName failed before a rollback snapshot was captured" -Type Error
+            if (-not $Quiet) {
+                Show-MessageBox -Message "$ActionName failed before a rollback snapshot was captured:`n$changeError" -Title "Network Change Failed" -Icon Error
+            }
+            return $false
+        }
+
+        $restoreResult = Restore-NetworkSnapshot -Snapshot $snapshot
+        if ($restoreResult.Restored) {
+            Update-Status "$ActionName failed; previous network state restored" -Type Error
+            if (-not $Quiet) {
+                Show-MessageBox -Message "$ActionName failed:`n$changeError`n`nPrevious network state was restored." -Title "Network Change Rolled Back" -Icon Error
+            }
+        } else {
+            Update-Status "$ActionName failed; restore failed" -Type Error
+            if (-not $Quiet) {
+                Show-MessageBox -Message "$ActionName failed:`n$changeError`n`nRestore failed:`n$($restoreResult.Message)" -Title "Network Change Failed" -Icon Error
+            }
+        }
+
+        return $false
+    }
+}
+
+function Get-IPApplyTarget {
+    if ($script:rbDHCP.IsChecked) {
+        return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+            UseDHCP = $true
+            StatusMessage = "DHCP enabled"
+        }
+    }
+
+    $ip = $script:txtIPAddress.Text.Trim()
+    $gateway = $script:txtGateway.Text.Trim()
+    $prefixText = $script:txtPrefix.Text.Trim()
+    $prefix = 0
+
+    if (-not (Test-ValidIPv4Address -IP $ip)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Invalid IPv4 address format."
+    }
+    if (-not [int]::TryParse($prefixText, [ref]$prefix) -or -not (Test-ValidIPv4PrefixLength -PrefixLength $prefix)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Prefix length must be a number from 1 to 32."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($gateway) -and -not (Test-ValidIPv4Address -IP $gateway)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Invalid default gateway IPv4 address."
+    }
+
+    return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+        UseDHCP = $false
+        IPAddress = $ip
+        Gateway = $gateway
+        PrefixLength = $prefix
+        StatusMessage = "Static IP $ip configured"
+    }
+}
+
+function Get-DNSApplyTarget {
+    if ($script:rbDnsDHCP.IsChecked) {
+        return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+            UseAutomatic = $true
+            Servers = @()
+            StatusMessage = "DNS set to automatic"
+        }
+    }
+
+    if ($script:rbDnsPreset.IsChecked) {
+        $selected = $script:lstDnsPresets.SelectedItem
+        if ($null -eq $selected) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Please select a DNS preset."
+        }
+
+        $preset = $selected.Tag.Data
+        if ($preset.Primary -eq "DHCP") {
+            return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+                UseAutomatic = $true
+                Servers = @()
+                StatusMessage = "DNS preset '$($selected.Tag.Name)' set to automatic"
+            }
+        }
+
+        $servers = @()
+        foreach ($server in @($preset.Primary, $preset.Secondary)) {
+            if ([string]::IsNullOrWhiteSpace($server)) { continue }
+            if (-not (Test-ValidIP -IP $server)) {
+                return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$($selected.Tag.Name)' contains invalid server '$server'."
+            }
+            $servers += $server
+        }
+
+        if ($script:chkIPv6Dns.IsChecked) {
+            foreach ($server in @($preset.PrimaryV6, $preset.SecondaryV6)) {
+                if ([string]::IsNullOrWhiteSpace($server)) { continue }
+                if (-not (Test-ValidIP -IP $server)) {
+                    return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$($selected.Tag.Name)' contains invalid IPv6 server '$server'."
+                }
+                $servers += $server
+            }
+        }
+
+        $servers = @($servers | Select-Object -Unique)
+        if ($servers.Count -eq 0) {
+            return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$($selected.Tag.Name)' has no usable DNS servers."
+        }
+
+        return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+            UseAutomatic = $false
+            Servers = $servers
+            StatusMessage = "DNS preset '$($selected.Tag.Name)' applied"
+        }
+    }
+
+    $primary = $script:txtDnsPrimary.Text.Trim()
+    $secondary = $script:txtDnsSecondary.Text.Trim()
+
+    if (-not (Test-ValidIP -IP $primary)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Invalid primary DNS address."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($secondary) -and -not (Test-ValidIP -IP $secondary)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Invalid secondary DNS address."
+    }
+
+    $servers = @($primary)
+    if (-not [string]::IsNullOrWhiteSpace($secondary)) { $servers += $secondary }
+
+    return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+        UseAutomatic = $false
+        Servers = @($servers | Select-Object -Unique)
+        StatusMessage = "Custom DNS applied"
+    }
+}
+
+function Get-ProfileApplyTarget {
+    param([pscustomobject]$ProfileData)
+
+    $useDhcp = [bool]$ProfileData.UseDHCP
+    $useDnsAutomatic = [bool]$ProfileData.UseDHCPForDNS
+    $ipAddress = if ($ProfileData.IPAddress) { ([string]$ProfileData.IPAddress).Trim() } else { "" }
+    $gateway = if ($ProfileData.Gateway) { ([string]$ProfileData.Gateway).Trim() } else { "" }
+    $prefixText = if ($ProfileData.PrefixLength) { ([string]$ProfileData.PrefixLength).Trim() } else { "24" }
+    $prefix = 0
+
+    if (-not $useDhcp) {
+        if (-not (Test-ValidIPv4Address -IP $ipAddress)) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Profile '$($ProfileData.Name)' has an invalid IPv4 address."
+        }
+        if (-not [int]::TryParse($prefixText, [ref]$prefix) -or -not (Test-ValidIPv4PrefixLength -PrefixLength $prefix)) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Profile '$($ProfileData.Name)' has an invalid prefix length."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($gateway) -and -not (Test-ValidIPv4Address -IP $gateway)) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Profile '$($ProfileData.Name)' has an invalid gateway."
+        }
+    }
+
+    $dnsServers = @()
+    if (-not $useDnsAutomatic) {
+        $primary = if ($ProfileData.PrimaryDNS) { ([string]$ProfileData.PrimaryDNS).Trim() } else { "" }
+        $secondary = if ($ProfileData.SecondaryDNS) { ([string]$ProfileData.SecondaryDNS).Trim() } else { "" }
+
+        if (-not (Test-ValidIP -IP $primary)) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Profile '$($ProfileData.Name)' has an invalid primary DNS server."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($secondary) -and -not (Test-ValidIP -IP $secondary)) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Profile '$($ProfileData.Name)' has an invalid secondary DNS server."
+        }
+
+        $dnsServers += $primary
+        if (-not [string]::IsNullOrWhiteSpace($secondary)) { $dnsServers += $secondary }
+    }
+
+    return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+        UseDHCP = $useDhcp
+        IPAddress = $ipAddress
+        Gateway = $gateway
+        PrefixLength = if ($useDhcp) { 0 } else { $prefix }
+        UseAutomatic = $useDnsAutomatic
+        Servers = @($dnsServers | Select-Object -Unique)
+    }
+}
+
+function Invoke-AdapterIPTarget {
+    param(
+        $Adapter,
+        [pscustomobject]$Target
+    )
+
+    if ($Target.UseDHCP) {
+        Set-NetIPInterface -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop
+        Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.PrefixOrigin -eq "Manual" } |
+            Remove-NetIPAddress -Confirm:$false -ErrorAction Stop
+        Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+            Remove-NetRoute -Confirm:$false -ErrorAction Stop
+        return
+    }
+
+    Set-NetIPInterface -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
+    Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
+        Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+    Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+        Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+
+    New-NetIPAddress -InterfaceIndex $Adapter.ifIndex -IPAddress $Target.IPAddress -PrefixLength $Target.PrefixLength -ErrorAction Stop | Out-Null
+
+    if (Test-ValidIPv4Address -IP $Target.Gateway) {
+        New-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $Target.Gateway -ErrorAction Stop | Out-Null
+    }
+}
+
+function Invoke-AdapterDNSTarget {
+    param(
+        $Adapter,
+        [pscustomobject]$Target
+    )
+
+    if ($Target.UseAutomatic) {
+        Set-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
+        return
+    }
+
+    $servers = @($Target.Servers | Where-Object { Test-ValidIP $_ } | Select-Object -Unique)
+    if ($servers.Count -eq 0) {
+        throw "No valid DNS servers were supplied."
+    }
+
+    Set-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ServerAddresses $servers -ErrorAction Stop
 }
 
 function ConvertTo-CleanMacAddress {
@@ -4475,53 +4949,32 @@ function Invoke-ApplyProfileObject {
         [string]$Source = "Manual"
     )
 
+    $target = Get-ProfileApplyTarget -ProfileData $ProfileData
+    if (-not $target.IsValid) {
+        Update-Status $target.Message -Type Error
+        if ($Source -ne "Auto") {
+            Show-MessageBox -Message $target.Message -Title "Profile Validation Failed" -Icon Error
+        }
+        return $false
+    }
+
     Update-Status "Applying profile '$($ProfileData.Name)'..."
 
-    try {
-        if ($ProfileData.UseDHCP) {
-            Set-NetIPInterface -InterfaceIndex $Adapter.ifIndex -Dhcp Enabled -ErrorAction Stop
-            Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Where-Object { $_.PrefixOrigin -eq "Manual" } |
-                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-        } else {
-            Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+    $quietApply = ($Source -eq "Auto")
+    $success = Invoke-NetworkMutation -Adapter $Adapter -ActionName "Apply profile '$($ProfileData.Name)'" -Quiet:$quietApply -ScriptBlock {
+        Invoke-AdapterIPTarget -Adapter $Adapter -Target $target
+        Invoke-AdapterDNSTarget -Adapter $Adapter -Target $target
+    }
 
-            $prefix = if ($ProfileData.PrefixLength) { [int]$ProfileData.PrefixLength } else { 24 }
-            New-NetIPAddress -InterfaceIndex $Adapter.ifIndex -IPAddress $ProfileData.IPAddress -PrefixLength $prefix -ErrorAction Stop | Out-Null
-
-            if (Test-ValidIP $ProfileData.Gateway) {
-                New-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $ProfileData.Gateway -ErrorAction Stop | Out-Null
-            }
-        }
-
-        if ($ProfileData.UseDHCPForDNS) {
-            Set-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
-        } else {
-            $dnsServers = @()
-            if (Test-ValidIP $ProfileData.PrimaryDNS) { $dnsServers += $ProfileData.PrimaryDNS }
-            if (Test-ValidIP $ProfileData.SecondaryDNS) { $dnsServers += $ProfileData.SecondaryDNS }
-            if ($dnsServers.Count -gt 0) {
-                Set-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ServerAddresses $dnsServers -ErrorAction Stop
-            }
-        }
-
+    if ($success) {
         $script:LastAutoAppliedProfile = if ($Source -eq "Auto") { $ProfileData.Name } else { $script:LastAutoAppliedProfile }
         Update-Status "Profile '$($ProfileData.Name)' applied successfully" -Type Success
         Start-Sleep -Milliseconds 500
         Update-AdapterDisplay
         return $true
-    } catch {
-        Update-Status "Error: $($_.Exception.Message)" -Type Error
-        if ($Source -ne "Auto") {
-            Show-MessageBox -Message "Failed to apply profile:`n$($_.Exception.Message)" -Title "Error" -Icon Error
-        }
-        return $false
     }
+
+    return $false
 }
 
 function Invoke-AutoApplyProfile {
@@ -4606,58 +5059,26 @@ function Apply-IPConfiguration {
         return
     }
 
+    $target = Get-IPApplyTarget
+    if (-not $target.IsValid) {
+        Show-MessageBox -Message $target.Message -Title "Validation Error" -Icon Error
+        Update-Status $target.Message -Type Error
+        return
+    }
+
     $result = Show-MessageBox -Message "Apply IP configuration to '$($adapter.Name)'?" -Title "Confirm" -Buttons YesNo -Icon Question
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
 
     Update-Status "Applying IP configuration..."
 
-    try {
-        if ($script:rbDHCP.IsChecked) {
-            # Enable DHCP
-            Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -Dhcp Enabled -ErrorAction Stop
+    $success = Invoke-NetworkMutation -Adapter $adapter -ActionName "Apply IP configuration" -ScriptBlock {
+        Invoke-AdapterIPTarget -Adapter $adapter -Target $target
+    }
 
-            # Remove static IP addresses
-            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Where-Object { $_.PrefixOrigin -eq "Manual" } |
-                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-
-            # Remove static gateway
-            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-
-            Update-Status "DHCP enabled on $($adapter.Name)" -Type Success
-        } else {
-            # Static IP configuration
-            $ip = $script:txtIPAddress.Text.Trim()
-            $gateway = $script:txtGateway.Text.Trim()
-            $prefix = [int]$script:txtPrefix.Text.Trim()
-
-            if (-not (Test-ValidIP $ip)) {
-                Show-MessageBox -Message "Invalid IP address format." -Title "Validation Error" -Icon Error
-                return
-            }
-
-            # Remove existing configuration
-            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-
-            # Apply new configuration
-            New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $ip -PrefixLength $prefix -ErrorAction Stop | Out-Null
-
-            if (Test-ValidIP $gateway) {
-                New-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $gateway -ErrorAction Stop | Out-Null
-            }
-
-            Update-Status "Static IP $ip configured on $($adapter.Name)" -Type Success
-        }
-
+    if ($success) {
+        Update-Status "$($target.StatusMessage) on $($adapter.Name)" -Type Success
         Start-Sleep -Milliseconds 500
         Update-AdapterDisplay
-    } catch {
-        Update-Status "Error: $($_.Exception.Message)" -Type Error
-        Show-MessageBox -Message "Failed to apply IP configuration:`n$($_.Exception.Message)" -Title "Error" -Icon Error
     }
 }
 
@@ -4668,55 +5089,25 @@ function Apply-DNSConfiguration {
         return
     }
 
+    $target = Get-DNSApplyTarget
+    if (-not $target.IsValid) {
+        Show-MessageBox -Message $target.Message -Title "Validation Error" -Icon Error
+        Update-Status $target.Message -Type Error
+        return
+    }
+
     $result = Show-MessageBox -Message "Apply DNS configuration to '$($adapter.Name)'?" -Title "Confirm" -Buttons YesNo -Icon Question
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
 
     Update-Status "Applying DNS configuration..."
 
-    try {
-        if ($script:rbDnsDHCP.IsChecked) {
-            # Use DHCP for DNS
-            Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
-            Update-Status "DNS set to automatic on $($adapter.Name)" -Type Success
-        }
-        elseif ($script:rbDnsPreset.IsChecked) {
-            $selected = $script:lstDnsPresets.SelectedItem
-            if ($null -eq $selected) {
-                Show-MessageBox -Message "Please select a DNS preset." -Title "No Selection" -Icon Warning
-                return
-            }
+    $success = Invoke-NetworkMutation -Adapter $adapter -ActionName "Apply DNS configuration" -ScriptBlock {
+        Invoke-AdapterDNSTarget -Adapter $adapter -Target $target
+    }
 
-            $preset = $selected.Tag.Data
-            if ($preset.Primary -eq "DHCP") {
-                Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
-            } else {
-                $dnsServers = @($preset.Primary)
-                if ($preset.Secondary) { $dnsServers += $preset.Secondary }
-                Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dnsServers -ErrorAction Stop
-            }
-            Update-Status "DNS preset '$($selected.Tag.Name)' applied to $($adapter.Name)" -Type Success
-        }
-        else {
-            # Custom DNS
-            $primary = $script:txtDnsPrimary.Text.Trim()
-            $secondary = $script:txtDnsSecondary.Text.Trim()
-
-            if (-not (Test-ValidIP $primary)) {
-                Show-MessageBox -Message "Invalid primary DNS address." -Title "Validation Error" -Icon Error
-                return
-            }
-
-            $dnsServers = @($primary)
-            if (Test-ValidIP $secondary) { $dnsServers += $secondary }
-
-            Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dnsServers -ErrorAction Stop
-            Update-Status "Custom DNS applied to $($adapter.Name)" -Type Success
-        }
-
+    if ($success) {
+        Update-Status "$($target.StatusMessage) to $($adapter.Name)" -Type Success
         Update-AdapterDetails
-    } catch {
-        Update-Status "Error: $($_.Exception.Message)" -Type Error
-        Show-MessageBox -Message "Failed to apply DNS configuration:`n$($_.Exception.Message)" -Title "Error" -Icon Error
     }
 }
 
@@ -5132,6 +5523,7 @@ $btnCaptureProfileMatch.Add_Click({ Invoke-CaptureProfileMatch })
 $btnFlushDns.Add_Click({ Invoke-FlushDns })
 $btnReleaseIP.Add_Click({ Invoke-ReleaseIP })
 $btnRenewIP.Add_Click({ Invoke-RenewIP })
+$btnRestoreNetworkState.Add_Click({ Invoke-RestoreLastNetworkState })
 $btnResetWinsock.Add_Click({ Invoke-ResetWinsock })
 $btnResetTCP.Add_Click({ Invoke-ResetTCP })
 $btnNetworkReset.Add_Click({ Invoke-NetworkReset })
@@ -5194,6 +5586,7 @@ Refresh-DnsPresets
 Show-DohConfiguration
 Show-DotConfiguration
 Refresh-ProfileList
+Show-RestoreSnapshotButtonState
 Update-ConnectionStatus
 Update-PublicIP
 Show-WifiActionState

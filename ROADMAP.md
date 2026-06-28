@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P0
-- [ ] P0 - Add network-change preflight, snapshot, and rollback
-  Why: Profile/IP/DNS changes can leave an adapter partially changed if a later command fails after existing addresses or routes were removed.
-  Evidence: `NetForge.ps1:4570-4608`, `NetForge.ps1:4701-4818`, Microsoft NetTCPIP/DnsClient docs.
-  Touches: `Apply-IPConfiguration`, `Apply-DNSConfiguration`, `Invoke-ApplyProfileObject`, new state snapshot/restore helpers.
-  Acceptance: Every apply path validates all target fields first, captures current IPv4/DNS/routes before mutation, restores the snapshot on failure, and exposes a visible "restore last state" action.
-  Complexity: L
-
 - [ ] P0 - Validate and atomically write profile/import JSON
   Why: Imported or corrupt profile JSON can be silently skipped or written without schema checks, duplicate handling, or safe replacement.
   Evidence: `NetForge.ps1:4386-4477`, `NetForge.ps1:5087-5107`, PSScriptAnalyzer empty-catch findings.
@@ -140,15 +133,15 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 
 ### P2
 - [ ] P2 - Centralize version and release metadata
-  Why: Script, README badge, changelog, working notes, and dist zip can drift; the local script already reports `1.14.0` while tracked docs still describe `1.13.0`.
-  Evidence: `NetForge.ps1:7`, `NetForge.ps1:47`, `README.md`, `CHANGELOG.md`, working notes, `dist/NetForge-v1.13.0.zip`.
+  Why: Script, README badge, changelog, working notes, and dist zip are still updated manually and can drift across releases.
+  Evidence: `NetForge.ps1:7`, `NetForge.ps1:47`, `README.md`, `CHANGELOG.md`, working notes, release zip naming.
   Touches: `NetForge.ps1`, README, changelog, working notes, release packaging script.
   Acceptance: One version source updates script header/UI, README badge, changelog heading, release zip name, and working notes; local verification fails on mismatch.
   Complexity: S
 
 - [ ] P2 - Ship signed/checksummed release artifacts
   Why: A high-privilege PowerShell network tool should make authenticity and install path clear.
-  Evidence: PowerShell signing docs, execution policy docs, current `dist/NetForge-v1.13.0.zip`.
+  Evidence: PowerShell signing docs, execution policy docs, current release zip artifact.
   Touches: release script, dist artifact, README install section, GitHub release asset process.
   Acceptance: Release build produces a clean zip, SHA256 file, optional Authenticode signature when a certificate exists, and README instructions for verifying the artifact.
   Complexity: M
