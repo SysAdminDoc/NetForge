@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.20.0
+    Version: 1.21.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,12 +44,14 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.20.0"
+$script:AppVersion = "1.21.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
-$script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
+$script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
+$script:ProfilesPath = $script:DefaultProfilesPath
 $script:LogsPath = Join-Path $script:ConfigPath "Logs"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
 $script:ProfileSchemaVersion = 1
+$script:ProfileStoreLoadWarning = ""
 $script:ContinuousPingRunning = $false
 $script:ContinuousPingPS = $null
 $script:CachedPublicIP = $null
@@ -116,6 +118,10 @@ $script:AccessibilityNames = @{
     lstProfiles = "Saved profile list"
     btnNewProfile = "Create new profile"
     btnDeleteProfile = "Delete selected profile"
+    btnChooseProfileStore = "Choose profile storage folder"
+    btnUseOneDriveProfileStore = "Use OneDrive profile storage"
+    btnRevertProfileStore = "Use local profile storage"
+    btnProfileStoreHealth = "Check profile storage health"
     txtProfileName = "Profile name"
     txtProfileDesc = "Profile description"
     chkProfileAutoApply = "Enable profile auto-apply"
@@ -142,13 +148,40 @@ $script:AccessibilityTabOrder = @(
     "lstAdapters", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
     "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "btnApplyIP",
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
-    "lstProfiles", "btnNewProfile", "txtProfileName", "chkProfileAutoApply", "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
+    "lstProfiles", "btnNewProfile", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
+    "txtProfileName", "chkProfileAutoApply", "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics"
 )
 
+if (Test-Path -LiteralPath $script:SettingsFile) {
+    try {
+        $settings = Get-Content -Raw -LiteralPath $script:SettingsFile | ConvertFrom-Json
+        if ($settings.ProfileStorePath) {
+            $candidatePath = [Environment]::ExpandEnvironmentVariables(([string]$settings.ProfileStorePath).Trim())
+            if ([System.IO.Path]::IsPathRooted($candidatePath)) {
+                $script:ProfilesPath = [System.IO.Path]::GetFullPath($candidatePath)
+            } else {
+                $script:ProfileStoreLoadWarning = "ProfileStorePath is not rooted; using local profile storage."
+            }
+        }
+    } catch {
+        $script:ProfileStoreLoadWarning = "Could not read settings.json; using local profile storage. $($_.Exception.Message)"
+    }
+}
+
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
-if (-not (Test-Path $script:ProfilesPath)) { New-Item -Path $script:ProfilesPath -ItemType Directory -Force | Out-Null }
+try {
+    if (-not (Test-Path $script:ProfilesPath)) {
+        New-Item -Path $script:ProfilesPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+    }
+} catch {
+    $script:ProfileStoreLoadWarning = "Saved profile store was unavailable; using local profile storage. $($_.Exception.Message)"
+    $script:ProfilesPath = $script:DefaultProfilesPath
+    if (-not (Test-Path $script:ProfilesPath)) {
+        New-Item -Path $script:ProfilesPath -ItemType Directory -Force | Out-Null
+    }
+}
 if (-not (Test-Path $script:LogsPath)) { New-Item -Path $script:LogsPath -ItemType Directory -Force | Out-Null }
 
 # ============================================================================
@@ -802,7 +835,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.20.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.21.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1486,6 +1519,20 @@ $script:DnsPresets = [ordered]@{
                                     <StackPanel Margin="20">
                                         <TextBlock Text="PROFILE DETAILS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,16"/>
 
+                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                            <StackPanel>
+                                                <TextBlock Text="Profile Storage" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,10"/>
+                                                <TextBlock x:Name="txtProfileStorePath" Text="Profile store path loading..." FontFamily="Consolas" FontSize="11" Foreground="{StaticResource AccentBlueBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                                <TextBlock x:Name="txtProfileStoreStatus" Text="Profile storage health loading..." FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                                <WrapPanel>
+                                                    <Button x:Name="btnChooseProfileStore" Content="Choose Folder" Style="{StaticResource ModernButton}" Margin="0,0,8,8" Padding="14,8"/>
+                                                    <Button x:Name="btnUseOneDriveProfileStore" Content="Use OneDrive" Style="{StaticResource ModernButton}" Margin="0,0,8,8" Padding="14,8"/>
+                                                    <Button x:Name="btnRevertProfileStore" Content="Use Local" Style="{StaticResource ModernButton}" Margin="0,0,8,8" Padding="14,8"/>
+                                                    <Button x:Name="btnProfileStoreHealth" Content="Check Health" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+
                                         <StackPanel Margin="0,0,0,16">
                                             <TextBlock Text="Profile Name" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtProfileName" Style="{StaticResource ModernTextBox}"/>
@@ -1836,7 +1883,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.20.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.21.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -5586,6 +5633,431 @@ function Write-ProfileImportLog {
     }
 }
 
+function Resolve-ProfileStorePath {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
+
+    try {
+        $expanded = [Environment]::ExpandEnvironmentVariables($Path.Trim())
+        if (-not [System.IO.Path]::IsPathRooted($expanded)) { return "" }
+        return [System.IO.Path]::GetFullPath($expanded)
+    } catch {
+        return ""
+    }
+}
+
+function Test-SamePath {
+    param(
+        [string]$PathA,
+        [string]$PathB
+    )
+
+    $resolvedA = Resolve-ProfileStorePath -Path $PathA
+    $resolvedB = Resolve-ProfileStorePath -Path $PathB
+    if ([string]::IsNullOrWhiteSpace($resolvedA) -or [string]::IsNullOrWhiteSpace($resolvedB)) { return $false }
+
+    $trimChars = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $normalizedA = $resolvedA.TrimEnd($trimChars)
+    $normalizedB = $resolvedB.TrimEnd($trimChars)
+    return $normalizedA.Equals($normalizedB, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-FileSha256 {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return "" }
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $hashBytes = $sha.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($hashBytes) -replace "-", "").ToLowerInvariant()
+    } finally {
+        if ($stream) { $stream.Dispose() }
+        if ($sha) { $sha.Dispose() }
+    }
+}
+
+function Get-AppSettings {
+    $settings = [ordered]@{}
+    if (-not (Test-Path -LiteralPath $script:SettingsFile)) { return $settings }
+
+    try {
+        $json = Get-Content -Raw -LiteralPath $script:SettingsFile | ConvertFrom-Json
+        foreach ($property in $json.PSObject.Properties) {
+            $settings[$property.Name] = $property.Value
+        }
+    } catch {
+        $settings["SettingsReadWarning"] = $_.Exception.Message
+    }
+
+    return $settings
+}
+
+function Save-AppSetting {
+    param(
+        [string]$Name,
+        $Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        throw "Setting name is required."
+    }
+    if (-not (Test-Path -LiteralPath $script:ConfigPath)) {
+        New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null
+    }
+
+    $settings = Get-AppSettings
+    $settings[$Name] = $Value
+    $settings["UpdatedAt"] = (Get-Date).ToString("o")
+
+    $tempPath = Join-Path $script:ConfigPath "settings.$([guid]::NewGuid().ToString('N')).tmp"
+    $backupPath = Join-Path $script:ConfigPath "settings.bak"
+
+    try {
+        [pscustomobject]$settings | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $tempPath -Encoding UTF8
+        if (Test-Path -LiteralPath $script:SettingsFile) {
+            [System.IO.File]::Replace($tempPath, $script:SettingsFile, $backupPath, $true)
+            if (Test-Path -LiteralPath $backupPath) {
+                Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+            }
+        } else {
+            [System.IO.File]::Move($tempPath, $script:SettingsFile)
+        }
+    } finally {
+        if (Test-Path -LiteralPath $tempPath) {
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Test-ProfileStorePath {
+    param(
+        [string]$Path,
+        [switch]$Create
+    )
+
+    $resolved = Resolve-ProfileStorePath -Path $Path
+    if ([string]::IsNullOrWhiteSpace($resolved)) {
+        return [pscustomobject]@{ IsValid = $false; Path = ""; Message = "Profile store path must be a rooted folder path." }
+    }
+    if (Test-Path -LiteralPath $resolved -PathType Leaf) {
+        return [pscustomobject]@{ IsValid = $false; Path = $resolved; Message = "Profile store path points to a file." }
+    }
+
+    try {
+        if (-not (Test-Path -LiteralPath $resolved)) {
+            if ($Create) {
+                New-Item -Path $resolved -ItemType Directory -Force | Out-Null
+            } else {
+                return [pscustomobject]@{ IsValid = $false; Path = $resolved; Message = "Profile store path does not exist." }
+            }
+        }
+
+        $probePath = Join-Path $resolved ".netforge-write-test-$([guid]::NewGuid().ToString('N')).tmp"
+        Set-Content -LiteralPath $probePath -Value "write-test" -Encoding UTF8
+        Remove-Item -LiteralPath $probePath -Force
+
+        return [pscustomobject]@{ IsValid = $true; Path = $resolved; Message = "Profile store is writable." }
+    } catch {
+        return [pscustomobject]@{ IsValid = $false; Path = $resolved; Message = "Profile store is not writable: $($_.Exception.Message)" }
+    }
+}
+
+function Get-ProfileStoreHealth {
+    param([string]$Path = $script:ProfilesPath)
+
+    $pathResult = Test-ProfileStorePath -Path $Path
+    $profileCount = 0
+    $invalidCount = 0
+    $profileFiles = @()
+
+    if ($pathResult.IsValid) {
+        $profileFiles = @(Get-ChildItem -Path $pathResult.Path -Filter "*.json" -ErrorAction SilentlyContinue)
+        $profileCount = $profileFiles.Count
+        foreach ($file in $profileFiles) {
+            try {
+                $content = Get-Content -Raw -LiteralPath $file.FullName | ConvertFrom-Json
+                $validation = Get-ProfileValidationResult -ProfileData $content
+                if (-not $validation.IsValid) { $invalidCount++ }
+            } catch {
+                $invalidCount++
+            }
+        }
+    }
+
+    $isDefault = Test-SamePath -PathA $pathResult.Path -PathB $script:DefaultProfilesPath
+    $mode = if ($isDefault) { "Local" } else { "Custom/synced" }
+    $message = if ($pathResult.IsValid) {
+        "$mode store healthy. $profileCount profile file(s), $invalidCount invalid."
+    } else {
+        "$mode store problem: $($pathResult.Message)"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($script:ProfileStoreLoadWarning)) {
+        $message = "$message Startup warning: $script:ProfileStoreLoadWarning"
+    }
+
+    return [pscustomobject]@{
+        IsValid = [bool]$pathResult.IsValid
+        Path = $pathResult.Path
+        IsDefault = $isDefault
+        ProfileCount = $profileCount
+        InvalidCount = $invalidCount
+        Message = $message
+    }
+}
+
+function Get-ProfileStoreMigrationPlan {
+    param(
+        [string]$SourcePath,
+        [string]$TargetPath
+    )
+
+    $source = Resolve-ProfileStorePath -Path $SourcePath
+    $target = Resolve-ProfileStorePath -Path $TargetPath
+    $copyFiles = @()
+    $skipped = @()
+    $conflicts = @()
+    $invalid = @()
+
+    if ([string]::IsNullOrWhiteSpace($source) -or [string]::IsNullOrWhiteSpace($target)) {
+        return [pscustomobject]@{
+            CanMigrate = $false
+            SourcePath = $source
+            TargetPath = $target
+            CopyFiles = @()
+            Skipped = @()
+            Conflicts = @("Source and target paths must be rooted folder paths.")
+            InvalidProfiles = @()
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $source)) {
+        return [pscustomobject]@{
+            CanMigrate = $true
+            SourcePath = $source
+            TargetPath = $target
+            CopyFiles = @()
+            Skipped = @("Source path does not exist; no profiles to copy.")
+            Conflicts = @()
+            InvalidProfiles = @()
+        }
+    }
+
+    foreach ($file in @(Get-ChildItem -Path $source -Filter "*.json" -ErrorAction SilentlyContinue)) {
+        try {
+            $content = Get-Content -Raw -LiteralPath $file.FullName | ConvertFrom-Json
+            $validation = Get-ProfileValidationResult -ProfileData $content
+            if (-not $validation.IsValid) {
+                $invalid += "$($file.Name): $($validation.Message)"
+                continue
+            }
+
+            $targetFile = Join-Path $target $validation.SafeFileName
+            if (Test-Path -LiteralPath $targetFile) {
+                $sourceHash = Get-FileSha256 -Path $file.FullName
+                $targetHash = Get-FileSha256 -Path $targetFile
+                if ($sourceHash -eq $targetHash) {
+                    $skipped += "$($validation.Profile.Name): identical file already exists at target."
+                } else {
+                    $conflicts += "$($validation.Profile.Name): target already has $($validation.SafeFileName)."
+                }
+                continue
+            }
+
+            $copyFiles += [pscustomobject]@{
+                Name = $validation.Profile.Name
+                SafeFileName = $validation.SafeFileName
+                SourcePath = $file.FullName
+                TargetPath = $targetFile
+                Sha256 = Get-FileSha256 -Path $file.FullName
+            }
+        } catch {
+            $invalid += "$($file.Name): $($_.Exception.Message)"
+        }
+    }
+
+    return [pscustomobject]@{
+        CanMigrate = ($conflicts.Count -eq 0)
+        SourcePath = $source
+        TargetPath = $target
+        CopyFiles = $copyFiles
+        Skipped = $skipped
+        Conflicts = $conflicts
+        InvalidProfiles = $invalid
+    }
+}
+
+function Write-ProfileStoreBackupManifest {
+    param(
+        [pscustomobject]$Plan,
+        [string]$ActionName
+    )
+
+    $manifestRoot = Join-Path $script:ConfigPath "ProfileStoreBackups"
+    if (-not (Test-Path -LiteralPath $manifestRoot)) {
+        New-Item -Path $manifestRoot -ItemType Directory -Force | Out-Null
+    }
+
+    $manifestPath = Join-Path $manifestRoot "profile-store-$((Get-Date).ToString('yyyyMMdd-HHmmss'))-$([guid]::NewGuid().ToString('N').Substring(0, 8)).json"
+    $manifest = [ordered]@{
+        Version = $script:AppVersion
+        Action = $ActionName
+        CreatedAt = (Get-Date).ToString("o")
+        SourcePath = $Plan.SourcePath
+        TargetPath = $Plan.TargetPath
+        CanMigrate = $Plan.CanMigrate
+        Copied = @($Plan.CopyFiles)
+        Skipped = @($Plan.Skipped)
+        Conflicts = @($Plan.Conflicts)
+        InvalidProfiles = @($Plan.InvalidProfiles)
+    }
+
+    [pscustomobject]$manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    return $manifestPath
+}
+
+function Update-ProfileStoreDisplay {
+    if (-not $script:txtProfileStorePath -or -not $script:txtProfileStoreStatus) { return }
+
+    $health = Get-ProfileStoreHealth -Path $script:ProfilesPath
+    $script:txtProfileStorePath.Text = if ([string]::IsNullOrWhiteSpace($health.Path)) { $script:ProfilesPath } else { $health.Path }
+    $script:txtProfileStoreStatus.Text = $health.Message
+    $script:txtProfileStoreStatus.Foreground = if ($health.IsValid -and $health.InvalidCount -eq 0) {
+        [System.Windows.Media.Brushes]::LightGreen
+    } elseif ($health.IsValid) {
+        [System.Windows.Media.Brushes]::Orange
+    } else {
+        [System.Windows.Media.Brushes]::Salmon
+    }
+}
+
+function Invoke-ProfileStoreChange {
+    param(
+        [string]$TargetPath,
+        [string]$Source = "Manual"
+    )
+
+    $targetHealth = Test-ProfileStorePath -Path $TargetPath -Create
+    if (-not $targetHealth.IsValid) {
+        Write-ProfileImportLog -Lines @("Profile storage change rejected:", $targetHealth.Message)
+        Update-Status "Profile storage change rejected" -Type Error
+        Show-MessageBox -Message $targetHealth.Message -Title "Profile Storage" -Icon Error
+        Update-ProfileStoreDisplay
+        return $false
+    }
+
+    if (Test-SamePath -PathA $script:ProfilesPath -PathB $targetHealth.Path) {
+        Save-AppSetting -Name "ProfileStorePath" -Value $targetHealth.Path
+        Update-ProfileStoreDisplay
+        Update-Status "Profile storage already uses $($targetHealth.Path)" -Type Success
+        return $true
+    }
+
+    $plan = Get-ProfileStoreMigrationPlan -SourcePath $script:ProfilesPath -TargetPath $targetHealth.Path
+    $manifestPath = Write-ProfileStoreBackupManifest -Plan $plan -ActionName $Source
+
+    if ($plan.Conflicts.Count -gt 0) {
+        $lines = @(
+            "Profile storage migration blocked.",
+            "Source: $($plan.SourcePath)",
+            "Target: $($plan.TargetPath)",
+            "Manifest: $manifestPath",
+            "",
+            "Conflicts:"
+        ) + $plan.Conflicts
+        Write-ProfileImportLog -Lines $lines
+        Update-Status "Profile storage migration blocked by same-name conflicts" -Type Error
+        Show-MessageBox -Message "Profile storage migration blocked by same-name conflicts. See diagnostics output for details.`n`nManifest: $manifestPath" -Title "Profile Storage Conflict" -Icon Error
+        return $false
+    }
+
+    try {
+        foreach ($item in $plan.CopyFiles) {
+            Copy-Item -LiteralPath $item.SourcePath -Destination $item.TargetPath -ErrorAction Stop
+        }
+
+        Save-AppSetting -Name "ProfileStorePath" -Value $targetHealth.Path
+        $script:ProfilesPath = $targetHealth.Path
+        Refresh-ProfileList
+        Update-ProfileStoreDisplay
+
+        $lines = @(
+            "Profile storage migration complete.",
+            "Source: $($plan.SourcePath)",
+            "Target: $($plan.TargetPath)",
+            "Copied: $($plan.CopyFiles.Count)",
+            "Skipped: $($plan.Skipped.Count)",
+            "Invalid skipped: $($plan.InvalidProfiles.Count)",
+            "Manifest: $manifestPath"
+        )
+        if ($plan.Skipped.Count -gt 0) {
+            $lines += "Skipped:"
+            $lines += $plan.Skipped
+        }
+        if ($plan.InvalidProfiles.Count -gt 0) {
+            $lines += "Invalid profiles:"
+            $lines += $plan.InvalidProfiles
+        }
+        Write-ProfileImportLog -Lines $lines
+        Write-OperationLog -Action "Profile store migration" -Result "Succeeded" -Detail "Source=$($plan.SourcePath); Target=$($plan.TargetPath); Manifest=$manifestPath"
+        Update-Status "Profile storage changed; copied $($plan.CopyFiles.Count) profile(s)" -Type Success
+        return $true
+    } catch {
+        Write-OperationLog -Action "Profile store migration" -Result "Failed" -Detail $_.Exception.Message
+        Write-ProfileImportLog -Lines @("Profile storage migration failed:", $_.Exception.Message, "Manifest: $manifestPath")
+        Update-Status "Profile storage migration failed" -Type Error
+        Show-MessageBox -Message "Profile storage migration failed:`n$($_.Exception.Message)`n`nOriginal profile store is still active." -Title "Profile Storage" -Icon Error
+        Update-ProfileStoreDisplay
+        return $false
+    }
+}
+
+function Get-OneDriveProfileStore {
+    $candidates = @($env:OneDrive, $env:OneDriveCommercial, $env:OneDriveConsumer) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -Unique
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Container) {
+            return (Join-Path $candidate "NetForge\Profiles")
+        }
+    }
+
+    return ""
+}
+
+function Invoke-ChooseProfileStore {
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = "Choose the folder NetForge should use for profile JSON files."
+    $dialog.ShowNewFolderButton = $true
+    if (Test-Path -LiteralPath $script:ProfilesPath -PathType Container) {
+        $dialog.SelectedPath = $script:ProfilesPath
+    }
+
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        [void](Invoke-ProfileStoreChange -TargetPath $dialog.SelectedPath -Source "ChooseFolder")
+    }
+}
+
+function Invoke-OneDriveProfileStore {
+    $oneDriveStore = Get-OneDriveProfileStore
+    if ([string]::IsNullOrWhiteSpace($oneDriveStore)) {
+        Update-Status "OneDrive folder was not found" -Type Warning
+        Show-MessageBox -Message "No OneDrive folder was found in the current user environment." -Title "Profile Storage" -Icon Warning
+        return
+    }
+
+    [void](Invoke-ProfileStoreChange -TargetPath $oneDriveStore -Source "OneDrive")
+}
+
+function Invoke-RevertProfileStore {
+    [void](Invoke-ProfileStoreChange -TargetPath $script:DefaultProfilesPath -Source "RevertLocal")
+}
+
 function Get-Profiles {
     $profiles = @()
     $script:LastProfileLoadWarnings = @()
@@ -5638,6 +6110,8 @@ function Refresh-ProfileList {
         Write-ProfileImportLog -Lines (@("Profile load skipped $($script:LastProfileLoadWarnings.Count) invalid file(s):") + $script:LastProfileLoadWarnings)
         Update-Status "Skipped $($script:LastProfileLoadWarnings.Count) invalid profile file(s); see diagnostics output" -Type Warning
     }
+
+    Update-ProfileStoreDisplay
 }
 
 function Load-ProfileToEditor {
@@ -6617,6 +7091,13 @@ $btnNewProfile.Add_Click({
     $script:txtProfileDns2.Text = ""
 })
 $btnDeleteProfile.Add_Click({ Delete-Profile })
+$btnChooseProfileStore.Add_Click({ Invoke-ChooseProfileStore })
+$btnUseOneDriveProfileStore.Add_Click({ Invoke-OneDriveProfileStore })
+$btnRevertProfileStore.Add_Click({ Invoke-RevertProfileStore })
+$btnProfileStoreHealth.Add_Click({
+    Update-ProfileStoreDisplay
+    Update-Status "Profile storage health refreshed"
+})
 $btnSaveProfile.Add_Click({ Save-Profile })
 $btnProfileDiff.Add_Click({ Show-ProfileDiff })
 $btnApplyProfile.Add_Click({ Apply-Profile })
@@ -6690,6 +7171,7 @@ Refresh-DnsPresets
 Show-DohConfiguration
 Show-DotConfiguration
 Refresh-ProfileList
+Update-ProfileStoreDisplay
 Initialize-AccessibilityMetadata
 Show-RestoreSnapshotButtonState
 Update-ConnectionStatus

@@ -201,6 +201,111 @@ Describe 'Network signature keys' {
     }
 }
 
+Describe 'Profile storage migration' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIP',
+            'Test-ValidIPv4Address',
+            'Test-ValidIPv4PrefixLength',
+            'ConvertTo-CleanMacAddress',
+            'Test-ValidMacAddress',
+            'Get-ProfileProperty',
+            'ConvertTo-ProfileBoolean',
+            'Get-SafeProfileFileName',
+            'Get-ProfileValidationResult',
+            'Resolve-ProfileStorePath',
+            'Test-SamePath',
+            'Get-FileSha256',
+            'Get-AppSettings',
+            'Save-AppSetting',
+            'Test-ProfileStorePath',
+            'Get-ProfileStoreMigrationPlan',
+            'Write-ProfileStoreBackupManifest'
+        )
+        $script:ProfileSchemaVersion = 1
+        $script:AppVersion = '1.21.0'
+    }
+
+    It 'normalizes equivalent profile store paths' {
+        $path = Join-Path $TestDrive 'Profiles'
+        New-Item -Path $path -ItemType Directory -Force | Out-Null
+
+        Test-SamePath -PathA $path -PathB "$path\" | Should -BeTrue
+    }
+
+    It 'plans profile copies without overwriting the target store' {
+        $source = Join-Path $TestDrive 'source'
+        $target = Join-Path $TestDrive 'target'
+        New-Item -Path $source, $target -ItemType Directory -Force | Out-Null
+
+        $profile = [pscustomobject]@{
+            Name = 'Clinic LAN'
+            UseDHCP = $true
+            UseDHCPForDNS = $true
+        }
+        $validation = Get-ProfileValidationResult -ProfileData $profile
+        $validation.Profile | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $source $validation.SafeFileName) -Encoding UTF8
+
+        $plan = Get-ProfileStoreMigrationPlan -SourcePath $source -TargetPath $target
+
+        $plan.CanMigrate | Should -BeTrue
+        $plan.CopyFiles.Count | Should -Be 1
+        $plan.Conflicts.Count | Should -Be 0
+    }
+
+    It 'blocks same-name profile conflicts' {
+        $source = Join-Path $TestDrive 'conflict-source'
+        $target = Join-Path $TestDrive 'conflict-target'
+        New-Item -Path $source, $target -ItemType Directory -Force | Out-Null
+
+        $sourceProfile = [pscustomobject]@{ Name = 'Clinic LAN'; Description = 'source'; UseDHCP = $true; UseDHCPForDNS = $true }
+        $targetProfile = [pscustomobject]@{ Name = 'Clinic LAN'; Description = 'target'; UseDHCP = $true; UseDHCPForDNS = $true }
+        $sourceValidation = Get-ProfileValidationResult -ProfileData $sourceProfile
+        $targetValidation = Get-ProfileValidationResult -ProfileData $targetProfile
+        $sourceValidation.Profile | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $source $sourceValidation.SafeFileName) -Encoding UTF8
+        $targetValidation.Profile | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $target $targetValidation.SafeFileName) -Encoding UTF8
+
+        $plan = Get-ProfileStoreMigrationPlan -SourcePath $source -TargetPath $target
+
+        $plan.CanMigrate | Should -BeFalse
+        $plan.Conflicts.Count | Should -Be 1
+        $plan.Conflicts[0] | Should -Match 'Clinic LAN'
+    }
+
+    It 'writes a backup manifest for profile store changes' {
+        $script:ConfigPath = Join-Path $TestDrive 'config'
+        New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null
+        $plan = [pscustomobject]@{
+            SourcePath = Join-Path $TestDrive 'source'
+            TargetPath = Join-Path $TestDrive 'target'
+            CanMigrate = $true
+            CopyFiles = @([pscustomobject]@{ Name = 'Clinic LAN'; SafeFileName = 'Clinic_LAN.json'; Sha256 = 'abc123' })
+            Skipped = @()
+            Conflicts = @()
+            InvalidProfiles = @()
+        }
+
+        $manifestPath = Write-ProfileStoreBackupManifest -Plan $plan -ActionName 'Test'
+        $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+
+        Test-Path -LiteralPath $manifestPath | Should -BeTrue
+        $manifest.Action | Should -Be 'Test'
+        $manifest.Copied[0].SafeFileName | Should -Be 'Clinic_LAN.json'
+    }
+
+    It 'persists profile store settings atomically' {
+        $script:ConfigPath = Join-Path $TestDrive 'settings'
+        $script:SettingsFile = Join-Path $script:ConfigPath 'settings.json'
+        $profileStore = Join-Path $TestDrive 'synced-profiles'
+
+        Save-AppSetting -Name 'ProfileStorePath' -Value $profileStore
+        $settings = Get-Content -Raw -LiteralPath $script:SettingsFile | ConvertFrom-Json
+
+        $settings.ProfileStorePath | Should -Be $profileStore
+        $settings.UpdatedAt | Should -Not -BeNullOrEmpty
+    }
+}
+
 Describe 'Accessibility metadata' {
     It 'lists automation names for primary workflows' {
         $source = Get-Content -Raw $script:NetForgePath

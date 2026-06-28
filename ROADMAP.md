@@ -80,14 +80,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 
 ## Research-Driven Additions
 
-### P1
-- [ ] P1 - Harden profile storage sync and migration
-  Why: Folder-based sync is useful, but changing the storage path without migration/conflict handling risks missing or overwritten profiles.
-  Evidence: local dirty-tree `Save-AppSetting`, `Invoke-ProfileStoreChange`, `Get-OneDriveProfileStore`; NetSetMan/argon-network-switcher profile portability.
-  Touches: profile storage controls, `Save-AppSetting`, `Invoke-ProfileStoreChange`, profile import/export.
-  Acceptance: Changing storage can copy existing profiles, detect same-name conflicts, keep a backup manifest, report sync path health, and revert to local storage without data loss.
-  Complexity: M
-
 ### P2
 - [ ] P2 - Centralize version and release metadata
   Why: Script, README badge, changelog, working notes, and dist zip are still updated manually and can drift across releases.

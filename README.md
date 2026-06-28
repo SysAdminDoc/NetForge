@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.20.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.21.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -78,6 +78,7 @@
 - Save complete network configurations as profiles
 - Store IP settings, DNS configuration, and metadata
 - Schema-versioned profiles with validation, duplicate protection, atomic writes, and import summaries
+- Configurable profile storage with custom folder/OneDrive migration, conflict detection, backup manifests, health checks, and local-storage revert
 - Event-driven auto-apply profiles when the current SSID or gateway MAC matches saved rules, with timer fallback
 - Preview profile differences against the selected adapter before applying
 - Quick-apply profiles to any adapter
@@ -208,7 +209,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 NetForge stores its configuration in:
 ```
-%APPDATA%\NetForge\
+%APPDATA%\NetForge\    # Default location; profiles can be moved to a selected sync folder
 |-- Profiles\          # Saved network profiles (.json)
 |-- Logs\              # Operation and crash logs
 `-- settings.json      # Application settings
