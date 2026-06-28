@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.11.0
+    Version: 1.12.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.11.0"
+$script:AppVersion = "1.12.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -60,6 +60,8 @@ $script:EncryptedDnsHealthRunning = $false
 $script:EncryptedDnsHealthJob = $null
 $script:EncryptedDnsHealthTimer = $null
 $script:DoqProxyProcess = $null
+$script:LastAutoAppliedProfile = ""
+$script:AutoProfileTimer = $null
 
 # Create directories
 if (-not (Test-Path $script:ConfigPath)) { New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null }
@@ -716,7 +718,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.11.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.12.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1412,6 +1414,29 @@ $script:DnsPresets = [ordered]@{
 
                                         <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                             <StackPanel>
+                                                <TextBlock Text="Auto-Apply Rules" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                                                <CheckBox x:Name="chkProfileAutoApply" Content="Auto-apply when current network matches" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,10"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                        <TextBlock Text="Match SSID" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBox x:Name="txtProfileMatchSsid" Style="{StaticResource ModernTextBox}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                                        <TextBlock Text="Gateway MAC" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBox x:Name="txtProfileGatewayMac" Style="{StaticResource ModernTextBox}"/>
+                                                    </StackPanel>
+                                                    <Button x:Name="btnCaptureProfileMatch" Grid.Column="2" Content="Capture Current" Style="{StaticResource ModernButton}" Padding="14,8" VerticalAlignment="Bottom"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                            <StackPanel>
                                                 <TextBlock Text="IP Configuration" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
                                                 <CheckBox x:Name="chkProfileDHCP" Content="Use DHCP" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,8"/>
                                                 <Grid Margin="0,8,0,0">
@@ -1717,7 +1742,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.11.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.12.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -4299,6 +4324,9 @@ function Load-ProfileToEditor {
     $profile = $selected.Tag
     $script:txtProfileName.Text = $profile.Name
     $script:txtProfileDesc.Text = $profile.Description
+    $script:chkProfileAutoApply.IsChecked = [bool]$profile.AutoApply
+    $script:txtProfileMatchSsid.Text = if ($profile.MatchSSID) { $profile.MatchSSID } else { "" }
+    $script:txtProfileGatewayMac.Text = if ($profile.MatchGatewayMac) { $profile.MatchGatewayMac } else { "" }
     $script:chkProfileDHCP.IsChecked = $profile.UseDHCP
     $script:txtProfileIP.Text = $profile.IPAddress
     $script:txtProfileSubnet.Text = $profile.SubnetMask
@@ -4319,6 +4347,9 @@ function Save-Profile {
     $profile = @{
         Name = $name
         Description = $script:txtProfileDesc.Text
+        AutoApply = [bool]$script:chkProfileAutoApply.IsChecked
+        MatchSSID = $script:txtProfileMatchSsid.Text.Trim()
+        MatchGatewayMac = (ConvertTo-CleanMacAddress -MacAddress $script:txtProfileGatewayMac.Text)
         UseDHCP = $script:chkProfileDHCP.IsChecked
         IPAddress = $script:txtProfileIP.Text
         SubnetMask = $script:txtProfileSubnet.Text
@@ -4357,6 +4388,151 @@ function Delete-Profile {
         Update-Status "Profile '$($profile.Name)' deleted" -Type Success
         Refresh-ProfileList
     }
+}
+
+function Get-CurrentNetworkSignature {
+    $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
+    if ($null -eq $activeAdapter) { return $null }
+
+    $gateway = Get-NetRoute -InterfaceIndex $activeAdapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $gatewayIp = if ($gateway) { $gateway.NextHop } else { "" }
+    $gatewayMac = ""
+
+    if (Test-ValidIP -IP $gatewayIp) {
+        $neighbor = Get-NetNeighbor -InterfaceIndex $activeAdapter.ifIndex -IPAddress $gatewayIp -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $neighbor -or [string]::IsNullOrWhiteSpace($neighbor.LinkLayerAddress)) {
+            [void](Test-Connection -ComputerName $gatewayIp -Count 1 -Quiet -ErrorAction SilentlyContinue)
+            $neighbor = Get-NetNeighbor -InterfaceIndex $activeAdapter.ifIndex -IPAddress $gatewayIp -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
+        if ($neighbor -and $neighbor.LinkLayerAddress) {
+            $gatewayMac = ConvertTo-CleanMacAddress -MacAddress $neighbor.LinkLayerAddress
+        }
+    }
+
+    $ssid = ""
+    if ((Get-AdapterConnectionKind -Adapter $activeAdapter) -eq "WiFi") {
+        $wlanOutput = netsh wlan show interfaces 2>&1 | Out-String
+        foreach ($line in ($wlanOutput -split "`n")) {
+            $trimmed = $line.Trim()
+            if ($trimmed -match '^\s*SSID\s*:\s*(.+)$' -and $trimmed -notmatch 'BSSID') {
+                $ssid = $Matches[1].Trim()
+                break
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Adapter = $activeAdapter
+        SSID = $ssid
+        Gateway = $gatewayIp
+        GatewayMac = $gatewayMac
+    }
+}
+
+function Invoke-CaptureProfileMatch {
+    $signature = Get-CurrentNetworkSignature
+    if ($null -eq $signature) {
+        Show-MessageBox -Message "No active network signature is available to capture." -Title "No Active Network" -Icon Warning
+        return
+    }
+
+    $script:chkProfileAutoApply.IsChecked = $true
+    $script:txtProfileMatchSsid.Text = $signature.SSID
+    $script:txtProfileGatewayMac.Text = $signature.GatewayMac
+    Update-Status "Captured current network match fields" -Type Success
+}
+
+function Test-ProfileAutoApplyMatch {
+    param(
+        [pscustomobject]$ProfileData,
+        [pscustomobject]$Signature
+    )
+
+    if (-not [bool]$ProfileData.AutoApply) { return $false }
+    if ($null -eq $Signature) { return $false }
+
+    $matchSsid = if ($ProfileData.MatchSSID) { $ProfileData.MatchSSID.Trim() } else { "" }
+    $matchGatewayMac = if ($ProfileData.MatchGatewayMac) { ConvertTo-CleanMacAddress -MacAddress $ProfileData.MatchGatewayMac } else { "" }
+
+    $ssidMatches = (-not [string]::IsNullOrWhiteSpace($matchSsid)) -and ($Signature.SSID -ieq $matchSsid)
+    $gatewayMatches = (-not [string]::IsNullOrWhiteSpace($matchGatewayMac)) -and ($Signature.GatewayMac -eq $matchGatewayMac)
+
+    return ($ssidMatches -or $gatewayMatches)
+}
+
+function Invoke-ApplyProfileObject {
+    param(
+        [pscustomobject]$ProfileData,
+        $Adapter,
+        [string]$Source = "Manual"
+    )
+
+    Update-Status "Applying profile '$($ProfileData.Name)'..."
+
+    try {
+        if ($ProfileData.UseDHCP) {
+            Set-NetIPInterface -InterfaceIndex $Adapter.ifIndex -Dhcp Enabled -ErrorAction Stop
+            Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Where-Object { $_.PrefixOrigin -eq "Manual" } |
+                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+            Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+        } else {
+            Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+            Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+
+            $prefix = if ($ProfileData.PrefixLength) { [int]$ProfileData.PrefixLength } else { 24 }
+            New-NetIPAddress -InterfaceIndex $Adapter.ifIndex -IPAddress $ProfileData.IPAddress -PrefixLength $prefix -ErrorAction Stop | Out-Null
+
+            if (Test-ValidIP $ProfileData.Gateway) {
+                New-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $ProfileData.Gateway -ErrorAction Stop | Out-Null
+            }
+        }
+
+        if ($ProfileData.UseDHCPForDNS) {
+            Set-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
+        } else {
+            $dnsServers = @()
+            if (Test-ValidIP $ProfileData.PrimaryDNS) { $dnsServers += $ProfileData.PrimaryDNS }
+            if (Test-ValidIP $ProfileData.SecondaryDNS) { $dnsServers += $ProfileData.SecondaryDNS }
+            if ($dnsServers.Count -gt 0) {
+                Set-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ServerAddresses $dnsServers -ErrorAction Stop
+            }
+        }
+
+        $script:LastAutoAppliedProfile = if ($Source -eq "Auto") { $ProfileData.Name } else { $script:LastAutoAppliedProfile }
+        Update-Status "Profile '$($ProfileData.Name)' applied successfully" -Type Success
+        Start-Sleep -Milliseconds 500
+        Update-AdapterDisplay
+        return $true
+    } catch {
+        Update-Status "Error: $($_.Exception.Message)" -Type Error
+        if ($Source -ne "Auto") {
+            Show-MessageBox -Message "Failed to apply profile:`n$($_.Exception.Message)" -Title "Error" -Icon Error
+        }
+        return $false
+    }
+}
+
+function Invoke-AutoApplyProfile {
+    $signature = Get-CurrentNetworkSignature
+    if ($null -eq $signature) {
+        $script:LastAutoAppliedProfile = ""
+        return
+    }
+
+    $profiles = Get-Profiles
+    foreach ($candidate in $profiles) {
+        if (-not (Test-ProfileAutoApplyMatch -ProfileData $candidate -Signature $signature)) { continue }
+        if ($script:LastAutoAppliedProfile -eq $candidate.Name) { return }
+
+        [void](Invoke-ApplyProfileObject -ProfileData $candidate -Adapter $signature.Adapter -Source "Auto")
+        return
+    }
+
+    $script:LastAutoAppliedProfile = ""
 }
 
 # ============================================================================
@@ -4501,50 +4677,7 @@ function Apply-Profile {
     $result = Show-MessageBox -Message "Apply profile '$($profile.Name)' to adapter '$($adapter.Name)'?" -Title "Confirm" -Buttons YesNo -Icon Question
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
 
-    Update-Status "Applying profile '$($profile.Name)'..."
-
-    try {
-        # Apply IP configuration
-        if ($profile.UseDHCP) {
-            Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -Dhcp Enabled -ErrorAction Stop
-            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Where-Object { $_.PrefixOrigin -eq "Manual" } |
-                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-        } else {
-            Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-            Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-                Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-
-            $prefix = if ($profile.PrefixLength) { [int]$profile.PrefixLength } else { 24 }
-            New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $profile.IPAddress -PrefixLength $prefix -ErrorAction Stop | Out-Null
-
-            if (Test-ValidIP $profile.Gateway) {
-                New-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $profile.Gateway -ErrorAction Stop | Out-Null
-            }
-        }
-
-        # Apply DNS configuration
-        if ($profile.UseDHCPForDNS) {
-            Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses -ErrorAction Stop
-        } else {
-            $dnsServers = @()
-            if (Test-ValidIP $profile.PrimaryDNS) { $dnsServers += $profile.PrimaryDNS }
-            if (Test-ValidIP $profile.SecondaryDNS) { $dnsServers += $profile.SecondaryDNS }
-            if ($dnsServers.Count -gt 0) {
-                Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $dnsServers -ErrorAction Stop
-            }
-        }
-
-        Update-Status "Profile '$($profile.Name)' applied successfully" -Type Success
-        Start-Sleep -Milliseconds 500
-        Update-AdapterDisplay
-    } catch {
-        Update-Status "Error: $($_.Exception.Message)" -Type Error
-        Show-MessageBox -Message "Failed to apply profile:`n$($_.Exception.Message)" -Title "Error" -Icon Error
-    }
+    [void](Invoke-ApplyProfileObject -ProfileData $profile -Adapter $adapter -Source "Manual")
 }
 
 # ============================================================================
@@ -4918,6 +5051,9 @@ $btnWifiDisconnect.Add_Click({ Invoke-WifiDisconnect })
 $btnNewProfile.Add_Click({
     $script:txtProfileName.Text = "New Profile"
     $script:txtProfileDesc.Text = ""
+    $script:chkProfileAutoApply.IsChecked = $false
+    $script:txtProfileMatchSsid.Text = ""
+    $script:txtProfileGatewayMac.Text = ""
     $script:chkProfileDHCP.IsChecked = $true
     $script:txtProfileIP.Text = ""
     $script:txtProfileSubnet.Text = "255.255.255.0"
@@ -4930,6 +5066,7 @@ $btnNewProfile.Add_Click({
 $btnDeleteProfile.Add_Click({ Delete-Profile })
 $btnSaveProfile.Add_Click({ Save-Profile })
 $btnApplyProfile.Add_Click({ Apply-Profile })
+$btnCaptureProfileMatch.Add_Click({ Invoke-CaptureProfileMatch })
 $btnFlushDns.Add_Click({ Invoke-FlushDns })
 $btnReleaseIP.Add_Click({ Invoke-ReleaseIP })
 $btnRenewIP.Add_Click({ Invoke-RenewIP })
@@ -4956,6 +5093,13 @@ $script:ConnStatusTimer.Add_Tick({
 })
 $script:ConnStatusTimer.Start()
 
+$script:AutoProfileTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:AutoProfileTimer.Interval = [TimeSpan]::FromSeconds(60)
+$script:AutoProfileTimer.Add_Tick({
+    Invoke-AutoApplyProfile
+})
+$script:AutoProfileTimer.Start()
+
 # ============================================================================
 # CLEANUP ON WINDOW CLOSE
 # ============================================================================
@@ -4973,6 +5117,9 @@ $window.Add_Closing({
     }
     if ($script:DoqProxyProcess -and -not $script:DoqProxyProcess.HasExited) {
         Stop-Process -Id $script:DoqProxyProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+    if ($script:AutoProfileTimer) {
+        $script:AutoProfileTimer.Stop()
     }
     $script:ConnStatusTimer.Stop()
 })

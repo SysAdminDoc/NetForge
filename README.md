@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.11.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.12.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -76,6 +76,7 @@
 ### Profile System
 - Save complete network configurations as profiles
 - Store IP settings, DNS configuration, and metadata
+- Auto-apply profiles when the current SSID or gateway MAC matches saved rules
 - Quick-apply profiles to any adapter
 - Import/export profiles as JSON
 - Perfect for switching between work, home, and other networks
@@ -173,6 +174,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 4. **Save as Profile** (optional):
    - Go to Profiles tab
    - Click "Create New Profile"
+   - Capture current SSID/gateway MAC when the profile should auto-apply
    - Fill in details and save
 5. **Manage WiFi**:
    - Go to the WiFi tab
