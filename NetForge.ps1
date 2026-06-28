@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.12.0
+    Version: 1.13.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.12.0"
+$script:AppVersion = "1.13.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
@@ -718,7 +718,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.12.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.13.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1492,8 +1492,16 @@ $script:DnsPresets = [ordered]@{
 
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                             <Button x:Name="btnSaveProfile" Content="Save Profile" Style="{StaticResource PrimaryButton}" Margin="0,0,8,0" Padding="20,10"/>
+                                            <Button x:Name="btnProfileDiff" Content="Preview Diff" Style="{StaticResource ModernButton}" Margin="0,0,8,0" Padding="20,10"/>
                                             <Button x:Name="btnApplyProfile" Content="Apply to Adapter" Style="{StaticResource ModernButton}" Padding="20,10"/>
                                         </StackPanel>
+
+                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,16,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Profile Diff" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,10"/>
+                                                <TextBlock x:Name="txtProfileDiffOutput" Text="Click Preview Diff to compare this profile against the selected adapter." FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
                                 </ScrollViewer>
                             </Border>
@@ -1742,7 +1750,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.12.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.13.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -4535,6 +4543,59 @@ function Invoke-AutoApplyProfile {
     $script:LastAutoAppliedProfile = ""
 }
 
+function Show-ProfileDiff {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    if ([string]::IsNullOrWhiteSpace($script:txtProfileName.Text.Trim())) {
+        Show-MessageBox -Message "Enter or select a profile before previewing differences." -Title "No Profile" -Icon Warning
+        return
+    }
+
+    $currentIp = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+    $currentGateway = Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $currentDns = Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+    $currentInterface = Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    $currentIpMode = if ($currentInterface -and $currentInterface.Dhcp -eq "Enabled") { "DHCP" } else { "Static" }
+    $targetIpMode = if ($script:chkProfileDHCP.IsChecked) { "DHCP" } else { "Static" }
+    $currentDnsMode = if (-not $currentDns -or -not $currentDns.ServerAddresses -or $currentDns.ServerAddresses.Count -eq 0) { "DHCP" } else { "Static" }
+    $targetDnsMode = if ($script:chkProfileDnsDHCP.IsChecked) { "DHCP" } else { "Static" }
+
+    $lines = @("Profile: $($script:txtProfileName.Text.Trim())", "Adapter: $($adapter.Name)", "")
+
+    function Add-DiffLine {
+        param(
+            [string]$Label,
+            [string]$CurrentValue,
+            [string]$TargetValue
+        )
+
+        $currentText = if ([string]::IsNullOrWhiteSpace($CurrentValue)) { "--" } else { $CurrentValue }
+        $targetText = if ([string]::IsNullOrWhiteSpace($TargetValue)) { "--" } else { $TargetValue }
+        $marker = if ($currentText -eq $targetText) { "same" } else { "change" }
+        $script:profileDiffLines += "[$marker] $Label`: $currentText => $targetText"
+    }
+
+    $script:profileDiffLines = $lines
+    Add-DiffLine -Label "IP Mode" -CurrentValue $currentIpMode -TargetValue $targetIpMode
+    Add-DiffLine -Label "IP Address" -CurrentValue $(if ($currentIp) { $currentIp.IPAddress } else { "" }) -TargetValue $(if ($script:chkProfileDHCP.IsChecked) { "Automatic" } else { $script:txtProfileIP.Text.Trim() })
+    Add-DiffLine -Label "Prefix" -CurrentValue $(if ($currentIp) { [string]$currentIp.PrefixLength } else { "" }) -TargetValue $(if ($script:chkProfileDHCP.IsChecked) { "Automatic" } else { $script:txtProfilePrefix.Text.Trim() })
+    Add-DiffLine -Label "Gateway" -CurrentValue $(if ($currentGateway) { $currentGateway.NextHop } else { "" }) -TargetValue $(if ($script:chkProfileDHCP.IsChecked) { "Automatic" } else { $script:txtProfileGateway.Text.Trim() })
+    Add-DiffLine -Label "DNS Mode" -CurrentValue $currentDnsMode -TargetValue $targetDnsMode
+    Add-DiffLine -Label "DNS Servers" -CurrentValue $(if ($currentDns -and $currentDns.ServerAddresses) { $currentDns.ServerAddresses -join ", " } else { "" }) -TargetValue $(if ($script:chkProfileDnsDHCP.IsChecked) { "Automatic" } else { (@($script:txtProfileDns1.Text.Trim(), $script:txtProfileDns2.Text.Trim()) | Where-Object { $_ }) -join ", " })
+    Add-DiffLine -Label "Auto-Apply" -CurrentValue "--" -TargetValue $(if ($script:chkProfileAutoApply.IsChecked) { "Enabled" } else { "Disabled" })
+    Add-DiffLine -Label "Match SSID" -CurrentValue "--" -TargetValue $script:txtProfileMatchSsid.Text.Trim()
+    Add-DiffLine -Label "Gateway MAC" -CurrentValue "--" -TargetValue (ConvertTo-CleanMacAddress -MacAddress $script:txtProfileGatewayMac.Text)
+
+    $script:txtProfileDiffOutput.Text = $script:profileDiffLines -join "`n"
+    $script:profileDiffLines = $null
+    Update-Status "Profile diff generated" -Type Success
+}
+
 # ============================================================================
 # APPLY FUNCTIONS
 # ============================================================================
@@ -5065,6 +5126,7 @@ $btnNewProfile.Add_Click({
 })
 $btnDeleteProfile.Add_Click({ Delete-Profile })
 $btnSaveProfile.Add_Click({ Save-Profile })
+$btnProfileDiff.Add_Click({ Show-ProfileDiff })
 $btnApplyProfile.Add_Click({ Apply-Profile })
 $btnCaptureProfileMatch.Add_Click({ Invoke-CaptureProfileMatch })
 $btnFlushDns.Add_Click({ Invoke-FlushDns })
