@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.19.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.20.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -69,7 +69,7 @@
 - Windows DoH and DoT encryption registration through `netsh dns add encryption`
 - Preset DoH templates and DoT hosts for Google, Cloudflare, Quad9, and AdGuard
 - Custom DoH template and DoT host entry for account-specific providers
-- Encrypted DNS health test with DoH HTTPS and DoT TCP/TLS DNS-message probes
+- DNS health output with configured adapter DNS, config leak guard, DoH/DoT probes, UDP fallback state, DoQ proxy listener state, and resolver latency preview
 - DoQ local proxy controls for compatible `dnsproxy.exe` binaries
 - NextDNS config ID helper that fills account-specific DoH, DoT, and DoQ endpoints
 - Search and filter DNS presets

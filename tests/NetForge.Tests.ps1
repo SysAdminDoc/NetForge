@@ -115,6 +115,11 @@ Describe 'Encrypted DNS endpoint helpers' {
             'Test-DohTemplate',
             'ConvertTo-DotHostValue',
             'Test-DotHost',
+            'New-DnsQueryMessage',
+            'Invoke-DnsUdpProbe',
+            'Get-DnsConfigLeakResult',
+            'Format-DnsLatencyRows',
+            'Format-DnsHealthResultLines',
             'Test-NextDnsConfigId'
         )
     }
@@ -134,6 +139,48 @@ Describe 'Encrypted DNS endpoint helpers' {
         Test-NextDnsConfigId -ConfigId 'abc123' | Should -BeTrue
         Test-NextDnsConfigId -ConfigId '-abc123' | Should -BeFalse
         Test-NextDnsConfigId -ConfigId 'abc' | Should -BeFalse
+    }
+
+    It 'builds a DNS wire query for health probes' {
+        $query = New-DnsQueryMessage -QueryName 'example.com'
+
+        $query.Length | Should -BeGreaterThan 20
+        $query[2] | Should -Be 1
+        $query[3] | Should -Be 0
+    }
+
+    It 'rejects invalid UDP probe targets without network access' {
+        $probe = Invoke-DnsUdpProbe -Server 'bad host' -Port 53
+
+        $probe.Success | Should -BeFalse
+        $probe.Message | Should -Match 'Not an IP address'
+    }
+
+    It 'detects adapter DNS outside the selected resolver target' {
+        $result = Get-DnsConfigLeakResult -AdapterServers @('8.8.8.8', '1.1.1.1') -TargetServers @('1.1.1.1')
+
+        $result.Success | Should -BeFalse
+        $result.Message | Should -Match '8.8.8.8'
+    }
+
+    It 'formats health sections with latency state' {
+        $lines = Format-DnsHealthResultLines -Results @(
+            [pscustomobject]@{ Sort = 1; Section = 'Resolver latency'; Name = '1.1.1.1 UDP/53'; Success = $true; Message = 'UDP response 64 bytes'; LatencyMs = 12 },
+            [pscustomobject]@{ Sort = 2; Section = 'Local proxy listener'; Name = '127.0.0.1:53'; Success = $false; Message = 'timed out'; LatencyMs = $null }
+        )
+
+        ($lines -join "`n") | Should -Match 'Resolver latency'
+        ($lines -join "`n") | Should -Match 'OK 1.1.1.1 UDP/53'
+        ($lines -join "`n") | Should -Match 'FAIL 127.0.0.1:53'
+    }
+
+    It 'formats resolver latency rows for apply previews' {
+        $lines = Format-DnsLatencyRows -Rows @(
+            [pscustomobject]@{ Resolver = '1.1.1.1'; Protocol = 'UDP/53'; Success = $true; LatencyMs = 10; Message = 'UDP response 64 bytes' }
+        )
+
+        ($lines -join "`n") | Should -Match '1.1.1.1'
+        ($lines -join "`n") | Should -Match '10 ms'
     }
 }
 

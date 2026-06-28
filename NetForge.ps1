@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.19.0
+    Version: 1.20.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.19.0"
+$script:AppVersion = "1.20.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:LogsPath = Join-Path $script:ConfigPath "Logs"
@@ -802,7 +802,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.19.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.20.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1263,7 +1263,7 @@ $script:DnsPresets = [ordered]@{
                                             <Button x:Name="btnRegisterDot" Content="Register DoT" Style="{StaticResource ModernButton}" Margin="0,14,0,8" Padding="14,8"/>
                                             <TextBlock x:Name="txtDotStatus" Text="Uses netsh dns add encryption dothost." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                                             <Button x:Name="btnTestEncryptedDns" Content="Test Health" Style="{StaticResource ModernButton}" Margin="0,14,0,8" Padding="14,8"/>
-                                            <TextBlock x:Name="txtEncryptedDnsHealthStatus" Text="Validates DoH/DoT handshake." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock x:Name="txtEncryptedDnsHealthStatus" Text="Shows adapter DNS, encrypted probes, fallback, proxy, and latency." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -1836,7 +1836,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.19.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.20.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -4277,6 +4277,292 @@ function Test-DotHost {
     return (-not [string]::IsNullOrWhiteSpace((ConvertTo-DotHostValue -HostName $HostName)))
 }
 
+function New-DnsQueryMessage {
+    param([string]$QueryName = "example.com")
+
+    $bytes = New-Object 'System.Collections.Generic.List[byte]'
+
+    function Add-UInt16BytePair {
+        param([int]$Value)
+        $bytes.Add([byte](($Value -shr 8) -band 0xff))
+        $bytes.Add([byte]($Value -band 0xff))
+    }
+
+    Add-UInt16BytePair 0x4e46
+    Add-UInt16BytePair 0x0100
+    Add-UInt16BytePair 1
+    Add-UInt16BytePair 0
+    Add-UInt16BytePair 0
+    Add-UInt16BytePair 0
+
+    foreach ($label in $QueryName.Trim(".").Split(".")) {
+        if ([string]::IsNullOrWhiteSpace($label) -or $label.Length -gt 63) {
+            throw "Invalid DNS query label '$label'."
+        }
+
+        $labelBytes = [System.Text.Encoding]::ASCII.GetBytes($label)
+        $bytes.Add([byte]$labelBytes.Length)
+        foreach ($labelByte in $labelBytes) {
+            $bytes.Add($labelByte)
+        }
+    }
+
+    $bytes.Add([byte]0)
+    Add-UInt16BytePair 1
+    Add-UInt16BytePair 1
+
+    return $bytes.ToArray()
+}
+
+function Invoke-DnsUdpProbe {
+    param(
+        [string]$Server,
+        [int]$Port = 53,
+        [int]$TimeoutMs = 900,
+        [string]$QueryName = "example.com"
+    )
+
+    if (-not (Test-ValidIP -IP $Server)) {
+        return [pscustomobject]@{
+            Server = $Server
+            Port = $Port
+            Success = $false
+            LatencyMs = $null
+            Message = "Not an IP address"
+        }
+    }
+    if ($Port -lt 1 -or $Port -gt 65535) {
+        return [pscustomobject]@{
+            Server = $Server
+            Port = $Port
+            Success = $false
+            LatencyMs = $null
+            Message = "Invalid port"
+        }
+    }
+
+    $client = $null
+    try {
+        $ipAddress = [System.Net.IPAddress]::Parse($Server)
+        $client = New-Object System.Net.Sockets.UdpClient($ipAddress.AddressFamily)
+        $client.Client.SendTimeout = $TimeoutMs
+        $client.Client.ReceiveTimeout = $TimeoutMs
+
+        $endpoint = New-Object System.Net.IPEndPoint($ipAddress, $Port)
+        $query = New-DnsQueryMessage -QueryName $QueryName
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+        $client.Connect($endpoint)
+        [void]$client.Send($query, $query.Length)
+
+        $anyAddress = if ($ipAddress.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+            [System.Net.IPAddress]::IPv6Any
+        } else {
+            [System.Net.IPAddress]::Any
+        }
+        $remoteEndpoint = New-Object System.Net.IPEndPoint($anyAddress, 0)
+        $response = $client.Receive([ref]$remoteEndpoint)
+        $stopwatch.Stop()
+
+        if ($response.Length -lt 12) {
+            throw "short DNS response ($($response.Length) bytes)"
+        }
+
+        return [pscustomobject]@{
+            Server = $Server
+            Port = $Port
+            Success = $true
+            LatencyMs = [int][Math]::Max(1, [Math]::Round($stopwatch.Elapsed.TotalMilliseconds))
+            Message = "UDP response $($response.Length) bytes"
+        }
+    } catch {
+        return [pscustomobject]@{
+            Server = $Server
+            Port = $Port
+            Success = $false
+            LatencyMs = $null
+            Message = $_.Exception.Message
+        }
+    } finally {
+        if ($client) { $client.Close() }
+    }
+}
+
+function Get-AdapterDnsServerSummary {
+    param($Adapter)
+
+    if ($null -eq $Adapter) { return @() }
+
+    try {
+        $rows = @(Get-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ErrorAction SilentlyContinue)
+        return @(
+            $rows |
+                ForEach-Object { $_.ServerAddresses } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+                Select-Object -Unique
+        )
+    } catch {
+        return @()
+    }
+}
+
+function Get-DnsResolverLatencyRows {
+    param(
+        [string[]]$Servers,
+        [int]$TimeoutMs = 900
+    )
+
+    $rows = @()
+    foreach ($server in @($Servers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
+        $probe = Invoke-DnsUdpProbe -Server $server -Port 53 -TimeoutMs $TimeoutMs
+        $rows += [pscustomobject]@{
+            Resolver = $server
+            Protocol = "UDP/53"
+            Success = [bool]$probe.Success
+            LatencyMs = $probe.LatencyMs
+            Message = $probe.Message
+        }
+    }
+    return $rows
+}
+
+function Format-DnsLatencyRows {
+    param([object[]]$Rows)
+
+    if ($null -eq $Rows -or $Rows.Count -eq 0) {
+        return @("Resolver latency (UDP/53): no static resolver target.")
+    }
+
+    $lines = @("Resolver latency (UDP/53):")
+    foreach ($row in $Rows) {
+        $state = if ($row.Success) { "OK" } else { "FAIL" }
+        $latency = if ($null -ne $row.LatencyMs) { "$($row.LatencyMs) ms" } else { "--" }
+        $lines += "  $($row.Resolver) | $state | $latency | $($row.Message)"
+    }
+    return $lines
+}
+
+function Get-DnsConfigLeakResult {
+    param(
+        [string[]]$AdapterServers,
+        [string[]]$TargetServers,
+        [string]$LocalProxyAddress = ""
+    )
+
+    $configured = @($AdapterServers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+    $targetList = @($TargetServers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if (-not [string]::IsNullOrWhiteSpace($LocalProxyAddress)) {
+        $targetList += $LocalProxyAddress
+    }
+    $targets = @($targetList | Select-Object -Unique)
+
+    if ($configured.Count -eq 0) {
+        return [pscustomobject]@{
+            Success = $null
+            Message = "Adapter DNS is automatic or unavailable."
+        }
+    }
+    if ($targets.Count -eq 0) {
+        return [pscustomobject]@{
+            Success = $false
+            Message = "No selected resolver target to compare with current adapter DNS: $($configured -join ', ')"
+        }
+    }
+
+    $unexpected = @($configured | Where-Object { $targets -notcontains $_ })
+    if ($unexpected.Count -gt 0) {
+        return [pscustomobject]@{
+            Success = $false
+            Message = "Adapter currently uses non-target resolver(s): $($unexpected -join ', ')"
+        }
+    }
+
+    return [pscustomobject]@{
+        Success = $true
+        Message = "Adapter DNS matches the selected/local resolver target."
+    }
+}
+
+function Format-DnsHealthResultLines {
+    param([object[]]$Results)
+
+    if ($null -eq $Results -or $Results.Count -eq 0) {
+        return @("No DNS health results returned.")
+    }
+
+    $lines = @()
+    $currentSection = ""
+    foreach ($result in @($Results | Sort-Object Sort, Section, Name)) {
+        if ($result.Section -ne $currentSection) {
+            if ($lines.Count -gt 0) { $lines += "" }
+            $lines += "$($result.Section):"
+            $currentSection = $result.Section
+        }
+
+        $state = if ($null -eq $result.Success) {
+            "INFO"
+        } elseif ($result.Success) {
+            "OK"
+        } else {
+            "FAIL"
+        }
+        $latency = if ($null -ne $result.LatencyMs) { " [$($result.LatencyMs) ms]" } else { "" }
+        $lines += "  $state $($result.Name): $($result.Message)$latency"
+    }
+
+    return $lines
+}
+
+function Update-DnsHealthOutput {
+    param(
+        [string[]]$Lines,
+        [string]$Header = "Encrypted DNS health"
+    )
+
+    $body = if ($Lines.Count -gt 0) { $Lines -join "`n" } else { "No DNS health output." }
+    if ($script:txtEncryptedDnsHealthStatus) {
+        $script:txtEncryptedDnsHealthStatus.Text = $body
+    }
+    if ($script:txtDiagOutput) {
+        $script:txtDiagOutput.Text = "$Header`n$('=' * $Header.Length)`n$body"
+    }
+    Write-OperationLog -Action $Header -Result "Updated" -Detail (($Lines | Select-Object -First 6) -join " | ")
+}
+
+function Invoke-DnsApplyHealthPreview {
+    param(
+        $Adapter,
+        [pscustomobject]$Target
+    )
+
+    $adapterDns = Get-AdapterDnsServerSummary -Adapter $Adapter
+    $adapterText = if ($adapterDns.Count -gt 0) { $adapterDns -join ", " } else { "Automatic or unavailable" }
+    $lines = @("Configured adapter DNS: $adapterText")
+
+    if ($Target.UseAutomatic) {
+        $lines += "Target DNS: Automatic from DHCP"
+        $lines += "Resolver latency (UDP/53): no static resolver target."
+        Update-DnsHealthOutput -Lines $lines -Header "DNS apply preview"
+        return $lines
+    }
+
+    $targetServers = @($Target.Servers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+    $lines += "Target resolver(s): $($targetServers -join ', ')"
+
+    $leak = Get-DnsConfigLeakResult -AdapterServers $adapterDns -TargetServers $targetServers
+    $leakState = if ($null -eq $leak.Success) { "INFO" } elseif ($leak.Success) { "OK" } else { "WARN" }
+    $lines += "Config leak guard: $leakState - $($leak.Message)"
+
+    $latencyRows = Get-DnsResolverLatencyRows -Servers $targetServers -TimeoutMs 900
+    $lines += Format-DnsLatencyRows -Rows $latencyRows
+
+    $reachable = @($latencyRows | Where-Object { $_.Success }).Count
+    $lines += "UDP fallback state: $reachable of $($latencyRows.Count) target resolver(s) answered UDP/53."
+
+    Update-DnsHealthOutput -Lines $lines -Header "DNS apply preview"
+    return $lines
+}
+
 function Get-DohConfigurationTarget {
     $servers = @()
     $template = $script:txtDohTemplate.Text.Trim()
@@ -4501,23 +4787,82 @@ function Register-DotEncryption {
 function Invoke-EncryptedDnsHealthTest {
     if ($script:EncryptedDnsHealthRunning) { return }
 
+    $adapter = Get-SelectedAdapter
     $dohTarget = Get-DohConfigurationTarget
     $dotTarget = Get-DotConfigurationTarget
+    $applyTarget = Get-DNSApplyTarget
     $dohTemplate = if (Test-DohTemplate -Template $dohTarget.Template) { $dohTarget.Template } else { "" }
     $dotHost = if (Test-DotHost -HostName $dotTarget.RawDoTHost) { $dotTarget.DoTHost } else { "" }
+    $targetServers = @()
+    $targetMode = "No DNS target selected"
 
-    if ([string]::IsNullOrWhiteSpace($dohTemplate) -and [string]::IsNullOrWhiteSpace($dotHost)) {
-        Show-MessageBox -Message "Select a preset with DoH/DoT metadata or enter a valid custom DoH template or DoT host before testing encrypted DNS health." -Title "No Encrypted DNS Target" -Icon Warning
+    if ($applyTarget.IsValid -and -not $applyTarget.UseAutomatic) {
+        $targetServers = @($applyTarget.Servers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+        $targetMode = $applyTarget.StatusMessage
+    } elseif ($applyTarget.IsValid -and $applyTarget.UseAutomatic) {
+        $targetMode = $applyTarget.StatusMessage
+    } elseif ($dohTarget.Servers.Count -gt 0) {
+        $targetServers = @($dohTarget.Servers | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+        $targetMode = "$($dohTarget.Source) encrypted DNS metadata"
+    }
+
+    $adapterDns = Get-AdapterDnsServerSummary -Adapter $adapter
+    $doqConfig = Get-DoqProxyConfiguration
+    $doqListenAddress = if (Test-ValidIP -IP $doqConfig.ListenAddress) { $doqConfig.ListenAddress } else { "" }
+    $doqListenPort = if ($doqConfig.ListenPort -ge 1 -and $doqConfig.ListenPort -le 65535) { $doqConfig.ListenPort } else { 0 }
+    $doqProcessRunning = ($script:DoqProxyProcess -and -not $script:DoqProxyProcess.HasExited)
+    $doqProcessId = if ($doqProcessRunning) { $script:DoqProxyProcess.Id } else { $null }
+    $localProxyCompareAddress = if ($doqListenPort -eq 53) { $doqListenAddress } else { "" }
+    $leakResult = Get-DnsConfigLeakResult -AdapterServers $adapterDns -TargetServers $targetServers -LocalProxyAddress $localProxyCompareAddress
+
+    if ([string]::IsNullOrWhiteSpace($dohTemplate) -and [string]::IsNullOrWhiteSpace($dotHost) -and $targetServers.Count -eq 0 -and $adapterDns.Count -eq 0 -and [string]::IsNullOrWhiteSpace($doqListenAddress)) {
+        Show-MessageBox -Message "Select a DNS preset, enter custom DNS servers, select an adapter, or configure the local DoQ proxy before testing DNS health." -Title "No DNS Health Target" -Icon Warning
         return
     }
 
     $script:EncryptedDnsHealthRunning = $true
     $script:btnTestEncryptedDns.IsEnabled = $false
-    $script:txtEncryptedDnsHealthStatus.Text = "Testing encrypted DNS..."
+    $script:txtEncryptedDnsHealthStatus.Text = "Testing DNS health..."
     Update-Status "Testing encrypted DNS health..."
 
+    $healthContext = [pscustomobject]@{
+        AdapterName = if ($adapter) { $adapter.Name } else { "" }
+        AdapterDnsServers = @($adapterDns)
+        TargetMode = $targetMode
+        TargetServers = @($targetServers)
+        LeakSuccess = $leakResult.Success
+        LeakMessage = $leakResult.Message
+        UdpFallbackAllowed = [bool]$script:chkDohUdpFallback.IsChecked
+        DohTemplate = $dohTemplate
+        DotHost = $dotHost
+        DoqListenAddress = $doqListenAddress
+        DoqListenPort = $doqListenPort
+        DoqProcessRunning = [bool]$doqProcessRunning
+        DoqProcessId = $doqProcessId
+    }
+
     $healthScript = {
-        param($DohTemplate, $DotHost)
+        param($Context)
+
+        function New-HealthResult {
+            param(
+                [int]$Sort,
+                [string]$Section,
+                [string]$Name,
+                [object]$Success,
+                [string]$Message,
+                [object]$LatencyMs = $null
+            )
+
+            return [pscustomobject]@{
+                Sort = $Sort
+                Section = $Section
+                Name = $Name
+                Success = $Success
+                Message = $Message
+                LatencyMs = $LatencyMs
+            }
+        }
 
         function ConvertTo-DnsQueryMessage {
             $bytes = New-Object 'System.Collections.Generic.List[byte]'
@@ -4550,6 +4895,55 @@ function Invoke-EncryptedDnsHealthTest {
             return $bytes.ToArray()
         }
 
+        function Invoke-UdpDnsProbe {
+            param(
+                [string]$Server,
+                [int]$Port = 53,
+                [int]$TimeoutMs = 1200
+            )
+
+            $client = $null
+            try {
+                $ipAddress = [System.Net.IPAddress]::Parse($Server)
+                $client = New-Object System.Net.Sockets.UdpClient($ipAddress.AddressFamily)
+                $client.Client.SendTimeout = $TimeoutMs
+                $client.Client.ReceiveTimeout = $TimeoutMs
+
+                $endpoint = New-Object System.Net.IPEndPoint($ipAddress, $Port)
+                $query = ConvertTo-DnsQueryMessage
+                $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+                $client.Connect($endpoint)
+                [void]$client.Send($query, $query.Length)
+
+                $anyAddress = if ($ipAddress.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+                    [System.Net.IPAddress]::IPv6Any
+                } else {
+                    [System.Net.IPAddress]::Any
+                }
+                $remoteEndpoint = New-Object System.Net.IPEndPoint($anyAddress, 0)
+                $response = $client.Receive([ref]$remoteEndpoint)
+                $stopwatch.Stop()
+
+                if ($response.Length -lt 12) {
+                    throw "short DNS response ($($response.Length) bytes)"
+                }
+
+                return [pscustomobject]@{
+                    Success = $true
+                    LatencyMs = [int][Math]::Max(1, [Math]::Round($stopwatch.Elapsed.TotalMilliseconds))
+                    Message = "UDP response $($response.Length) bytes"
+                }
+            } catch {
+                return [pscustomobject]@{
+                    Success = $false
+                    LatencyMs = $null
+                    Message = $_.Exception.Message
+                }
+            } finally {
+                if ($client) { $client.Close() }
+            }
+        }
+
         function ConvertTo-DnsBase64Url {
             param([byte[]]$Bytes)
             return [Convert]::ToBase64String($Bytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
@@ -4570,12 +4964,14 @@ function Invoke-EncryptedDnsHealthTest {
                 $request.UserAgent = "NetForge"
                 $request.Timeout = 7000
                 $request.ReadWriteTimeout = 7000
+                $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
                 $response = $request.GetResponse()
                 try {
                     $stream = $response.GetResponseStream()
                     $memory = New-Object System.IO.MemoryStream
                     $stream.CopyTo($memory)
+                    $stopwatch.Stop()
                     $length = $memory.Length
 
                     if ([int]$response.StatusCode -ne 200) {
@@ -4589,6 +4985,7 @@ function Invoke-EncryptedDnsHealthTest {
                         Protocol = "DoH"
                         Success = $true
                         Message = "HTTPS 200, DNS response $length bytes"
+                        LatencyMs = [int][Math]::Max(1, [Math]::Round($stopwatch.Elapsed.TotalMilliseconds))
                     }
                 } finally {
                     if ($response) { $response.Close() }
@@ -4598,6 +4995,7 @@ function Invoke-EncryptedDnsHealthTest {
                     Protocol = "DoH"
                     Success = $false
                     Message = $_.Exception.Message
+                    LatencyMs = $null
                 }
             }
         }
@@ -4656,6 +5054,7 @@ function Invoke-EncryptedDnsHealthTest {
                     return ($policyErrors -eq [System.Net.Security.SslPolicyErrors]::None)
                 }
                 $sslStream = New-Object System.Net.Security.SslStream($client.GetStream(), $false, $callback)
+                $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
                 $sslStream.AuthenticateAsClient($endpoint.Host)
 
                 $query = ConvertTo-DnsQueryMessage
@@ -4673,17 +5072,20 @@ function Invoke-EncryptedDnsHealthTest {
                     throw "short DNS response ($responseLength bytes)"
                 }
                 [void](Get-StreamByteBlock -Stream $sslStream -Count $responseLength)
+                $stopwatch.Stop()
 
                 return [pscustomobject]@{
                     Protocol = "DoT"
                     Success = $true
                     Message = "TLS handshake and DNS response $responseLength bytes"
+                    LatencyMs = [int][Math]::Max(1, [Math]::Round($stopwatch.Elapsed.TotalMilliseconds))
                 }
             } catch {
                 return [pscustomobject]@{
                     Protocol = "DoT"
                     Success = $false
                     Message = $_.Exception.Message
+                    LatencyMs = $null
                 }
             } finally {
                 if ($sslStream) { $sslStream.Dispose() }
@@ -4692,16 +5094,54 @@ function Invoke-EncryptedDnsHealthTest {
         }
 
         $results = @()
-        if (-not [string]::IsNullOrWhiteSpace($DohTemplate)) {
-            $results += Invoke-DohHealthProbe -Template $DohTemplate
+
+        $adapterName = if ([string]::IsNullOrWhiteSpace($Context.AdapterName)) { "No adapter selected" } else { $Context.AdapterName }
+        $adapterDnsText = if ($Context.AdapterDnsServers.Count -gt 0) { $Context.AdapterDnsServers -join ", " } else { "Automatic or unavailable" }
+        $results += New-HealthResult -Sort 10 -Section "Configured adapter DNS" -Name $adapterName -Success $null -Message $adapterDnsText
+
+        $targetText = if ($Context.TargetServers.Count -gt 0) { $Context.TargetServers -join ", " } else { "No static resolver target" }
+        $results += New-HealthResult -Sort 20 -Section "Selected target" -Name $Context.TargetMode -Success $null -Message $targetText
+        $results += New-HealthResult -Sort 30 -Section "Config leak guard" -Name "Adapter vs target" -Success $Context.LeakSuccess -Message $Context.LeakMessage
+
+        if (-not [string]::IsNullOrWhiteSpace($Context.DohTemplate)) {
+            $probe = Invoke-DohHealthProbe -Template $Context.DohTemplate
+            $results += New-HealthResult -Sort 40 -Section "Encrypted endpoint probe" -Name "DoH" -Success $probe.Success -Message $probe.Message -LatencyMs $probe.LatencyMs
+        } else {
+            $results += New-HealthResult -Sort 40 -Section "Encrypted endpoint probe" -Name "DoH" -Success $null -Message "No DoH template selected."
         }
-        if (-not [string]::IsNullOrWhiteSpace($DotHost)) {
-            $results += Invoke-DotHealthProbe -HostValue $DotHost
+        if (-not [string]::IsNullOrWhiteSpace($Context.DotHost)) {
+            $probe = Invoke-DotHealthProbe -HostValue $Context.DotHost
+            $results += New-HealthResult -Sort 41 -Section "Encrypted endpoint probe" -Name "DoT" -Success $probe.Success -Message $probe.Message -LatencyMs $probe.LatencyMs
+        } else {
+            $results += New-HealthResult -Sort 41 -Section "Encrypted endpoint probe" -Name "DoT" -Success $null -Message "No DoT host selected."
         }
+
+        $fallbackPolicy = if ($Context.UdpFallbackAllowed) { "Allowed by current DoH/DoT registration option." } else { "Disabled by current DoH/DoT registration option." }
+        $results += New-HealthResult -Sort 50 -Section "UDP fallback state" -Name "Registration policy" -Success $null -Message $fallbackPolicy
+
+        if ($Context.TargetServers.Count -eq 0) {
+            $results += New-HealthResult -Sort 60 -Section "Resolver latency" -Name "UDP/53" -Success $null -Message "No static resolver target to probe."
+        } else {
+            $index = 0
+            foreach ($server in $Context.TargetServers) {
+                $probe = Invoke-UdpDnsProbe -Server $server -Port 53 -TimeoutMs 1200
+                $results += New-HealthResult -Sort (60 + $index) -Section "Resolver latency" -Name "$server UDP/53" -Success $probe.Success -Message $probe.Message -LatencyMs $probe.LatencyMs
+                $index++
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($Context.DoqListenAddress) -and $Context.DoqListenPort -gt 0) {
+            $proxyProbe = Invoke-UdpDnsProbe -Server $Context.DoqListenAddress -Port $Context.DoqListenPort -TimeoutMs 1200
+            $processState = if ($Context.DoqProcessRunning) { "NetForge process running (PID $($Context.DoqProcessId))" } else { "NetForge process not running" }
+            $results += New-HealthResult -Sort 80 -Section "Local proxy listener" -Name "$($Context.DoqListenAddress):$($Context.DoqListenPort)" -Success $proxyProbe.Success -Message "$processState; $($proxyProbe.Message)" -LatencyMs $proxyProbe.LatencyMs
+        } else {
+            $results += New-HealthResult -Sort 80 -Section "Local proxy listener" -Name "DoQ proxy" -Success $null -Message "No valid listen address and port configured."
+        }
+
         return $results
     }
 
-    $script:EncryptedDnsHealthJob = Start-Job -ScriptBlock $healthScript -ArgumentList $dohTemplate, $dotHost
+    $script:EncryptedDnsHealthJob = Start-Job -ScriptBlock $healthScript -ArgumentList $healthContext
 
     $script:EncryptedDnsHealthTimer = New-Object System.Windows.Threading.DispatcherTimer
     $script:EncryptedDnsHealthTimer.Interval = [TimeSpan]::FromMilliseconds(250)
@@ -4712,18 +5152,14 @@ function Invoke-EncryptedDnsHealthTest {
 
         try {
             $results = @(Receive-Job $script:EncryptedDnsHealthJob -ErrorAction Stop)
-            $lines = @()
-            foreach ($result in $results) {
-                $prefix = if ($result.Success) { "OK" } else { "FAIL" }
-                $lines += "$($result.Protocol) $prefix`: $($result.Message)"
-            }
+            $lines = Format-DnsHealthResultLines -Results $results
 
             if ($lines.Count -eq 0) {
-                $script:txtEncryptedDnsHealthStatus.Text = "No health results returned."
+                Update-DnsHealthOutput -Lines @("No health results returned.") -Header "Encrypted DNS health"
                 Update-Status "Encrypted DNS health test returned no results" -Type Warning
             } else {
-                $script:txtEncryptedDnsHealthStatus.Text = $lines -join "`n"
-                $failed = @($results | Where-Object { -not $_.Success })
+                Update-DnsHealthOutput -Lines $lines -Header "Encrypted DNS health"
+                $failed = @($results | Where-Object { $null -ne $_.Success -and -not $_.Success })
                 if ($failed.Count -eq 0) {
                     Update-Status "Encrypted DNS health test passed" -Type Success
                 } else {
@@ -4731,7 +5167,7 @@ function Invoke-EncryptedDnsHealthTest {
                 }
             }
         } catch {
-            $script:txtEncryptedDnsHealthStatus.Text = "Health test failed: $($_.Exception.Message)"
+            Update-DnsHealthOutput -Lines @("Health test failed: $($_.Exception.Message)") -Header "Encrypted DNS health"
             Update-Status "Encrypted DNS health test failed" -Type Error
         } finally {
             Remove-Job $script:EncryptedDnsHealthJob -Force -ErrorAction SilentlyContinue
@@ -5615,7 +6051,20 @@ function Apply-DNSConfiguration {
         return
     }
 
-    $result = Show-MessageBox -Message "Apply DNS configuration to '$($adapter.Name)'?" -Title "Confirm" -Buttons YesNo -Icon Question
+    $previewLines = @()
+    try {
+        $previewLines = @(Invoke-DnsApplyHealthPreview -Adapter $adapter -Target $target)
+    } catch {
+        $previewLines = @("DNS apply preview failed: $($_.Exception.Message)")
+        Update-DnsHealthOutput -Lines $previewLines -Header "DNS apply preview"
+    }
+
+    $previewText = ($previewLines | Select-Object -First 10) -join "`n"
+    if ($previewLines.Count -gt 10) {
+        $previewText += "`n..."
+    }
+
+    $result = Show-MessageBox -Message "Apply DNS configuration to '$($adapter.Name)'?`n`n$previewText" -Title "Confirm" -Buttons YesNo -Icon Question
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
 
     Update-Status "Applying DNS configuration..."

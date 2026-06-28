@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P1
-- [ ] P1 - Add encrypted DNS leak, fallback, and resolver latency checks
-  Why: DoH/DoT registration and DoQ proxy start are not enough to prove queries are encrypted, non-leaking, or performant.
-  Evidence: `NetForge.ps1:3748-4304`, YogaDNS, Simple DNSCrypt, DNS Jumper, RFC 8484/RFC 7858/RFC 9250.
-  Touches: DNS tab, `Invoke-EncryptedDnsHealthTest`, `Invoke-StartDoqProxy`, diagnostics output.
-  Acceptance: DNS health shows configured adapter DNS, encrypted endpoint probe, UDP fallback state, local-proxy listener state, and per-resolver latency table before applying a preset.
-  Complexity: L
-
 - [ ] P1 - Harden profile storage sync and migration
   Why: Folder-based sync is useful, but changing the storage path without migration/conflict handling risks missing or overwritten profiles.
   Evidence: local dirty-tree `Save-AppSetting`, `Invoke-ProfileStoreChange`, `Get-OneDriveProfileStore`; NetSetMan/argon-network-switcher profile portability.
