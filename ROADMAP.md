@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P0
-- [ ] P0 - Validate and atomically write profile/import JSON
-  Why: Imported or corrupt profile JSON can be silently skipped or written without schema checks, duplicate handling, or safe replacement.
-  Evidence: `NetForge.ps1:4386-4477`, `NetForge.ps1:5087-5107`, PSScriptAnalyzer empty-catch findings.
-  Touches: `Get-Profiles`, `Save-Profile`, `Import-Configuration`, profile model helpers, profile storage UI.
-  Acceptance: Profiles have `SchemaVersion`, required-field validation, duplicate-name conflict prompts via status UI, temp-file-plus-rename writes, import dry-run summary, and rejected rows listed in the log.
-  Complexity: M
-
 - [ ] P0 - Add persistent operation log, crash log, and diagnostic export
   Why: Network repair tools need traceability; current failures are mostly status text/message boxes and several catches are empty.
   Evidence: `NetForge.ps1:75`, `NetForge.ps1:2366`, `NetForge.ps1:4393`, NetAdapter Repair recovery workflow, PSScriptAnalyzer findings.

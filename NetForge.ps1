@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.14.0
+    Version: 1.15.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,10 +44,11 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.14.0"
+$script:AppVersion = "1.15.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:ProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
+$script:ProfileSchemaVersion = 1
 $script:ContinuousPingRunning = $false
 $script:ContinuousPingPS = $null
 $script:CachedPublicIP = $null
@@ -62,6 +63,7 @@ $script:EncryptedDnsHealthTimer = $null
 $script:DoqProxyProcess = $null
 $script:LastAutoAppliedProfile = ""
 $script:LastNetworkSnapshot = $null
+$script:LastProfileLoadWarnings = @()
 $script:AutoProfileTimer = $null
 
 # Create directories
@@ -719,7 +721,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.14.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.15.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1752,7 +1754,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.14.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.15.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -4758,14 +4760,223 @@ function Invoke-ApplyDoqLocalResolver {
 # ============================================================================
 # PROFILE FUNCTIONS
 # ============================================================================
+function Get-ProfileProperty {
+    param(
+        [pscustomobject]$ProfileData,
+        [string]$Name,
+        $DefaultValue = $null
+    )
+
+    if ($null -eq $ProfileData) { return $DefaultValue }
+    $property = $ProfileData.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $DefaultValue }
+    if ($null -eq $property.Value) { return $DefaultValue }
+    return $property.Value
+}
+
+function ConvertTo-ProfileBoolean {
+    param(
+        $Value,
+        [bool]$DefaultValue = $false
+    )
+
+    if ($null -eq $Value) { return $DefaultValue }
+    if ($Value -is [bool]) { return $Value }
+
+    $text = ([string]$Value).Trim()
+    if ($text -match '^(true|1|yes)$') { return $true }
+    if ($text -match '^(false|0|no)$') { return $false }
+    return $DefaultValue
+}
+
+function Get-SafeProfileFileName {
+    param([string]$Name)
+
+    $safeName = ([string]$Name).Trim() -replace '[^\w\-]', '_'
+    $safeName = $safeName.Trim("_")
+    if ([string]::IsNullOrWhiteSpace($safeName)) { $safeName = "Profile" }
+    return "$safeName.json"
+}
+
+function Get-ProfileFilePath {
+    param([string]$Name)
+
+    return (Join-Path $script:ProfilesPath (Get-SafeProfileFileName -Name $Name))
+}
+
+function Get-ProfileValidationResult {
+    param([pscustomobject]$ProfileData)
+
+    $errors = @()
+    $name = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "Name" -DefaultValue "")).Trim()
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        $errors += "Profile name is required."
+    }
+
+    $schemaRaw = Get-ProfileProperty -ProfileData $ProfileData -Name "SchemaVersion" -DefaultValue $script:ProfileSchemaVersion
+    $schemaVersion = 0
+    if (-not [int]::TryParse(([string]$schemaRaw), [ref]$schemaVersion)) {
+        $errors += "SchemaVersion must be a number."
+    } elseif ($schemaVersion -gt $script:ProfileSchemaVersion) {
+        $errors += "SchemaVersion $schemaVersion is newer than this NetForge build supports."
+    } elseif ($schemaVersion -lt 1) {
+        $schemaVersion = $script:ProfileSchemaVersion
+    }
+
+    $useDhcp = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "UseDHCP" -DefaultValue $true) -DefaultValue $true
+    $useDnsAutomatic = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "UseDHCPForDNS" -DefaultValue $true) -DefaultValue $true
+    $autoApply = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "AutoApply" -DefaultValue $false) -DefaultValue $false
+
+    $description = [string](Get-ProfileProperty -ProfileData $ProfileData -Name "Description" -DefaultValue "")
+    $matchSsid = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "MatchSSID" -DefaultValue "")).Trim()
+    $matchGatewayMacRaw = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "MatchGatewayMac" -DefaultValue "")).Trim()
+    $matchGatewayMac = ""
+    if (-not [string]::IsNullOrWhiteSpace($matchGatewayMacRaw)) {
+        if (Test-ValidMacAddress -MacAddress $matchGatewayMacRaw) {
+            $matchGatewayMac = ConvertTo-CleanMacAddress -MacAddress $matchGatewayMacRaw
+        } else {
+            $errors += "Gateway MAC must be a valid unicast MAC address."
+        }
+    }
+
+    if ($autoApply -and [string]::IsNullOrWhiteSpace($matchSsid) -and [string]::IsNullOrWhiteSpace($matchGatewayMac)) {
+        $errors += "Auto-apply profiles need a match SSID or gateway MAC."
+    }
+
+    $ipAddress = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "IPAddress" -DefaultValue "")).Trim()
+    $subnetMask = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "SubnetMask" -DefaultValue "255.255.255.0")).Trim()
+    $gateway = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "Gateway" -DefaultValue "")).Trim()
+    $prefixText = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "PrefixLength" -DefaultValue "24")).Trim()
+    $prefix = 24
+
+    if (-not $useDhcp) {
+        if (-not (Test-ValidIPv4Address -IP $ipAddress)) {
+            $errors += "Static profiles need a valid IPv4 address."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($subnetMask) -and -not (Test-ValidIPv4Address -IP $subnetMask)) {
+            $errors += "Subnet mask must be a valid IPv4 mask."
+        }
+        if (-not [int]::TryParse($prefixText, [ref]$prefix) -or -not (Test-ValidIPv4PrefixLength -PrefixLength $prefix)) {
+            $errors += "Prefix length must be a number from 1 to 32."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($gateway) -and -not (Test-ValidIPv4Address -IP $gateway)) {
+            $errors += "Gateway must be a valid IPv4 address."
+        }
+    }
+
+    $primaryDns = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "PrimaryDNS" -DefaultValue "")).Trim()
+    $secondaryDns = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "SecondaryDNS" -DefaultValue "")).Trim()
+    if (-not $useDnsAutomatic) {
+        if (-not (Test-ValidIP -IP $primaryDns)) {
+            $errors += "Static DNS profiles need a valid primary DNS server."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($secondaryDns) -and -not (Test-ValidIP -IP $secondaryDns)) {
+            $errors += "Secondary DNS must be a valid IP address."
+        }
+    }
+
+    $createdAt = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "CreatedAt" -DefaultValue "")).Trim()
+    if ([string]::IsNullOrWhiteSpace($createdAt)) {
+        $createdAt = (Get-Date).ToString("o")
+    }
+    $updatedAt = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "UpdatedAt" -DefaultValue "")).Trim()
+    if ([string]::IsNullOrWhiteSpace($updatedAt)) {
+        $updatedAt = $createdAt
+    }
+
+    if ($errors.Count -gt 0) {
+        return [pscustomobject]@{
+            IsValid = $false
+            Message = ($errors -join " ")
+            Profile = $null
+            SafeFileName = ""
+        }
+    }
+
+    $normalized = [ordered]@{
+        SchemaVersion = $script:ProfileSchemaVersion
+        Name = $name
+        Description = $description
+        AutoApply = $autoApply
+        MatchSSID = $matchSsid
+        MatchGatewayMac = $matchGatewayMac
+        UseDHCP = $useDhcp
+        IPAddress = $ipAddress
+        SubnetMask = $subnetMask
+        Gateway = $gateway
+        PrefixLength = if ($useDhcp) { "" } else { [string]$prefix }
+        UseDHCPForDNS = $useDnsAutomatic
+        PrimaryDNS = $primaryDns
+        SecondaryDNS = $secondaryDns
+        CreatedAt = $createdAt
+        UpdatedAt = $updatedAt
+    }
+
+    return [pscustomobject]@{
+        IsValid = $true
+        Message = ""
+        Profile = [pscustomobject]$normalized
+        SafeFileName = (Get-SafeProfileFileName -Name $name)
+    }
+}
+
+function Write-ProfileFileAtomic {
+    param(
+        [pscustomobject]$ProfileData,
+        [string]$FilePath
+    )
+
+    $directory = Split-Path -Path $FilePath -Parent
+    if (-not (Test-Path -LiteralPath $directory)) {
+        New-Item -Path $directory -ItemType Directory -Force | Out-Null
+    }
+
+    $fileName = [System.IO.Path]::GetFileName($FilePath)
+    $tempPath = Join-Path $directory ".$fileName.$([guid]::NewGuid().ToString('N')).tmp"
+    $backupPath = Join-Path $directory ".$fileName.bak"
+
+    try {
+        $ProfileData | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $tempPath -Encoding UTF8
+
+        if (Test-Path -LiteralPath $FilePath) {
+            [System.IO.File]::Replace($tempPath, $FilePath, $backupPath, $true)
+            if (Test-Path -LiteralPath $backupPath) {
+                Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
+            }
+        } else {
+            [System.IO.File]::Move($tempPath, $FilePath)
+        }
+    } finally {
+        if (Test-Path -LiteralPath $tempPath) {
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Write-ProfileImportLog {
+    param([string[]]$Lines)
+
+    if ($script:txtDiagOutput) {
+        $script:txtDiagOutput.Text = ($Lines -join "`n")
+    }
+}
+
 function Get-Profiles {
     $profiles = @()
+    $script:LastProfileLoadWarnings = @()
     if (Test-Path $script:ProfilesPath) {
         Get-ChildItem -Path $script:ProfilesPath -Filter "*.json" | ForEach-Object {
             try {
                 $content = Get-Content $_.FullName -Raw | ConvertFrom-Json
-                $profiles += $content
-            } catch { }
+                $validation = Get-ProfileValidationResult -ProfileData $content
+                if ($validation.IsValid) {
+                    $profiles += $validation.Profile
+                } else {
+                    $script:LastProfileLoadWarnings += "$($_.Name): $($validation.Message)"
+                }
+            } catch {
+                $script:LastProfileLoadWarnings += "$($_.Name): $($_.Exception.Message)"
+            }
         }
     }
     return $profiles
@@ -4797,6 +5008,11 @@ function Refresh-ProfileList {
 
         $script:lstProfiles.Items.Add($item) | Out-Null
     }
+
+    if ($script:LastProfileLoadWarnings.Count -gt 0) {
+        Write-ProfileImportLog -Lines (@("Profile load skipped $($script:LastProfileLoadWarnings.Count) invalid file(s):") + $script:LastProfileLoadWarnings)
+        Update-Status "Skipped $($script:LastProfileLoadWarnings.Count) invalid profile file(s); see diagnostics output" -Type Warning
+    }
 }
 
 function Load-ProfileToEditor {
@@ -4827,11 +5043,12 @@ function Save-Profile {
     }
 
     $profile = @{
+        SchemaVersion = $script:ProfileSchemaVersion
         Name = $name
         Description = $script:txtProfileDesc.Text
         AutoApply = [bool]$script:chkProfileAutoApply.IsChecked
         MatchSSID = $script:txtProfileMatchSsid.Text.Trim()
-        MatchGatewayMac = (ConvertTo-CleanMacAddress -MacAddress $script:txtProfileGatewayMac.Text)
+        MatchGatewayMac = $script:txtProfileGatewayMac.Text.Trim()
         UseDHCP = $script:chkProfileDHCP.IsChecked
         IPAddress = $script:txtProfileIP.Text
         SubnetMask = $script:txtProfileSubnet.Text
@@ -4841,11 +5058,41 @@ function Save-Profile {
         PrimaryDNS = $script:txtProfileDns1.Text
         SecondaryDNS = $script:txtProfileDns2.Text
         CreatedAt = (Get-Date).ToString("o")
+        UpdatedAt = (Get-Date).ToString("o")
     }
 
-    $safeName = $name -replace '[^\w\-]', '_'
-    $filePath = Join-Path $script:ProfilesPath "$safeName.json"
-    $profile | ConvertTo-Json -Depth 10 | Set-Content -Path $filePath -Encoding UTF8
+    $selected = $script:lstProfiles.SelectedItem
+    if ($selected -and $selected.Tag -and $selected.Tag.CreatedAt) {
+        $profile.CreatedAt = $selected.Tag.CreatedAt
+    }
+
+    $validation = Get-ProfileValidationResult -ProfileData ([pscustomobject]$profile)
+    if (-not $validation.IsValid) {
+        Update-Status "Profile validation failed: $($validation.Message)" -Type Error
+        Show-MessageBox -Message $validation.Message -Title "Profile Validation Failed" -Icon Error
+        return
+    }
+
+    $filePath = Join-Path $script:ProfilesPath $validation.SafeFileName
+    $selectedSafeName = ""
+    if ($selected -and $selected.Tag -and $selected.Tag.Name) {
+        $selectedSafeName = Get-SafeProfileFileName -Name $selected.Tag.Name
+    }
+
+    if ((Test-Path -LiteralPath $filePath) -and $selectedSafeName -ne $validation.SafeFileName) {
+        Update-Status "Profile '$name' already exists; select it before updating or choose another name" -Type Warning
+        Write-ProfileImportLog -Lines @("Profile save rejected:", "Profile '$name' already exists at $filePath.", "Select the existing profile before updating, or choose another name.")
+        return
+    }
+
+    Write-ProfileFileAtomic -ProfileData $validation.Profile -FilePath $filePath
+
+    if (-not [string]::IsNullOrWhiteSpace($selectedSafeName) -and $selectedSafeName -ne $validation.SafeFileName) {
+        $oldPath = Join-Path $script:ProfilesPath $selectedSafeName
+        if (Test-Path -LiteralPath $oldPath) {
+            Remove-Item -LiteralPath $oldPath -Force -ErrorAction SilentlyContinue
+        }
+    }
 
     Update-Status "Profile '$name' saved successfully" -Type Success
     Refresh-ProfileList
@@ -4862,10 +5109,9 @@ function Delete-Profile {
     $result = Show-MessageBox -Message "Are you sure you want to delete profile '$($profile.Name)'?" -Title "Confirm Delete" -Buttons YesNo -Icon Question
 
     if ($result -eq [System.Windows.MessageBoxResult]::Yes) {
-        $safeName = $profile.Name -replace '[^\w\-]', '_'
-        $filePath = Join-Path $script:ProfilesPath "$safeName.json"
+        $filePath = Get-ProfileFilePath -Name $profile.Name
         if (Test-Path $filePath) {
-            Remove-Item $filePath -Force
+            Remove-Item -LiteralPath $filePath -Force
         }
         Update-Status "Profile '$($profile.Name)' deleted" -Type Success
         Refresh-ProfileList
@@ -5384,19 +5630,85 @@ function Import-Configuration {
     if ($openDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         try {
             $import = Get-Content $openDialog.FileName -Raw | ConvertFrom-Json
+            $incomingProfiles = @()
 
             if ($import.Profiles) {
-                foreach ($profile in $import.Profiles) {
-                    $safeName = $profile.Name -replace '[^\w\-]', '_'
-                    $filePath = Join-Path $script:ProfilesPath "$safeName.json"
-                    $profile | ConvertTo-Json -Depth 10 | Set-Content -Path $filePath -Encoding UTF8
+                $incomingProfiles = @($import.Profiles)
+            } elseif ($import.Name) {
+                $incomingProfiles = @($import)
+            } else {
+                Write-ProfileImportLog -Lines @("Import rejected:", "No profile records were found in $($openDialog.FileName).")
+                Update-Status "Import rejected: no profiles found" -Type Error
+                return
+            }
+
+            $existingNames = @{}
+            if (Test-Path -LiteralPath $script:ProfilesPath) {
+                Get-ChildItem -Path $script:ProfilesPath -Filter "*.json" | ForEach-Object {
+                    $existingNames[$_.Name.ToLowerInvariant()] = $true
                 }
             }
 
+            $seenNames = @{}
+            $accepted = @()
+            $rejected = @()
+            $index = 0
+
+            foreach ($incomingProfile in $incomingProfiles) {
+                $index++
+                $validation = Get-ProfileValidationResult -ProfileData $incomingProfile
+                if (-not $validation.IsValid) {
+                    $rejected += "Row $index rejected: $($validation.Message)"
+                    continue
+                }
+
+                $safeKey = $validation.SafeFileName.ToLowerInvariant()
+                if ($seenNames.ContainsKey($safeKey)) {
+                    $rejected += "Row $index '$($validation.Profile.Name)' rejected: duplicate name inside import."
+                    continue
+                }
+                if ($existingNames.ContainsKey($safeKey)) {
+                    $rejected += "Row $index '$($validation.Profile.Name)' rejected: profile already exists."
+                    continue
+                }
+
+                $seenNames[$safeKey] = $true
+                $accepted += $validation
+            }
+
+            $logLines = @(
+                "Import dry-run: $($accepted.Count) accepted, $($rejected.Count) rejected from $($openDialog.FileName)."
+            )
+            foreach ($item in $accepted) {
+                $logLines += "Accepted: $($item.Profile.Name) -> $($item.SafeFileName)"
+            }
+            if ($rejected.Count -gt 0) {
+                $logLines += "Rejected:"
+                $logLines += $rejected
+            }
+
+            if ($accepted.Count -eq 0) {
+                Write-ProfileImportLog -Lines $logLines
+                Update-Status "Import dry-run rejected all profiles; see diagnostics output" -Type Warning
+                return
+            }
+
+            foreach ($item in $accepted) {
+                $filePath = Join-Path $script:ProfilesPath $item.SafeFileName
+                Write-ProfileFileAtomic -ProfileData $item.Profile -FilePath $filePath
+            }
+
+            $logLines += "Imported $($accepted.Count) profile(s)."
+            Write-ProfileImportLog -Lines $logLines
             Refresh-ProfileList
-            Update-Status "Configuration imported successfully" -Type Success
+            if ($rejected.Count -gt 0) {
+                Update-Status "Imported $($accepted.Count) profile(s), rejected $($rejected.Count); see diagnostics output" -Type Warning
+            } else {
+                Update-Status "Imported $($accepted.Count) profile(s) successfully" -Type Success
+            }
         } catch {
             Update-Status "Import failed: $($_.Exception.Message)" -Type Error
+            Write-ProfileImportLog -Lines @("Import failed:", $_.Exception.Message)
         }
     }
 }

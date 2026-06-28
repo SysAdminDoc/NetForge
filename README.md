@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.14.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.15.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -77,6 +77,7 @@
 ### Profile System
 - Save complete network configurations as profiles
 - Store IP settings, DNS configuration, and metadata
+- Schema-versioned profiles with validation, duplicate protection, atomic writes, and import summaries
 - Auto-apply profiles when the current SSID or gateway MAC matches saved rules
 - Preview profile differences against the selected adapter before applying
 - Quick-apply profiles to any adapter
