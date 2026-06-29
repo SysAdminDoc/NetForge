@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.23.0
+    Version: 1.24.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,12 +44,16 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.23.0"
+$script:AppVersion = "1.24.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
 $script:LogsPath = Join-Path $script:ConfigPath "Logs"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
+$script:ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
+$script:DnsCatalogPath = Join-Path $script:ScriptRoot "dns-providers.json"
+$script:DnsCatalogHashPath = "$script:DnsCatalogPath.sha256"
+$script:DnsCatalogStatus = "Embedded DNS preset defaults"
 $script:ProfileSchemaVersion = 1
 $script:ProfileStoreLoadWarning = ""
 $script:ContinuousPingRunning = $false
@@ -835,7 +839,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.23.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.24.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1883,7 +1887,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.23.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="NetForge v1.24.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -4161,6 +4165,176 @@ function Invoke-DnsLookup {
 # ============================================================================
 # DNS PRESET FUNCTIONS
 # ============================================================================
+function Test-DnsCatalogIntegrity {
+    param(
+        [string]$CatalogPath,
+        [string]$HashPath
+    )
+
+    if (-not (Test-Path -LiteralPath $CatalogPath -PathType Leaf)) {
+        return [pscustomobject]@{ IsValid = $false; Message = "DNS catalog file was not found."; Hash = "" }
+    }
+    if (-not (Test-Path -LiteralPath $HashPath -PathType Leaf)) {
+        return [pscustomobject]@{ IsValid = $false; Message = "DNS catalog hash file was not found."; Hash = "" }
+    }
+
+    $actualHash = Get-FileSha256 -Path $CatalogPath
+    $hashText = Get-Content -Raw -LiteralPath $HashPath
+    $expectedHash = ""
+    if ($hashText -match '(?im)^\s*([a-f0-9]{64})\s+') {
+        $expectedHash = $Matches[1].ToLowerInvariant()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($expectedHash)) {
+        return [pscustomobject]@{ IsValid = $false; Message = "DNS catalog hash file does not contain a SHA256 hash."; Hash = $actualHash }
+    }
+    if ($actualHash -ne $expectedHash) {
+        return [pscustomobject]@{ IsValid = $false; Message = "DNS catalog hash mismatch."; Hash = $actualHash }
+    }
+
+    return [pscustomobject]@{ IsValid = $true; Message = "DNS catalog hash verified."; Hash = $actualHash }
+}
+
+function ConvertFrom-DnsProviderCatalog {
+    param($Catalog)
+
+    $errors = @()
+    $presets = [ordered]@{}
+
+    if ($null -eq $Catalog) {
+        return [pscustomobject]@{ IsValid = $false; Message = "DNS catalog is empty."; Presets = $presets }
+    }
+    if ([int]$Catalog.SchemaVersion -ne 1) {
+        return [pscustomobject]@{ IsValid = $false; Message = "DNS catalog schema version is not supported."; Presets = $presets }
+    }
+
+    $providers = @($Catalog.Providers)
+    if ($providers.Count -eq 0) {
+        return [pscustomobject]@{ IsValid = $false; Message = "DNS catalog has no providers."; Presets = $presets }
+    }
+
+    $seenNames = @{}
+    $allowedCapabilities = @('default', 'dhcp', 'ipv4', 'ipv6', 'doh', 'dot', 'doq', 'public', 'security', 'privacy', 'family', 'ad-blocking')
+
+    foreach ($provider in $providers) {
+        $name = ([string]$provider.Name).Trim()
+        $category = ([string]$provider.Category).Trim()
+        $description = ([string]$provider.Description).Trim()
+        $capabilities = @($provider.Capabilities | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() } | Where-Object { $_ } | Select-Object -Unique)
+        $ipv4 = @($provider.IPv4 | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+        $ipv6 = @($provider.IPv6 | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+        $doh = ([string]$provider.DoH).Trim()
+        $dot = ([string]$provider.DoT).Trim()
+        $doq = ([string]$provider.DoQ).Trim()
+
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            $errors += "Provider name is required."
+            continue
+        }
+        $nameKey = $name.ToLowerInvariant()
+        if ($seenNames.ContainsKey($nameKey)) {
+            $errors += "Provider '$name' is duplicated."
+            continue
+        }
+        $seenNames[$nameKey] = $true
+
+        if ([string]::IsNullOrWhiteSpace($category)) { $errors += "Provider '$name' is missing a category." }
+        if ([string]::IsNullOrWhiteSpace($description)) { $errors += "Provider '$name' is missing a description." }
+        if ($capabilities.Count -eq 0) { $errors += "Provider '$name' is missing capabilities." }
+
+        foreach ($capability in $capabilities) {
+            if ($allowedCapabilities -notcontains $capability) {
+                $errors += "Provider '$name' has unknown capability '$capability'."
+            }
+        }
+
+        $isDhcp = ($ipv4.Count -gt 0 -and $ipv4[0] -eq "DHCP")
+        if ($isDhcp) {
+            if ($capabilities -notcontains 'dhcp') { $errors += "Provider '$name' uses DHCP but lacks dhcp capability." }
+        } else {
+            if ($ipv4.Count -eq 0 -and $ipv6.Count -eq 0) { $errors += "Provider '$name' has no DNS servers." }
+            foreach ($server in $ipv4) {
+                if (-not (Test-ValidIPv4Address -IP $server)) { $errors += "Provider '$name' has invalid IPv4 server '$server'." }
+            }
+        }
+
+        foreach ($server in $ipv6) {
+            $parsed = $null
+            if (-not [System.Net.IPAddress]::TryParse($server, [ref]$parsed) -or $parsed.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
+                $errors += "Provider '$name' has invalid IPv6 server '$server'."
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($doh) -and -not (Test-DohTemplate -Template $doh)) {
+            $errors += "Provider '$name' has invalid DoH template."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($dot) -and -not (Test-DotHost -HostName $dot)) {
+            $errors += "Provider '$name' has invalid DoT host."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($doq) -and $doq -notmatch '^quic://[^\s]+$') {
+            $errors += "Provider '$name' has invalid DoQ upstream."
+        }
+
+        $entry = [ordered]@{
+            Primary = if ($isDhcp) { "DHCP" } elseif ($ipv4.Count -ge 1) { $ipv4[0] } else { "" }
+            Secondary = if ($isDhcp) { "DHCP" } elseif ($ipv4.Count -ge 2) { $ipv4[1] } else { "" }
+            PrimaryV6 = if ($ipv6.Count -ge 1) { $ipv6[0] } else { "" }
+            SecondaryV6 = if ($ipv6.Count -ge 2) { $ipv6[1] } else { "" }
+            DoHTemplate = $doh
+            DoTHost = $dot
+            DoQUpstream = $doq
+            Description = $description
+            Category = $category
+            Capabilities = @($capabilities)
+        }
+
+        $presets[$name] = $entry
+    }
+
+    if ($errors.Count -gt 0) {
+        return [pscustomobject]@{ IsValid = $false; Message = ($errors -join " "); Presets = $presets }
+    }
+
+    return [pscustomobject]@{ IsValid = $true; Message = "Loaded $($presets.Count) DNS providers."; Presets = $presets }
+}
+
+function Import-DnsPresetCatalog {
+    param(
+        [string]$CatalogPath = $script:DnsCatalogPath,
+        [string]$HashPath = $script:DnsCatalogHashPath
+    )
+
+    $integrity = Test-DnsCatalogIntegrity -CatalogPath $CatalogPath -HashPath $HashPath
+    if (-not $integrity.IsValid) {
+        $script:DnsCatalogStatus = "$($integrity.Message) Using embedded DNS preset defaults."
+        Write-OperationLog -Action "DNS catalog" -Result "Fallback" -Detail $script:DnsCatalogStatus
+        return $false
+    }
+
+    try {
+        $catalog = Get-Content -Raw -LiteralPath $CatalogPath | ConvertFrom-Json
+        $conversion = ConvertFrom-DnsProviderCatalog -Catalog $catalog
+        if (-not $conversion.IsValid) {
+            $script:DnsCatalogStatus = "$($conversion.Message) Using embedded DNS preset defaults."
+            Write-OperationLog -Action "DNS catalog" -Result "Fallback" -Detail $script:DnsCatalogStatus
+            return $false
+        }
+
+        $script:DnsPresets = $conversion.Presets
+        $script:DnsCatalogStatus = "$($conversion.Message) Catalog hash $($integrity.Hash.Substring(0, 12))."
+        Write-OperationLog -Action "DNS catalog" -Result "Loaded" -Detail $script:DnsCatalogStatus
+        return $true
+    } catch {
+        $script:DnsCatalogStatus = "DNS catalog load failed: $($_.Exception.Message). Using embedded DNS preset defaults."
+        Write-OperationLog -Action "DNS catalog" -Result "Fallback" -Detail $script:DnsCatalogStatus
+        return $false
+    }
+}
+
+function Initialize-DnsPresetCatalog {
+    [void](Import-DnsPresetCatalog -CatalogPath $script:DnsCatalogPath -HashPath $script:DnsCatalogHashPath)
+}
+
 function Refresh-DnsPresets {
     param([string]$Filter = "", [string]$Category = "All Categories")
 
@@ -4213,7 +4387,8 @@ function Refresh-DnsPresets {
         $headerPanel.Children.Add($categoryBorder) | Out-Null
 
         $descText = New-Object System.Windows.Controls.TextBlock
-        $descText.Text = $data.Description
+        $capabilityText = if ($data.Capabilities -and $data.Capabilities.Count -gt 0) { " [$($data.Capabilities -join ', ')]" } else { "" }
+        $descText.Text = "$($data.Description)$capabilityText"
         $descText.FontSize = 11
         $descText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
         $descText.Margin = "0,4,0,0"
@@ -7167,6 +7342,7 @@ $window.Add_Closing({
 # INITIALIZATION
 # ============================================================================
 Refresh-AdapterList
+Initialize-DnsPresetCatalog
 Refresh-DnsPresets
 Show-DohConfiguration
 Show-DotConfiguration

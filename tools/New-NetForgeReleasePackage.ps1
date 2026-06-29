@@ -111,6 +111,8 @@ $packageItems = @(
     'screenshot.png',
     'PSScriptAnalyzerSettings.psd1',
     'version.json',
+    'dns-providers.json',
+    'dns-providers.json.sha256',
     'tools',
     'tests'
 )

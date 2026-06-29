@@ -8,9 +8,17 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $scriptPath = Join-Path $repoRoot 'NetForge.ps1'
 $settingsPath = Join-Path $repoRoot 'PSScriptAnalyzerSettings.psd1'
 $versionPath = Join-Path $repoRoot 'version.json'
+$dnsCatalogPath = Join-Path $repoRoot 'dns-providers.json'
+$dnsCatalogHashPath = "$dnsCatalogPath.sha256"
 
 if (-not (Test-Path -LiteralPath $versionPath)) {
     throw "version.json was not found."
+}
+if (-not (Test-Path -LiteralPath $dnsCatalogPath)) {
+    throw "dns-providers.json was not found."
+}
+if (-not (Test-Path -LiteralPath $dnsCatalogHashPath)) {
+    throw "dns-providers.json.sha256 was not found."
 }
 
 $versionMetadata = Get-Content -Raw -LiteralPath $versionPath | ConvertFrom-Json
@@ -44,6 +52,12 @@ function Get-Sha256 {
         if ($stream) { $stream.Dispose() }
         if ($sha) { $sha.Dispose() }
     }
+}
+
+$dnsCatalogHash = Get-Sha256 -Path $dnsCatalogPath
+$dnsCatalogHashText = Get-Content -Raw -LiteralPath $dnsCatalogHashPath
+if ($dnsCatalogHashText -notmatch "$dnsCatalogHash\s+dns-providers\.json") {
+    throw "dns-providers.json.sha256 does not match dns-providers.json."
 }
 
 $scriptText = Get-Content -Raw -LiteralPath $scriptPath

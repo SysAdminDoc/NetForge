@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P2
-- [ ] P2 - Move DNS providers into a validated catalog
-  Why: DNS providers change endpoints and features; editing a 5,313-line script for preset maintenance increases risk.
-  Evidence: `NetForge.ps1:82-719`, AdGuard dnsproxy, NextDNS Windows docs, Control D `ctrld`, DNSCrypt Proxy.
-  Touches: DNS preset loading, provider schema, catalog validation, DNS tab filtering.
-  Acceptance: Built-in catalog loads from signed/hashed JSON with schema validation, supports provider capabilities (IPv4, IPv6, DoH, DoT, DoQ, family/security/ad-blocking), and falls back to embedded defaults offline.
-  Complexity: L
-
 - [ ] P2 - Externalize UI strings for localization
   Why: All UI text is embedded in XAML/functions, blocking translation and increasing copy drift.
   Evidence: `NetForge.ps1:700-1780`, Microsoft WPF globalization/localization guidance, DNS Jumper multi-language distribution.

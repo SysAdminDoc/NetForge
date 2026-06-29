@@ -201,6 +201,69 @@ Describe 'Network signature keys' {
     }
 }
 
+Describe 'DNS provider catalog' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIP',
+            'Test-ValidIPv4Address',
+            'Test-DohTemplate',
+            'ConvertTo-DotHostValue',
+            'Test-DotHost',
+            'Get-FileSha256',
+            'Test-DnsCatalogIntegrity',
+            'ConvertFrom-DnsProviderCatalog'
+        )
+    }
+
+    It 'verifies the shipped catalog sidecar hash' {
+        $catalogPath = Join-Path $script:RepoRoot 'dns-providers.json'
+        $hashPath = "$catalogPath.sha256"
+
+        $result = Test-DnsCatalogIntegrity -CatalogPath $catalogPath -HashPath $hashPath
+
+        $result.IsValid | Should -BeTrue
+        $result.Hash | Should -Match '^[a-f0-9]{64}$'
+    }
+
+    It 'loads providers with encrypted DNS capabilities' {
+        $catalog = Get-Content -Raw -LiteralPath (Join-Path $script:RepoRoot 'dns-providers.json') | ConvertFrom-Json
+
+        $result = ConvertFrom-DnsProviderCatalog -Catalog $catalog
+
+        $result.IsValid | Should -BeTrue
+        $result.Presets.Count | Should -BeGreaterThan 30
+        $result.Presets['Cloudflare DNS'].DoHTemplate | Should -Be 'https://cloudflare-dns.com/dns-query'
+        $result.Presets['Cloudflare DNS'].DoTHost | Should -Be 'one.one.one.one:853'
+        $result.Presets['Cloudflare DNS'].Capabilities | Should -Contain 'doh'
+        $result.Presets['AdGuard DNS'].Capabilities | Should -Contain 'ad-blocking'
+    }
+
+    It 'rejects invalid catalog providers before replacing defaults' {
+        $catalog = [pscustomobject]@{
+            SchemaVersion = 1
+            Providers = @(
+                [pscustomobject]@{
+                    Name = 'Broken DNS'
+                    Category = 'Public'
+                    Description = 'Invalid provider'
+                    IPv4 = @('999.999.999.999')
+                    IPv6 = @('not-ipv6')
+                    DoH = 'http://example.test/dns-query'
+                    DoT = 'bad host'
+                    DoQ = 'udp://example.test'
+                    Capabilities = @('ipv4', 'unknown')
+                }
+            )
+        }
+
+        $result = ConvertFrom-DnsProviderCatalog -Catalog $catalog
+
+        $result.IsValid | Should -BeFalse
+        $result.Message | Should -Match 'invalid IPv4'
+        $result.Message | Should -Match 'unknown capability'
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

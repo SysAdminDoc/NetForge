@@ -52,6 +52,7 @@ $readmePath = Join-Path $repoRoot 'README.md'
 if (Test-Path -LiteralPath $readmePath) {
     $readmeText = Get-Content -Raw -LiteralPath $readmePath
     $readmeText = $readmeText -replace 'Version-\d+\.\d+\.\d+-orange', "Version-$Version-orange"
+    $readmeText = $readmeText -replace '(Set-NetForgeVersion\.ps1 -Version )\d+\.\d+\.\d+', "`${1}$Version"
     Set-Utf8Text -Path $readmePath -Text $readmeText
 }
 

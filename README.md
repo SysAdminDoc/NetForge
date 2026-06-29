@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.23.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.24.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -67,6 +67,7 @@
 - Custom DNS server configuration
 - IPv6 DNS support for compatible presets
 - Windows DoH and DoT encryption registration through `netsh dns add encryption`
+- DNS providers load from a validated `dns-providers.json` catalog with a SHA256 sidecar and embedded defaults fallback
 - Preset DoH templates and DoT hosts for Google, Cloudflare, Quad9, and AdGuard
 - Custom DoH template and DoT host entry for account-specific providers
 - DNS health output with configured adapter DNS, config leak guard, DoH/DoT probes, UDP fallback state, DoQ proxy listener state, and resolver latency preview
@@ -174,7 +175,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.23.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.24.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
