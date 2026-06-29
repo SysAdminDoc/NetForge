@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.38.0
+    Version: 1.39.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.38.0"
+$script:AppVersion = "1.39.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -113,6 +113,8 @@ $script:AccessibilityNames = @{
     txtMetricValue = "Interface metric value"
     btnApplyMetric = "Apply interface metric"
     btnAutoMetric = "Restore automatic interface metric"
+    btnIPv4FirstMetric = "Prefer IPv4 binding priority"
+    btnIPv6FirstMetric = "Prefer IPv6 binding priority"
     rbDHCP = "Use DHCP IP configuration"
     rbStatic = "Use static IP configuration"
     txtIPAddress = "Static IP address"
@@ -222,6 +224,7 @@ $script:AccessibilityNames = @{
 }
 $script:AccessibilityTabOrder = @(
     "lstAdapters", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
+    "txtInterfaceMetric", "chkMetricIPv4", "chkMetricIPv6", "btnApplyMetric", "btnAutoMetric", "btnIPv4FirstMetric", "btnIPv6FirstMetric",
     "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "chkConfigureIPv6Address", "txtIPv6Address", "txtIPv6Prefix", "txtIPv6Gateway", "btnApplyIP",
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
     "lstProfiles", "btnNewProfile", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
@@ -1181,7 +1184,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.38.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.39.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1442,7 +1445,9 @@ function Apply-Localization {
 
                                         <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Width="150">
                                             <Button x:Name="btnApplyMetric" Content="Apply Metric" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
-                                            <Button x:Name="btnAutoMetric" Content="Auto Metric" Style="{StaticResource ModernButton}" Padding="14,8"/>
+                                            <Button x:Name="btnAutoMetric" Content="Auto Metric" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnIPv4FirstMetric" Content="IPv4 First" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnIPv6FirstMetric" Content="IPv6 First" Style="{StaticResource ModernButton}" Padding="14,8"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -2474,7 +2479,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.38.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.39.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3862,6 +3867,57 @@ function Test-ValidInterfaceMetric {
     $value = 0
     if (-not [int]::TryParse($Metric, [ref]$value)) { return $false }
     return ($value -ge 1 -and $value -le 9999)
+}
+
+function Get-AdapterBindingPriorityPlan {
+    param([string]$Mode)
+
+    switch ($Mode) {
+        "IPv4First" {
+            return [pscustomobject]@{
+                Mode = "IPv4First"
+                IPv4Metric = 10
+                IPv6Metric = 50
+                Description = "IPv4 first"
+            }
+        }
+        "IPv6First" {
+            return [pscustomobject]@{
+                Mode = "IPv6First"
+                IPv4Metric = 50
+                IPv6Metric = 10
+                Description = "IPv6 first"
+            }
+        }
+        default {
+            throw "Unknown binding priority mode '$Mode'."
+        }
+    }
+}
+
+function Invoke-AdapterBindingPriority {
+    param([string]$Mode)
+
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    try {
+        $plan = Get-AdapterBindingPriorityPlan -Mode $Mode
+        Update-Status "Applying $($plan.Description) binding priority to $($adapter.Name)..."
+        Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -AutomaticMetric Disabled -InterfaceMetric $plan.IPv4Metric -ErrorAction Stop
+        Set-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv6 -AutomaticMetric Disabled -InterfaceMetric $plan.IPv6Metric -ErrorAction Stop
+        Show-InterfaceMetricDisplay
+        Update-AdapterDetails
+        Write-OperationLog -Action "Adapter binding priority" -Result "Succeeded" -Detail "Adapter=$($adapter.Name); Mode=$($plan.Mode); IPv4=$($plan.IPv4Metric); IPv6=$($plan.IPv6Metric)"
+        Update-Status "$($plan.Description) binding priority applied to $($adapter.Name)" -Type Success
+    } catch {
+        Update-Status "Binding priority update failed: $($_.Exception.Message)" -Type Error
+        Write-OperationLog -Action "Adapter binding priority" -Result "Failed" -Detail $_.Exception.Message
+        Show-MessageBox -Message "Failed to apply adapter binding priority:`n$($_.Exception.Message)" -Title "Binding Priority Failed" -Icon Error
+    }
 }
 
 function Invoke-ApplyInterfaceMetric {
@@ -10605,6 +10661,8 @@ $btnApplyMac.Add_Click({ Invoke-MacOverride })
 $btnRevertMac.Add_Click({ Invoke-MacRevert })
 $btnApplyMetric.Add_Click({ Invoke-ApplyInterfaceMetric })
 $btnAutoMetric.Add_Click({ Invoke-AutomaticInterfaceMetric })
+$btnIPv4FirstMetric.Add_Click({ Invoke-AdapterBindingPriority -Mode "IPv4First" })
+$btnIPv6FirstMetric.Add_Click({ Invoke-AdapterBindingPriority -Mode "IPv6First" })
 $btnApplyIP.Add_Click({ Apply-IPConfiguration })
 $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
 $btnRegisterDoh.Add_Click({ Register-DohEncryption })

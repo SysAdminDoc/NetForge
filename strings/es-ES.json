@@ -32,6 +32,8 @@
     "button.generate": "Generar",
     "button.hostsAddEntry": "Agregar entrada",
     "button.import": "Importar",
+    "button.ipv4First": "IPv4 primero",
+    "button.ipv6First": "IPv6 primero",
     "button.latencyHistogram.idle": "Histograma de latencia",
     "button.latencyHistogram.running": "Ejecutando...",
     "button.mtr.start": "Iniciar MTR",

@@ -622,6 +622,25 @@ Describe 'Endpoint privacy policy' {
     }
 }
 
+Describe 'Interface metric priority helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-AdapterBindingPriorityPlan'
+        )
+    }
+
+    It 'builds IPv4-first and IPv6-first metric plans' {
+        $ipv4First = Get-AdapterBindingPriorityPlan -Mode 'IPv4First'
+        $ipv6First = Get-AdapterBindingPriorityPlan -Mode 'IPv6First'
+
+        $ipv4First.IPv4Metric | Should -BeLessThan $ipv4First.IPv6Metric
+        $ipv6First.IPv6Metric | Should -BeLessThan $ipv6First.IPv4Metric
+        $ipv4First.Description | Should -Be 'IPv4 first'
+        $ipv6First.Description | Should -Be 'IPv6 first'
+        { Get-AdapterBindingPriorityPlan -Mode 'BadMode' } | Should -Throw
+    }
+}
+
 Describe 'Latency histogram helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

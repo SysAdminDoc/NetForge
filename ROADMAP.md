@@ -13,7 +13,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### Diagnostics
 
 ### IPv6 & Advanced
-- Adapter binding priority (IPv4-first vs IPv6-first)
 
 ### UX
 - System tray mode with quick DNS / profile switcher
