@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.46.0
+    Version: 1.47.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -90,7 +90,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.46.0"
+$script:AppVersion = "1.47.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -134,6 +134,9 @@ $script:CachedPublicIP = $null
 $script:PublicIpLookupEnabled = $true
 $script:ExternalSpeedTestEnabled = $true
 $script:SpeedTestEndpoint = "https://speed.cloudflare.com/__down?bytes=1048576"
+$script:DiscordWebhookEnabled = $false
+$script:DiscordWebhookUrl = ""
+$script:DiscordWebhookLastStatus = "Discord webhook notifications are disabled."
 $script:SpeedTestRunning = $false
 $script:WifiScanRunning = $false
 $script:WifiNetworks = @()
@@ -260,6 +263,9 @@ $script:AccessibilityNames = @{
     chkExternalSpeedTest = "Allow external speed test downloads"
     cmbSpeedTestEndpoint = "Speed test endpoint"
     btnSaveEndpointPolicy = "Save endpoint policy"
+    chkDiscordWebhook = "Enable Discord profile webhook"
+    txtDiscordWebhookUrl = "Discord profile webhook URL"
+    btnSaveDiscordWebhook = "Save Discord profile webhook"
     txtDiagPingTarget = "Diagnostics ping target"
     btnDiagPing = "Run diagnostics ping test"
     btnContinuousPing = "Start continuous ping"
@@ -308,7 +314,7 @@ $script:AccessibilityTabOrder = @(
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
     "txtHostsGroupName", "txtHostsAddress", "txtHostsNames", "btnHostsAddEntry", "btnHostsToggleGroup", "btnHostsRemoveGroup", "btnHostsRefresh", "btnHostsApply", "lstHostsGroups",
-    "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy",
+    "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy", "chkDiscordWebhook", "txtDiscordWebhookUrl", "btnSaveDiscordWebhook",
     "txtDiagPingTarget", "btnDiagPing", "btnContinuousPing", "txtLatencyHistogramSeconds", "btnLatencyHistogram"
 )
 
@@ -444,6 +450,12 @@ if (Test-Path -LiteralPath $script:SettingsFile) {
         }
         if ($settings.SpeedTestEndpoint) {
             $script:SpeedTestEndpoint = [string]$settings.SpeedTestEndpoint
+        }
+        if ($null -ne $settings.DiscordWebhookEnabled) {
+            $script:DiscordWebhookEnabled = -not (([string]$settings.DiscordWebhookEnabled).Trim() -match '^(0|false|no|off|disabled)$')
+        }
+        if ($settings.DiscordWebhookUrl) {
+            $script:DiscordWebhookUrl = ([string]$settings.DiscordWebhookUrl).Trim()
         }
     } catch {
         $script:ProfileStoreLoadWarning = "Could not read settings.json; using local profile storage. $($_.Exception.Message)"
@@ -1382,7 +1394,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.46.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.47.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2338,6 +2350,8 @@ function Apply-Localization {
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="2*"/>
@@ -2585,7 +2599,20 @@ function Apply-Localization {
                                             <Button x:Name="btnSaveEndpointPolicy" Grid.Column="2" Content="Save Policy" Style="{StaticResource PrimaryButton}" Padding="16,8"/>
                                         </Grid>
 
-                                        <TextBlock x:Name="txtEndpointPolicyStatus" Grid.Row="2" Text="Endpoint policy settings load from settings.json." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="txtEndpointPolicyStatus" Grid.Row="2" Text="Endpoint policy settings load from settings.json." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                        <Grid Grid.Row="3" Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox x:Name="chkDiscordWebhook" Grid.Column="0" Content="Profile apply webhook" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <TextBox x:Name="txtDiscordWebhookUrl" Grid.Column="1" Style="{StaticResource ModernTextBox}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnSaveDiscordWebhook" Grid.Column="2" Content="Save Webhook" Style="{StaticResource ModernButton}" Padding="16,8"/>
+                                        </Grid>
+
+                                        <TextBlock x:Name="txtDiscordWebhookStatus" Grid.Row="4" Text="Discord webhook notifications are disabled." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                                     </Grid>
                                 </Border>
 
@@ -2723,7 +2750,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.46.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.47.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -8899,6 +8926,332 @@ function Save-EndpointPolicySettings {
     Update-Status "Endpoint policy saved" -Type Success
 }
 
+function ConvertTo-DiscordWebhookSafeText {
+    param(
+        $Value,
+        [int]$MaxLength = 256
+    )
+
+    if ($null -eq $Value) { return "Unknown" }
+    if ($MaxLength -lt 4) { $MaxLength = 4 }
+
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return "Unknown" }
+
+    $text = [regex]::Replace($text, '[\x00-\x1F\x7F]', ' ')
+    $text = [regex]::Replace($text, '\s+', ' ').Trim()
+    if ($text.Length -le $MaxLength) { return $text }
+
+    return ($text.Substring(0, $MaxLength - 3) + "...")
+}
+
+function Test-DiscordWebhookUrl {
+    param([string]$Url)
+
+    if ([string]::IsNullOrWhiteSpace($Url)) { return $false }
+
+    $parsedUri = $null
+    if (-not [System.Uri]::TryCreate($Url.Trim(), [System.UriKind]::Absolute, [ref]$parsedUri)) {
+        return $false
+    }
+
+    $webhookHost = $parsedUri.Host.ToLowerInvariant()
+    if ($parsedUri.Scheme -ne [System.Uri]::UriSchemeHttps) { return $false }
+    if ($webhookHost -notin @("discord.com", "discordapp.com")) { return $false }
+    if (-not [string]::IsNullOrWhiteSpace($parsedUri.Query)) { return $false }
+    if (-not [string]::IsNullOrWhiteSpace($parsedUri.Fragment)) { return $false }
+
+    $path = $parsedUri.AbsolutePath.TrimEnd("/")
+    return ($path -match '^/api/webhooks/[0-9]{15,25}/[A-Za-z0-9_\.-]+$')
+}
+
+function Get-DiscordWebhookRedactedUrl {
+    param([string]$Url)
+
+    if (-not (Test-DiscordWebhookUrl -Url $Url)) {
+        return "invalid Discord webhook URL"
+    }
+
+    $parsedUri = [System.Uri]$Url.Trim()
+    $segments = @($parsedUri.AbsolutePath.Trim("/").Split("/"))
+    $webhookId = if ($segments.Count -ge 3) { $segments[2] } else { "unknown" }
+    return "$($parsedUri.Scheme)://$($parsedUri.Host)/api/webhooks/$webhookId/[redacted]"
+}
+
+function New-DiscordProfileWebhookPayload {
+    param(
+        [pscustomobject]$ProfileData,
+        $Adapter,
+        [string]$Source = "Manual"
+    )
+
+    $profileName = "Unknown"
+    if ($ProfileData -and $ProfileData.PSObject.Properties["Name"]) {
+        $profileName = ConvertTo-DiscordWebhookSafeText -Value $ProfileData.Name -MaxLength 256
+    }
+
+    $adapterName = "Unknown"
+    if ($Adapter -and $Adapter.PSObject.Properties["Name"]) {
+        $adapterName = ConvertTo-DiscordWebhookSafeText -Value $Adapter.Name -MaxLength 256
+    }
+
+    $adapterIndex = "Unknown"
+    if ($Adapter -and $Adapter.PSObject.Properties["ifIndex"]) {
+        $adapterIndex = ConvertTo-DiscordWebhookSafeText -Value $Adapter.ifIndex -MaxLength 32
+    } elseif ($Adapter -and $Adapter.PSObject.Properties["InterfaceIndex"]) {
+        $adapterIndex = ConvertTo-DiscordWebhookSafeText -Value $Adapter.InterfaceIndex -MaxLength 32
+    }
+
+    $hostName = ConvertTo-DiscordWebhookSafeText -Value $env:COMPUTERNAME -MaxLength 128
+    $sourceName = ConvertTo-DiscordWebhookSafeText -Value $Source -MaxLength 64
+    $utcNow = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ", [System.Globalization.CultureInfo]::InvariantCulture)
+
+    $fields = @(
+        [ordered]@{ name = "Profile"; value = $profileName; inline = $true },
+        [ordered]@{ name = "Adapter"; value = "$adapterName [$adapterIndex]"; inline = $true },
+        [ordered]@{ name = "Source"; value = $sourceName; inline = $true },
+        [ordered]@{ name = "Host"; value = $hostName; inline = $true },
+        [ordered]@{ name = "Version"; value = $script:AppVersion; inline = $true },
+        [ordered]@{ name = "Time"; value = $utcNow; inline = $true }
+    )
+
+    $payload = [ordered]@{
+        username = "NetForge"
+        content = "NetForge applied profile '$profileName' on $hostName."
+        allowed_mentions = [ordered]@{
+            parse = @()
+        }
+        embeds = @(
+            [ordered]@{
+                title = "Profile applied"
+                color = 16753920
+                timestamp = $utcNow
+                fields = $fields
+            }
+        )
+    }
+
+    return ($payload | ConvertTo-Json -Depth 8 -Compress)
+}
+
+function Invoke-DiscordWebhookPost {
+    param(
+        [string]$WebhookUrl,
+        [string]$PayloadJson,
+        [string]$AppVersion
+    )
+
+    $request = $null
+    $requestStream = $null
+    $response = $null
+
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+    } catch {
+        [void]$_.Exception
+    }
+
+    try {
+        $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($WebhookUrl)
+        $request.Method = "POST"
+        $request.ContentType = "application/json"
+        $request.UserAgent = "NetForge/$AppVersion"
+        $request.Timeout = 5000
+        $request.ReadWriteTimeout = 5000
+
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($PayloadJson)
+        $request.ContentLength = $bytes.Length
+        $requestStream = $request.GetRequestStream()
+        $requestStream.Write($bytes, 0, $bytes.Length)
+        $requestStream.Dispose()
+        $requestStream = $null
+
+        $response = [System.Net.HttpWebResponse]$request.GetResponse()
+        return [pscustomobject]@{
+            Success = $true
+            StatusCode = [int]$response.StatusCode
+            Error = ""
+        }
+    } catch [System.Net.WebException] {
+        $statusCode = 0
+        if ($_.Exception.Response -is [System.Net.HttpWebResponse]) {
+            $statusCode = [int]$_.Exception.Response.StatusCode
+        }
+
+        return [pscustomobject]@{
+            Success = $false
+            StatusCode = $statusCode
+            Error = $_.Exception.Message
+        }
+    } catch {
+        return [pscustomobject]@{
+            Success = $false
+            StatusCode = 0
+            Error = $_.Exception.Message
+        }
+    } finally {
+        if ($requestStream) { $requestStream.Dispose() }
+        if ($response) { $response.Dispose() }
+    }
+}
+
+function Set-DiscordWebhookStatus {
+    param([string]$Message)
+
+    if ([string]::IsNullOrWhiteSpace($Message)) {
+        $Message = "Discord webhook notifications are disabled."
+    }
+
+    $script:DiscordWebhookLastStatus = $Message
+    if ($script:txtDiscordWebhookStatus) {
+        $script:txtDiscordWebhookStatus.Text = $Message
+    }
+}
+
+function Complete-DiscordWebhookResult {
+    param(
+        $Result,
+        [string]$RedactedUrl
+    )
+
+    if ($Result -and $Result.Success) {
+        Set-DiscordWebhookStatus -Message "Last Discord webhook sent to $RedactedUrl."
+        Write-OperationLog -Action "Discord profile webhook" -Result "Succeeded" -Detail "Endpoint=$RedactedUrl; StatusCode=$($Result.StatusCode)"
+        return
+    }
+
+    $errorText = if ($Result -and $Result.Error) { [string]$Result.Error } else { "Unknown webhook error." }
+    Set-DiscordWebhookStatus -Message "Discord webhook failed: $errorText"
+    Write-OperationLog -Action "Discord profile webhook" -Result "Failed" -Detail "Endpoint=$RedactedUrl; $errorText"
+}
+
+function Initialize-DiscordWebhookControls {
+    if ($script:chkDiscordWebhook) {
+        $script:chkDiscordWebhook.IsChecked = [bool]$script:DiscordWebhookEnabled
+    }
+    if ($script:txtDiscordWebhookUrl) {
+        $script:txtDiscordWebhookUrl.Text = [string]$script:DiscordWebhookUrl
+    }
+
+    if (-not $script:DiscordWebhookEnabled) {
+        Set-DiscordWebhookStatus -Message "Discord webhook notifications are disabled."
+    } elseif (Test-DiscordWebhookUrl -Url $script:DiscordWebhookUrl) {
+        Set-DiscordWebhookStatus -Message "Discord webhook enabled for $(Get-DiscordWebhookRedactedUrl -Url $script:DiscordWebhookUrl)."
+    } else {
+        Set-DiscordWebhookStatus -Message "Discord webhook is enabled, but the saved URL is invalid."
+    }
+}
+
+function Save-DiscordWebhookSettings {
+    $enabled = ($script:chkDiscordWebhook -and $script:chkDiscordWebhook.IsChecked -eq $true)
+    $url = ""
+    if ($script:txtDiscordWebhookUrl) {
+        $url = ([string]$script:txtDiscordWebhookUrl.Text).Trim()
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($url) -and -not (Test-DiscordWebhookUrl -Url $url)) {
+        Set-DiscordWebhookStatus -Message "Discord webhook URL must be an HTTPS discord.com/api/webhooks URL."
+        Write-OperationLog -Action "Discord profile webhook" -Result "Rejected" -Detail "Invalid webhook URL was not saved."
+        Update-Status "Discord webhook URL rejected" -Type Warning
+        return
+    }
+
+    if ($enabled -and [string]::IsNullOrWhiteSpace($url)) {
+        Set-DiscordWebhookStatus -Message "Discord webhook URL is required before enabling notifications."
+        Write-OperationLog -Action "Discord profile webhook" -Result "Rejected" -Detail "Webhook enable requested without a URL."
+        Update-Status "Discord webhook URL required" -Type Warning
+        return
+    }
+
+    $script:DiscordWebhookEnabled = $enabled
+    $script:DiscordWebhookUrl = $url
+
+    Save-AppSetting -Name "DiscordWebhookEnabled" -Value $enabled
+    Save-AppSetting -Name "DiscordWebhookUrl" -Value $url
+
+    if ($enabled) {
+        $redactedUrl = Get-DiscordWebhookRedactedUrl -Url $url
+        Set-DiscordWebhookStatus -Message "Discord webhook enabled for $redactedUrl."
+        Write-OperationLog -Action "Discord profile webhook" -Result "Saved" -Detail "Enabled=True; Endpoint=$redactedUrl"
+    } else {
+        Set-DiscordWebhookStatus -Message "Discord webhook notifications are disabled."
+        Write-OperationLog -Action "Discord profile webhook" -Result "Saved" -Detail "Enabled=False"
+    }
+
+    Update-Status "Discord webhook settings saved" -Type Success
+}
+
+function Send-DiscordProfileWebhook {
+    param(
+        [pscustomobject]$ProfileData,
+        $Adapter,
+        [string]$Source = "Manual",
+        [switch]$Synchronous
+    )
+
+    if (-not $script:DiscordWebhookEnabled) { return }
+    if (-not (Test-DiscordWebhookUrl -Url $script:DiscordWebhookUrl)) {
+        Set-DiscordWebhookStatus -Message "Discord webhook skipped because the saved URL is invalid."
+        Write-OperationLog -Action "Discord profile webhook" -Result "Rejected" -Detail "Saved webhook URL is invalid."
+        return
+    }
+
+    $url = [string]$script:DiscordWebhookUrl
+    $redactedUrl = Get-DiscordWebhookRedactedUrl -Url $url
+    $payloadJson = New-DiscordProfileWebhookPayload -ProfileData $ProfileData -Adapter $Adapter -Source $Source
+
+    if ($Synchronous) {
+        Set-DiscordWebhookStatus -Message "Sending Discord webhook to $redactedUrl..."
+        $result = Invoke-DiscordWebhookPost -WebhookUrl $url -PayloadJson $payloadJson -AppVersion $script:AppVersion
+        Complete-DiscordWebhookResult -Result $result -RedactedUrl $redactedUrl
+        return
+    }
+
+    Set-DiscordWebhookStatus -Message "Sending Discord webhook to $redactedUrl..."
+
+    try {
+        $ps = [PowerShell]::Create()
+        $postFunction = ${function:Invoke-DiscordWebhookPost}.ToString()
+        $asyncScript = @"
+param(
+    [string]`$WebhookUrl,
+    [string]`$PayloadJson,
+    [string]`$AppVersion
+)
+
+function Invoke-DiscordWebhookPost {
+$postFunction
+}
+
+Invoke-DiscordWebhookPost -WebhookUrl `$WebhookUrl -PayloadJson `$PayloadJson -AppVersion `$AppVersion
+"@
+        $ps.AddScript($asyncScript).AddArgument($url).AddArgument($payloadJson).AddArgument($script:AppVersion)
+
+        $handle = $ps.BeginInvoke()
+        $timer = New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval = [TimeSpan]::FromMilliseconds(500)
+        $timer.Add_Tick({
+            if ($handle.IsCompleted) {
+                try {
+                    $result = $ps.EndInvoke($handle)
+                    $info = if ($result -and $result.Count -gt 0) { $result[0] } else { $null }
+                    Complete-DiscordWebhookResult -Result $info -RedactedUrl $redactedUrl
+                } catch {
+                    Set-DiscordWebhookStatus -Message "Discord webhook failed: $($_.Exception.Message)"
+                    Write-OperationLog -Action "Discord profile webhook" -Result "Failed" -Detail "Endpoint=$redactedUrl; $($_.Exception.Message)"
+                } finally {
+                    $ps.Dispose()
+                    $timer.Stop()
+                }
+            }
+        }.GetNewClosure())
+        $timer.Start()
+    } catch {
+        Set-DiscordWebhookStatus -Message "Discord webhook failed to start: $($_.Exception.Message)"
+        Write-OperationLog -Action "Discord profile webhook" -Result "Failed" -Detail "Endpoint=$redactedUrl; $($_.Exception.Message)"
+    }
+}
+
 function Test-ProfileStorePath {
     param(
         [string]$Path,
@@ -9619,6 +9972,7 @@ function Invoke-ApplyProfileObject {
     if ($success) {
         $script:LastAutoAppliedProfile = if ($Source -eq "Auto") { $ProfileData.Name } else { $script:LastAutoAppliedProfile }
         Update-Status "Profile '$($ProfileData.Name)' applied successfully" -Type Success
+        Send-DiscordProfileWebhook -ProfileData $ProfileData -Adapter $Adapter -Source $Source -Synchronous:($Source -eq "Cli")
         if ($Source -ne "Cli" -and $script:txtAdapterName) {
             Start-Sleep -Milliseconds 500
             Update-AdapterDisplay
@@ -12438,6 +12792,7 @@ $btnLatencyHistogram.Add_Click({ Invoke-LatencyHistogram })
 $btnSpeedTest.Add_Click({ Invoke-SpeedTest })
 $btnDnsLookup.Add_Click({ Invoke-DnsLookup })
 $btnSaveEndpointPolicy.Add_Click({ Save-EndpointPolicySettings })
+$btnSaveDiscordWebhook.Add_Click({ Save-DiscordWebhookSettings })
 
 # ============================================================================
 # CONNECTION STATUS TIMER (auto-refresh every 30 seconds)
@@ -12533,6 +12888,7 @@ Initialize-ThemeSelector
 Initialize-CompactModeControl
 Initialize-SystemTray
 Initialize-EndpointPolicyControls
+Initialize-DiscordWebhookControls
 Show-RestoreSnapshotButtonState
 Update-ConnectionStatus
 Update-PublicIP

@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.46.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.47.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -91,6 +91,7 @@
 - Import/export profiles as JSON or PNG QR codes, plus import Windows WLAN profile XML from `netsh wlan export profile`
 - CLI profile apply for scripts with `-ApplyProfile`, optional `-AdapterName`, and `-Silent`
 - Remote Desktop launch workflow that applies a profile first and reverts the previous network state when RDP exits
+- Optional Discord webhook notification after successful profile applies for fleet visibility
 - Perfect for switching between work, home, and other networks
 
 ### Network Tools
@@ -134,6 +135,7 @@
 - **Continuous Ping**: Toggle on/off, pings every 2 seconds with color-coded results (green <50ms, yellow 50-100ms, red >100ms)
 - **Latency Histogram**: Timed endpoint probe with bucketed latency distribution, p50/p95, and loss percentage
 - **Endpoint Policy**: Disable public-IP lookup, disable external speed-test downloads, and choose the HTTPS-only speed-test endpoint
+- **Profile Webhook**: Opt-in Discord webhook for successful profile applies with redacted endpoint logging
 - **Speed Test**: Downloads from the selected HTTPS endpoint and logs the contacted endpoint
 - **DNS Lookup**: Resolve any domain to IP addresses, shows responding DNS server
 
@@ -217,7 +219,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.46.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.47.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
@@ -263,6 +265,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Go to Diagnostics
    - Disable public-IP lookup or external speed-test downloads when working offline or privately
    - Select the HTTPS speed-test endpoint and click "Save Policy"
+   - Optionally enable the profile apply Discord webhook with an HTTPS `discord.com/api/webhooks/...` URL
 
 ### DNS Presets Quick Reference
 
@@ -287,7 +290,7 @@ NetForge stores its configuration in:
 ```
 
 Set `UiLocale` in `settings.json` to a shipped locale such as `en-US` or `es-ES` to change the UI language on the next launch.
-Set `PublicIpLookupEnabled`, `ExternalSpeedTestEnabled`, and `SpeedTestEndpoint` in `settings.json` or use the Diagnostics endpoint-policy panel to control external diagnostic calls.
+Set `PublicIpLookupEnabled`, `ExternalSpeedTestEnabled`, `SpeedTestEndpoint`, `DiscordWebhookEnabled`, and `DiscordWebhookUrl` in `settings.json` or use the Diagnostics endpoint-policy panel to control external diagnostic calls and profile notifications.
 
 ## Troubleshooting
 

@@ -839,8 +839,14 @@ Describe 'Endpoint privacy policy' {
             'Test-HttpsEndpointUri',
             'Get-PublicIpEndpointList',
             'Get-SpeedTestEndpointCatalog',
-            'Resolve-SpeedTestEndpoint'
+            'Resolve-SpeedTestEndpoint',
+            'ConvertTo-DiscordWebhookSafeText',
+            'Test-DiscordWebhookUrl',
+            'Get-DiscordWebhookRedactedUrl',
+            'New-DiscordProfileWebhookPayload'
         )
+        $versionMetadata = Get-Content -Raw -LiteralPath (Join-Path $script:RepoRoot 'version.json') | ConvertFrom-Json
+        $script:AppVersion = [string]$versionMetadata.Version
     }
 
     It 'normalizes persisted endpoint policy booleans' {
@@ -877,6 +883,35 @@ Describe 'Endpoint privacy policy' {
         $source | Should -Match 'PublicIpLookupEnabled'
         $source | Should -Match 'ExternalSpeedTestEnabled'
         $source | Should -Match 'SpeedTestEndpoint'
+        $source | Should -Match 'DiscordWebhookEnabled'
+    }
+
+    It 'accepts only Discord HTTPS webhook URLs and redacts tokens' {
+        Test-DiscordWebhookUrl -Url 'https://discord.com/api/webhooks/123456789012345678/abc.DEF_ghi-jkl' | Should -BeTrue
+        Test-DiscordWebhookUrl -Url 'https://discordapp.com/api/webhooks/123456789012345678/abc.DEF_ghi-jkl' | Should -BeTrue
+        Test-DiscordWebhookUrl -Url 'http://discord.com/api/webhooks/123456789012345678/abc' | Should -BeFalse
+        Test-DiscordWebhookUrl -Url 'https://discord.com.evil.example/api/webhooks/123456789012345678/abc' | Should -BeFalse
+        Test-DiscordWebhookUrl -Url 'https://discord.com/api/webhooks/123456789012345678/abc?wait=true' | Should -BeFalse
+        Test-DiscordWebhookUrl -Url 'https://discord.com/channels/123' | Should -BeFalse
+
+        Get-DiscordWebhookRedactedUrl -Url 'https://discord.com/api/webhooks/123456789012345678/abc.DEF_ghi-jkl' | Should -Be 'https://discord.com/api/webhooks/123456789012345678/[redacted]'
+    }
+
+    It 'builds a Discord profile payload without webhook secrets or mentions' {
+        $profile = [pscustomobject]@{ Name = 'Clinic @everyone' }
+        $adapter = [pscustomobject]@{ Name = 'Wi-Fi'; ifIndex = 12 }
+
+        $payloadJson = New-DiscordProfileWebhookPayload -ProfileData $profile -Adapter $adapter -Source 'Manual'
+        $payload = $payloadJson | ConvertFrom-Json
+
+        $payload.username | Should -Be 'NetForge'
+        $payload.content | Should -Match 'Clinic @everyone'
+        $payload.allowed_mentions.parse.Count | Should -Be 0
+        $payload.embeds[0].title | Should -Be 'Profile applied'
+        ($payload.embeds[0].fields | Where-Object { $_.name -eq 'Profile' }).value | Should -Be 'Clinic @everyone'
+        ($payload.embeds[0].fields | Where-Object { $_.name -eq 'Adapter' }).value | Should -Be 'Wi-Fi [12]'
+        ($payload.embeds[0].fields | Where-Object { $_.name -eq 'Source' }).value | Should -Be 'Manual'
+        $payloadJson | Should -Not -Match 'api/webhooks'
     }
 }
 
