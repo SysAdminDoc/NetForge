@@ -596,6 +596,67 @@ Describe 'Endpoint privacy policy' {
     }
 }
 
+Describe 'Latency histogram helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Resolve-LatencyHistogramDuration',
+            'Get-LatencyPercentile',
+            'Get-LatencyHistogramBucketDefinitions',
+            'New-LatencyHistogramBucket',
+            'Get-LatencyHistogramSummary',
+            'Format-LatencyHistogramValue',
+            'Format-LatencyHistogramReport'
+        )
+    }
+
+    It 'validates bounded histogram durations' {
+        $valid = Resolve-LatencyHistogramDuration -Value '45'
+        $tooShort = Resolve-LatencyHistogramDuration -Value '4'
+        $invalid = Resolve-LatencyHistogramDuration -Value 'abc'
+
+        $valid.IsValid | Should -BeTrue
+        $valid.Seconds | Should -Be 45
+        $tooShort.IsValid | Should -BeFalse
+        $tooShort.Message | Should -Match 'between 5 and 300'
+        $invalid.IsValid | Should -BeFalse
+        $invalid.Seconds | Should -Be 30
+    }
+
+    It 'summarizes latency buckets, percentiles, and loss' {
+        $samples = @(
+            [pscustomobject]@{ Success = $true; LatencyMs = 10 },
+            [pscustomobject]@{ Success = $true; LatencyMs = 25 },
+            [pscustomobject]@{ Success = $true; LatencyMs = 75 },
+            [pscustomobject]@{ Success = $true; LatencyMs = 250 },
+            [pscustomobject]@{ Success = $true; LatencyMs = 700 },
+            [pscustomobject]@{ Success = $false; LatencyMs = -1 },
+            [pscustomobject]@{ Success = $false; LatencyMs = $null }
+        )
+
+        $summary = Get-LatencyHistogramSummary -Samples $samples -Target 'example.com' -DurationSeconds 7
+        $timeoutBucket = $summary.Buckets | Where-Object { $_.Label -eq 'Timeout/loss' }
+        $fastBucket = $summary.Buckets | Where-Object { $_.Label -eq '0-19 ms' }
+
+        $summary.SampleCount | Should -Be 7
+        $summary.SuccessCount | Should -Be 5
+        $summary.LossCount | Should -Be 2
+        $summary.LossPercent | Should -Be 28.6
+        $summary.MinMs | Should -Be 10
+        $summary.AvgMs | Should -Be 212
+        $summary.MaxMs | Should -Be 700
+        $summary.P50Ms | Should -Be 75
+        $summary.P95Ms | Should -Be 700
+        $fastBucket.Count | Should -Be 1
+        $timeoutBucket.Count | Should -Be 2
+        $timeoutBucket.Bar.Length | Should -BeGreaterThan 0
+
+        $report = Format-LatencyHistogramReport -Summary $summary
+        $report | Should -Match 'Latency histogram for example.com over 7s'
+        $report | Should -Match 'P50/P95: 75 ms / 700 ms'
+        $report | Should -Match 'Timeout/loss'
+    }
+}
+
 Describe 'MTR history helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

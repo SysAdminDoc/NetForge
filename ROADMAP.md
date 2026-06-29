@@ -11,7 +11,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### Profiles
 
 ### Diagnostics
-- Latency histogram to any endpoint over N seconds
 
 ### IPv6 & Advanced
 - IPv6 address/prefix configuration UI (currently IPv4-centric)

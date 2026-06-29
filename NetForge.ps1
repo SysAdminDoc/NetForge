@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.34.0
+    Version: 1.35.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.34.0"
+$script:AppVersion = "1.35.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -182,6 +182,12 @@ $script:AccessibilityNames = @{
     chkExternalSpeedTest = "Allow external speed test downloads"
     cmbSpeedTestEndpoint = "Speed test endpoint"
     btnSaveEndpointPolicy = "Save endpoint policy"
+    txtDiagPingTarget = "Diagnostics ping target"
+    btnDiagPing = "Run diagnostics ping test"
+    btnContinuousPing = "Start continuous ping"
+    txtLatencyHistogramSeconds = "Latency histogram duration in seconds"
+    btnLatencyHistogram = "Run latency histogram"
+    txtPingLog = "Ping and latency output"
     btnResetWinsock = "Reset Winsock"
     btnResetTCP = "Reset TCP IP stack"
     btnNetworkReset = "Full network reset"
@@ -204,7 +210,8 @@ $script:AccessibilityTabOrder = @(
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
-    "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy"
+    "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy",
+    "txtDiagPingTarget", "btnDiagPing", "btnContinuousPing", "txtLatencyHistogramSeconds", "btnLatencyHistogram"
 )
 
 if (Test-Path -LiteralPath $script:SettingsFile) {
@@ -608,6 +615,8 @@ function Get-DynamicLocalizationKeyList {
     return @(
         "button.continuousPing.start",
         "button.continuousPing.stop",
+        "button.latencyHistogram.idle",
+        "button.latencyHistogram.running",
         "button.mtr.start",
         "button.mtr.stop",
         "button.portScan.idle",
@@ -1150,7 +1159,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.34.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.35.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2208,6 +2217,18 @@ function Apply-Localization {
                                             <Button x:Name="btnContinuousPing" Content="Start Continuous Ping" Style="{StaticResource ModernButton}" Grid.Column="2"/>
                                         </Grid>
 
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Duration (sec)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <TextBox x:Name="txtLatencyHistogramSeconds" Grid.Column="1" Style="{StaticResource ModernTextBox}" Text="30" Width="80" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnLatencyHistogram" Content="Latency Histogram" Style="{StaticResource ModernButton}" Grid.Column="2"/>
+                                        </Grid>
+
                                         <!-- Ping Statistics -->
                                         <Border x:Name="pnlPingStats" Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16" Visibility="Collapsed">
                                             <Grid>
@@ -2314,7 +2335,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.34.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.35.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -4523,6 +4544,300 @@ function Invoke-DiagPingTest {
             $ps.Dispose()
             $script:btnDiagPing.IsEnabled = $true
             Update-Status "Ping test complete"
+            $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+function Resolve-LatencyHistogramDuration {
+    param(
+        [string]$Value,
+        [int]$DefaultSeconds = 30,
+        [int]$MinSeconds = 5,
+        [int]$MaxSeconds = 300
+    )
+
+    $seconds = 0
+    if (-not [int]::TryParse(([string]$Value).Trim(), [ref]$seconds)) {
+        return [pscustomobject]@{
+            IsValid = $false
+            Seconds = $DefaultSeconds
+            Message = "Enter a duration between $MinSeconds and $MaxSeconds seconds."
+        }
+    }
+
+    if ($seconds -lt $MinSeconds -or $seconds -gt $MaxSeconds) {
+        return [pscustomobject]@{
+            IsValid = $false
+            Seconds = $DefaultSeconds
+            Message = "Duration must be between $MinSeconds and $MaxSeconds seconds."
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = $true
+        Seconds = $seconds
+        Message = ""
+    }
+}
+
+function Get-LatencyPercentile {
+    param(
+        [int[]]$Values,
+        [double]$Percentile
+    )
+
+    $items = @($Values | Where-Object { $_ -ge 0 } | Sort-Object)
+    if ($items.Count -eq 0) { return $null }
+
+    $rank = [int][Math]::Ceiling(($Percentile / 100) * $items.Count)
+    $index = [Math]::Max(0, [Math]::Min(($items.Count - 1), ($rank - 1)))
+    return [int]$items[$index]
+}
+
+function Get-LatencyHistogramBucketDefinitions {
+    return @(
+        [pscustomobject]@{ Label = "0-19 ms"; Min = 0; Max = 19 },
+        [pscustomobject]@{ Label = "20-49 ms"; Min = 20; Max = 49 },
+        [pscustomobject]@{ Label = "50-99 ms"; Min = 50; Max = 99 },
+        [pscustomobject]@{ Label = "100-199 ms"; Min = 100; Max = 199 },
+        [pscustomobject]@{ Label = "200-499 ms"; Min = 200; Max = 499 },
+        [pscustomobject]@{ Label = "500+ ms"; Min = 500; Max = [int]::MaxValue }
+    )
+}
+
+function New-LatencyHistogramBucket {
+    param(
+        [string]$Label,
+        [int]$Count,
+        [int]$Total
+    )
+
+    $percent = 0
+    if ($Total -gt 0) {
+        $percent = [math]::Round(($Count / $Total) * 100, 1)
+    }
+
+    $barLength = 0
+    if ($Count -gt 0) {
+        $barLength = [Math]::Max(1, [Math]::Min(24, [int][Math]::Round($percent / 4)))
+    }
+
+    return [pscustomobject]@{
+        Label = $Label
+        Count = $Count
+        Percent = $percent
+        Bar = ("#" * $barLength)
+    }
+}
+
+function Get-LatencyHistogramSummary {
+    param(
+        [object[]]$Samples,
+        [string]$Target = "",
+        [int]$DurationSeconds = 0
+    )
+
+    $sampleList = @($Samples)
+    $latencies = New-Object System.Collections.Generic.List[int]
+    $lossCount = 0
+
+    foreach ($sample in $sampleList) {
+        $success = $false
+        if ($sample -and $sample.PSObject.Properties["Success"]) {
+            $success = [bool]$sample.Success
+        }
+
+        $latency = -1
+        if ($sample -and $sample.PSObject.Properties["LatencyMs"]) {
+            [void][int]::TryParse(([string]$sample.LatencyMs), [ref]$latency)
+        }
+
+        if ($success -and $latency -ge 0) {
+            [void]$latencies.Add($latency)
+        } else {
+            $lossCount++
+        }
+    }
+
+    $total = $sampleList.Count
+    $successCount = $latencies.Count
+    $lossPercent = 0
+    if ($total -gt 0) {
+        $lossPercent = [math]::Round(($lossCount / $total) * 100, 1)
+    }
+
+    $latencyValues = @($latencies.ToArray())
+    $minMs = $null
+    $avgMs = $null
+    $maxMs = $null
+    if ($successCount -gt 0) {
+        $minMs = [int](($latencyValues | Measure-Object -Minimum).Minimum)
+        $maxMs = [int](($latencyValues | Measure-Object -Maximum).Maximum)
+        $avgMs = [math]::Round((($latencyValues | Measure-Object -Average).Average), 1)
+    }
+
+    $buckets = @()
+    foreach ($definition in Get-LatencyHistogramBucketDefinitions) {
+        $count = @($latencyValues | Where-Object { $_ -ge $definition.Min -and $_ -le $definition.Max }).Count
+        $buckets += New-LatencyHistogramBucket -Label $definition.Label -Count $count -Total $total
+    }
+    $buckets += New-LatencyHistogramBucket -Label "Timeout/loss" -Count $lossCount -Total $total
+
+    return [pscustomobject]@{
+        Target = $Target
+        DurationSeconds = $DurationSeconds
+        SampleCount = $total
+        SuccessCount = $successCount
+        LossCount = $lossCount
+        LossPercent = $lossPercent
+        MinMs = $minMs
+        AvgMs = $avgMs
+        MaxMs = $maxMs
+        P50Ms = Get-LatencyPercentile -Values $latencyValues -Percentile 50
+        P95Ms = Get-LatencyPercentile -Values $latencyValues -Percentile 95
+        Buckets = $buckets
+    }
+}
+
+function Format-LatencyHistogramValue {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return "--" }
+    return "$Value ms"
+}
+
+function Format-LatencyHistogramReport {
+    param([object]$Summary)
+
+    if ($null -eq $Summary) {
+        return "No latency histogram data available."
+    }
+
+    $target = if ([string]::IsNullOrWhiteSpace([string]$Summary.Target)) { "target" } else { [string]$Summary.Target }
+    $duration = [int]$Summary.DurationSeconds
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("Latency histogram for $target over ${duration}s") | Out-Null
+    $sb.AppendLine("=" * 56) | Out-Null
+    $sb.AppendLine(("Samples: {0} | Replies: {1} | Loss: {2} ({3}%)" -f $Summary.SampleCount, $Summary.SuccessCount, $Summary.LossCount, $Summary.LossPercent)) | Out-Null
+    $sb.AppendLine(("Min/Avg/Max: {0} / {1} / {2}" -f (Format-LatencyHistogramValue $Summary.MinMs), (Format-LatencyHistogramValue $Summary.AvgMs), (Format-LatencyHistogramValue $Summary.MaxMs))) | Out-Null
+    $sb.AppendLine(("P50/P95: {0} / {1}" -f (Format-LatencyHistogramValue $Summary.P50Ms), (Format-LatencyHistogramValue $Summary.P95Ms))) | Out-Null
+    $sb.AppendLine("") | Out-Null
+    $sb.AppendLine("Bucket        Count   Percent  Distribution") | Out-Null
+    $sb.AppendLine("------------  ------  -------  ------------------------") | Out-Null
+    foreach ($bucket in @($Summary.Buckets)) {
+        $sb.AppendLine(("{0,-12}  {1,6}  {2,6}%  {3}" -f $bucket.Label, $bucket.Count, $bucket.Percent, $bucket.Bar)) | Out-Null
+    }
+
+    return $sb.ToString()
+}
+
+function Invoke-LatencyHistogram {
+    if ($script:LatencyHistogramRunning) { return }
+
+    $target = $script:txtDiagPingTarget.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
+        return
+    }
+
+    $duration = Resolve-LatencyHistogramDuration -Value $script:txtLatencyHistogramSeconds.Text
+    if (-not $duration.IsValid) {
+        Show-MessageBox -Message $duration.Message -Title "Invalid Duration" -Icon Warning
+        Update-Status $duration.Message -Type Warning
+        return
+    }
+
+    if ($script:ContinuousPingRunning) {
+        Toggle-ContinuousPing
+    }
+
+    $script:LatencyHistogramRunning = $true
+    $script:btnLatencyHistogram.IsEnabled = $false
+    $script:btnLatencyHistogram.Content = Get-UiString -Key "button.latencyHistogram.running" -DefaultValue "Running..."
+    $script:pnlPingStats.Visibility = "Collapsed"
+    $script:txtPingLog.Inlines.Clear()
+    $script:txtPingLog.Text = "Building latency histogram for $target over $($duration.Seconds) seconds..."
+    Update-Status "Running latency histogram to $target for $($duration.Seconds) seconds..."
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        param(
+            [string]$Target,
+            [int]$Seconds
+        )
+
+        $samples = @()
+        for ($i = 1; $i -le $Seconds; $i++) {
+            $ping = $null
+            $started = Get-Date
+            try {
+                $ping = New-Object System.Net.NetworkInformation.Ping
+                $reply = $ping.Send($Target, 1000)
+                if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success) {
+                    $samples += [pscustomobject]@{
+                        Sequence = $i
+                        Success = $true
+                        LatencyMs = [int]$reply.RoundtripTime
+                        Status = $reply.Status.ToString()
+                    }
+                } else {
+                    $samples += [pscustomobject]@{
+                        Sequence = $i
+                        Success = $false
+                        LatencyMs = -1
+                        Status = $reply.Status.ToString()
+                    }
+                }
+            } catch {
+                $samples += [pscustomobject]@{
+                    Sequence = $i
+                    Success = $false
+                    LatencyMs = -1
+                    Status = $_.Exception.Message
+                }
+            } finally {
+                if ($ping) { $ping.Dispose() }
+            }
+
+            $elapsed = [int]((Get-Date) - $started).TotalMilliseconds
+            $remainingMs = 1000 - $elapsed
+            if ($i -lt $Seconds -and $remainingMs -gt 0) {
+                Start-Sleep -Milliseconds $remainingMs
+            }
+        }
+
+        return $samples
+    }).AddArgument($target).AddArgument($duration.Seconds)
+
+    $handle = $ps.BeginInvoke()
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(500)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $samples = @($ps.EndInvoke($handle))
+                $summary = Get-LatencyHistogramSummary -Samples $samples -Target $target -DurationSeconds $duration.Seconds
+                $script:txtPingLog.Text = Format-LatencyHistogramReport -Summary $summary
+                $script:pnlPingStats.Visibility = "Visible"
+                $script:txtPingMin.Text = if ($null -ne $summary.MinMs) { $summary.MinMs.ToString() } else { "--" }
+                $script:txtPingAvg.Text = if ($null -ne $summary.AvgMs) { $summary.AvgMs.ToString() } else { "--" }
+                $script:txtPingMax.Text = if ($null -ne $summary.MaxMs) { $summary.MaxMs.ToString() } else { "--" }
+                $script:txtPingLoss.Text = $summary.LossPercent.ToString()
+                Write-OperationLog -Action "LatencyHistogram" -Result "Complete" -Detail "Target=$target; Duration=$($duration.Seconds); Samples=$($summary.SampleCount); Loss=$($summary.LossPercent)%"
+                Update-Status "Latency histogram complete for $target" -Type Success
+                $script:svPingLog.ScrollToEnd()
+            } catch {
+                $script:txtPingLog.Text = "Error running latency histogram: $($_.Exception.Message)"
+                Write-OperationLog -Action "LatencyHistogram" -Result "Error" -Detail $_.Exception.Message
+                Update-Status "Latency histogram failed" -Type Error
+            }
+
+            $script:LatencyHistogramRunning = $false
+            $script:btnLatencyHistogram.IsEnabled = $true
+            $script:btnLatencyHistogram.Content = Get-UiString -Key "button.latencyHistogram.idle" -DefaultValue "Latency Histogram"
+            $ps.Dispose()
             $timer.Stop()
         }
     }.GetNewClosure())
@@ -9494,6 +9809,7 @@ $btnNslookup.Add_Click({ Invoke-Nslookup })
 # Diagnostics button handlers
 $btnDiagPing.Add_Click({ Invoke-DiagPingTest })
 $btnContinuousPing.Add_Click({ Toggle-ContinuousPing })
+$btnLatencyHistogram.Add_Click({ Invoke-LatencyHistogram })
 $btnSpeedTest.Add_Click({ Invoke-SpeedTest })
 $btnDnsLookup.Add_Click({ Invoke-DnsLookup })
 $btnSaveEndpointPolicy.Add_Click({ Save-EndpointPolicySettings })
