@@ -45,6 +45,12 @@ Describe 'Profile validation' {
             'ConvertFrom-WlanSsidHex',
             'ConvertFrom-WlanProfileXmlDocument',
             'Get-ProfileImportRecords',
+            'Get-ProfileScheduleDayAliases',
+            'Normalize-ProfileScheduleDays',
+            'Normalize-ProfileScheduleTime',
+            'ConvertTo-ProfileScheduleDaysText',
+            'Get-ProfileScheduleDescription',
+            'Test-ProfileScheduleDue',
             'Get-SafeProfileFileName',
             'ConvertFrom-MappedDriveText',
             'ConvertTo-MappedDriveText',
@@ -52,7 +58,7 @@ Describe 'Profile validation' {
             'Get-ProfileValidationResult',
             'Write-ProfileFileAtomic'
         )
-        $script:ProfileSchemaVersion = 2
+        $script:ProfileSchemaVersion = 3
     }
 
     It 'normalizes a legacy static profile to the current schema version' {
@@ -75,7 +81,7 @@ Describe 'Profile validation' {
         $result = Get-ProfileValidationResult -ProfileData $profile
 
         $result.IsValid | Should -BeTrue
-        $result.Profile.SchemaVersion | Should -Be 2
+        $result.Profile.SchemaVersion | Should -Be 3
         $result.Profile.AutoApply | Should -BeTrue
         $result.Profile.MatchGatewayMac | Should -Be '001122334455'
         $result.Profile.ConfigureProxy | Should -BeFalse
@@ -110,6 +116,32 @@ Describe 'Profile validation' {
         $result.Profile.MappedDrives.Count | Should -Be 1
         $result.Profile.MappedDrives[0].DriveLetter | Should -Be 'Z'
         $result.Profile.MappedDrives[0].RemotePath | Should -Be '\\fileserver\share'
+    }
+
+    It 'normalizes scheduled profile switches' {
+        $profile = [pscustomobject]@{
+            Name = 'Morning Work'
+            UseDHCP = $true
+            UseDHCPForDNS = $true
+            ScheduleEnabled = $true
+            ScheduleTime = '8:05'
+            ScheduleDays = 'weekdays'
+        }
+
+        $result = Get-ProfileValidationResult -ProfileData $profile
+
+        $result.IsValid | Should -BeTrue
+        $result.Profile.SchemaVersion | Should -Be 3
+        $result.Profile.ScheduleEnabled | Should -BeTrue
+        $result.Profile.ScheduleTime | Should -Be '08:05'
+        $result.Profile.ScheduleDays | Should -Contain 'Monday'
+        $result.Profile.ScheduleDays | Should -Contain 'Friday'
+        $result.Profile.ScheduleDays | Should -Not -Contain 'Saturday'
+        (Normalize-ProfileScheduleDays -Days 'Every day').Days.Count | Should -Be 7
+        Get-ProfileScheduleDescription -ProfileData $result.Profile | Should -Be '08:05 Weekdays'
+        Test-ProfileScheduleDue -ProfileData $result.Profile -Now ([datetime]'2026-06-29T08:05:00') | Should -BeTrue
+        Test-ProfileScheduleDue -ProfileData $result.Profile -Now ([datetime]'2026-06-29T08:06:00') | Should -BeFalse
+        Test-ProfileScheduleDue -ProfileData $result.Profile -Now ([datetime]'2026-06-28T08:05:00') | Should -BeFalse
     }
 
     It 'rejects invalid profile data before writing' {
@@ -152,6 +184,23 @@ Describe 'Profile validation' {
         $result.Message | Should -Match 'proxy server'
         $result.Message | Should -Match 'printer name'
         $result.Message | Should -Match 'Mapped drive'
+    }
+
+    It 'rejects invalid scheduled profile switches before writing' {
+        $profile = [pscustomobject]@{
+            Name = 'Bad Schedule'
+            UseDHCP = $true
+            UseDHCPForDNS = $true
+            ScheduleEnabled = $true
+            ScheduleTime = '25:61'
+            ScheduleDays = 'Funday'
+        }
+
+        $result = Get-ProfileValidationResult -ProfileData $profile
+
+        $result.IsValid | Should -BeFalse
+        $result.Message | Should -Match 'valid 24-hour'
+        $result.Message | Should -Match 'Unknown schedule day'
     }
 
     It 'round-trips mapped drive text' {
@@ -248,7 +297,7 @@ Describe 'Profile validation' {
         $roundTrip = Get-Content -Raw $filePath | ConvertFrom-Json
 
         $roundTrip.Name | Should -Be 'Atomic'
-        $roundTrip.SchemaVersion | Should -Be 2
+        $roundTrip.SchemaVersion | Should -Be 3
     }
 }
 
@@ -557,6 +606,10 @@ Describe 'Profile storage migration' {
             'Test-ValidMacAddress',
             'Get-ProfileProperty',
             'ConvertTo-ProfileBoolean',
+            'Get-ProfileScheduleDayAliases',
+            'Normalize-ProfileScheduleDays',
+            'Normalize-ProfileScheduleTime',
+            'ConvertTo-ProfileScheduleDaysText',
             'Get-SafeProfileFileName',
             'ConvertFrom-MappedDriveText',
             'ConvertTo-MappedDriveText',
@@ -571,7 +624,7 @@ Describe 'Profile storage migration' {
             'Get-ProfileStoreMigrationPlan',
             'Write-ProfileStoreBackupManifest'
         )
-        $script:ProfileSchemaVersion = 2
+        $script:ProfileSchemaVersion = 3
         $versionMetadata = Get-Content -Raw -LiteralPath (Join-Path $script:RepoRoot 'version.json') | ConvertFrom-Json
         $script:AppVersion = [string]$versionMetadata.Version
     }

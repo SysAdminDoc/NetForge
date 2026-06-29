@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.28.0
+    Version: 1.29.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.28.0"
+$script:AppVersion = "1.29.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -61,7 +61,7 @@ $script:StringResources = @{}
 $script:DefaultStringResources = @{}
 $script:LocalizationStatus = "Embedded English UI text"
 $script:LocalizationMissingKeys = @()
-$script:ProfileSchemaVersion = 2
+$script:ProfileSchemaVersion = 3
 $script:ProfileStoreLoadWarning = ""
 $script:ContinuousPingRunning = $false
 $script:ContinuousPingPS = $null
@@ -81,9 +81,11 @@ $script:DoqProxyProcess = $null
 $script:LastAutoAppliedProfile = ""
 $script:LastAutoApplySignature = ""
 $script:LastAutoApplyAttemptKey = ""
+$script:LastScheduledProfileKey = ""
 $script:LastNetworkSnapshot = $null
 $script:LastProfileLoadWarnings = @()
 $script:AutoProfileTimer = $null
+$script:ScheduleProfileTimer = $null
 $script:NetworkChangeHandlers = @{}
 $script:NetworkChangeSubscribed = $false
 $script:AccessibilityNames = @{
@@ -142,6 +144,9 @@ $script:AccessibilityNames = @{
     txtProfileMatchSsid = "Profile match SSID"
     txtProfileGatewayMac = "Profile gateway MAC"
     btnCaptureProfileMatch = "Capture current network match"
+    chkProfileSchedule = "Enable scheduled profile apply"
+    txtProfileScheduleTime = "Scheduled profile time"
+    txtProfileScheduleDays = "Scheduled profile days"
     chkProfileNetworkCategory = "Set Windows network category"
     cmbProfileNetworkCategory = "Profile network category"
     chkProfileProxy = "Set system proxy"
@@ -177,7 +182,8 @@ $script:AccessibilityTabOrder = @(
     "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "btnApplyIP",
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
     "lstProfiles", "btnNewProfile", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
-    "txtProfileName", "chkProfileAutoApply", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
+    "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
+    "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy"
@@ -1120,7 +1126,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.28.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.29.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1853,6 +1859,27 @@ function Apply-Localization {
 
                                         <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                             <StackPanel>
+                                                <TextBlock Text="Scheduled Apply" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                                                <CheckBox x:Name="chkProfileSchedule" Content="Apply profile on schedule" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,10"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="160"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                                        <TextBlock Text="Time (HH:mm)" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBox x:Name="txtProfileScheduleTime" Style="{StaticResource ModernTextBox}" Text="08:00"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                                        <TextBlock Text="Days" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBox x:Name="txtProfileScheduleDays" Style="{StaticResource ModernTextBox}" Text="Every day"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                            <StackPanel>
                                                 <TextBlock Text="IP Configuration" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
                                                 <CheckBox x:Name="chkProfileDHCP" Content="Use DHCP" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,8"/>
                                                 <Grid Margin="0,8,0,0">
@@ -2251,7 +2278,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.28.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.29.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -6131,6 +6158,175 @@ function ConvertTo-ProfileBoolean {
     return $DefaultValue
 }
 
+function Get-ProfileScheduleDayAliases {
+    $aliases = @{
+        mon = "Monday"; monday = "Monday"
+        tue = "Tuesday"; tues = "Tuesday"; tuesday = "Tuesday"
+        wed = "Wednesday"; weds = "Wednesday"; wednesday = "Wednesday"
+        thu = "Thursday"; thur = "Thursday"; thurs = "Thursday"; thursday = "Thursday"
+        fri = "Friday"; friday = "Friday"
+        sat = "Saturday"; saturday = "Saturday"
+        sun = "Sunday"; sunday = "Sunday"
+    }
+
+    return $aliases
+}
+
+function Normalize-ProfileScheduleDays {
+    param(
+        $Days,
+        [switch]$DefaultToEveryDay
+    )
+
+    $orderedDays = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    $tokens = @()
+
+    if ($null -ne $Days) {
+        if ($Days -is [string]) {
+            $dayText = (([string]$Days).Trim() -replace '(?i)\bevery\s+day\b', 'everyday')
+            $tokens = @($dayText -split '[,;|\s]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        } else {
+            foreach ($day in @($Days)) {
+                if ($null -eq $day) { continue }
+                $dayText = (([string]$day).Trim() -replace '(?i)\bevery\s+day\b', 'everyday')
+                $tokens += @($dayText -split '[,;|\s]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            }
+        }
+    }
+
+    if ($tokens.Count -eq 0) {
+        return [pscustomobject]@{
+            IsValid = $true
+            Days = if ($DefaultToEveryDay) { [object[]]@($orderedDays) } else { [object[]]@() }
+            Message = ""
+        }
+    }
+
+    $aliases = Get-ProfileScheduleDayAliases
+    $selected = New-Object System.Collections.Generic.List[string]
+    $errors = @()
+
+    foreach ($token in $tokens) {
+        $key = $token.Trim().ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($key)) { continue }
+
+        if ($key -in @("daily", "everyday", "every-day", "all", "*")) {
+            foreach ($day in $orderedDays) {
+                if (-not $selected.Contains($day)) { [void]$selected.Add($day) }
+            }
+            continue
+        }
+
+        if ($key -in @("weekday", "weekdays", "workday", "workdays")) {
+            foreach ($day in @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")) {
+                if (-not $selected.Contains($day)) { [void]$selected.Add($day) }
+            }
+            continue
+        }
+
+        if ($key -in @("weekend", "weekends")) {
+            foreach ($day in @("Saturday", "Sunday")) {
+                if (-not $selected.Contains($day)) { [void]$selected.Add($day) }
+            }
+            continue
+        }
+
+        if ($aliases.ContainsKey($key)) {
+            $dayName = $aliases[$key]
+            if (-not $selected.Contains($dayName)) { [void]$selected.Add($dayName) }
+        } else {
+            $errors += "Unknown schedule day '$token'."
+        }
+    }
+
+    $normalized = @($orderedDays | Where-Object { $selected.Contains($_) })
+    return [pscustomobject]@{
+        IsValid = ($errors.Count -eq 0 -and $normalized.Count -gt 0)
+        Days = [object[]]@($normalized)
+        Message = if ($errors.Count -gt 0) {
+            ($errors -join " ")
+        } elseif ($normalized.Count -eq 0) {
+            "Schedule days must include at least one day."
+        } else {
+            ""
+        }
+    }
+}
+
+function Normalize-ProfileScheduleTime {
+    param([string]$Time)
+
+    $text = ([string]$Time).Trim()
+    if ($text -notmatch '^(\d{1,2}):(\d{2})$') {
+        return [pscustomobject]@{ IsValid = $false; Time = ""; Message = "Schedule time must use HH:mm format." }
+    }
+
+    $hour = [int]$Matches[1]
+    $minute = [int]$Matches[2]
+    if ($hour -lt 0 -or $hour -gt 23 -or $minute -lt 0 -or $minute -gt 59) {
+        return [pscustomobject]@{ IsValid = $false; Time = ""; Message = "Schedule time must be a valid 24-hour clock time." }
+    }
+
+    return [pscustomobject]@{
+        IsValid = $true
+        Time = ("{0:D2}:{1:D2}" -f $hour, $minute)
+        Message = ""
+    }
+}
+
+function ConvertTo-ProfileScheduleDaysText {
+    param($Days)
+
+    $normalized = Normalize-ProfileScheduleDays -Days $Days
+    if (-not $normalized.IsValid -or $normalized.Days.Count -eq 0) { return "" }
+
+    $joined = (@($normalized.Days) -join ",")
+    if ($joined -eq "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday") { return "Every day" }
+    if ($joined -eq "Monday,Tuesday,Wednesday,Thursday,Friday") { return "Weekdays" }
+    if ($joined -eq "Saturday,Sunday") { return "Weekends" }
+    return $joined
+}
+
+function Get-ProfileScheduleDescription {
+    param([pscustomobject]$ProfileData)
+
+    if (-not [bool](Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleEnabled" -DefaultValue $false)) {
+        return "Disabled"
+    }
+
+    $time = [string](Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleTime" -DefaultValue "")
+    $daysText = ConvertTo-ProfileScheduleDaysText -Days (Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleDays" -DefaultValue @())
+    if ([string]::IsNullOrWhiteSpace($daysText)) { $daysText = "Every day" }
+    return "$time $daysText"
+}
+
+function Test-ProfileScheduleDue {
+    param(
+        [pscustomobject]$ProfileData,
+        [datetime]$Now = (Get-Date)
+    )
+
+    if (-not [bool](Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleEnabled" -DefaultValue $false)) { return $false }
+
+    $timeResult = Normalize-ProfileScheduleTime -Time ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleTime" -DefaultValue ""))
+    if (-not $timeResult.IsValid) { return $false }
+
+    $daysResult = Normalize-ProfileScheduleDays -Days (Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleDays" -DefaultValue @()) -DefaultToEveryDay
+    if (-not $daysResult.IsValid) { return $false }
+    if (@($daysResult.Days) -notcontains $Now.DayOfWeek.ToString()) { return $false }
+
+    return ($timeResult.Time -eq ("{0:D2}:{1:D2}" -f $Now.Hour, $Now.Minute))
+}
+
+function Get-ProfileScheduleDueKey {
+    param(
+        [pscustomobject]$ProfileData,
+        [datetime]$Now = (Get-Date)
+    )
+
+    return "$($ProfileData.Name)|$($Now.ToString('yyyyMMdd'))|$([string](Get-ProfileProperty -ProfileData $ProfileData -Name 'ScheduleTime' -DefaultValue ''))"
+}
+
 function Get-WlanXmlElementText {
     param(
         [System.Xml.XmlNode]$RootNode,
@@ -6221,6 +6417,9 @@ function ConvertFrom-WlanProfileXmlDocument {
         AutoApply = $true
         MatchSSID = $ssid
         MatchGatewayMac = ""
+        ScheduleEnabled = $false
+        ScheduleTime = ""
+        ScheduleDays = @()
         UseDHCP = $true
         IPAddress = ""
         SubnetMask = "255.255.255.0"
@@ -6525,6 +6724,25 @@ function Get-ProfileValidationResult {
         $errors += "Auto-apply profiles need a match SSID or gateway MAC."
     }
 
+    $scheduleEnabled = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleEnabled" -DefaultValue $false) -DefaultValue $false
+    $scheduleTime = ""
+    $scheduleDays = @()
+    if ($scheduleEnabled) {
+        $scheduleTimeResult = Normalize-ProfileScheduleTime -Time ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleTime" -DefaultValue ""))
+        if ($scheduleTimeResult.IsValid) {
+            $scheduleTime = $scheduleTimeResult.Time
+        } else {
+            $errors += $scheduleTimeResult.Message
+        }
+
+        $scheduleDaysResult = Normalize-ProfileScheduleDays -Days (Get-ProfileProperty -ProfileData $ProfileData -Name "ScheduleDays" -DefaultValue @()) -DefaultToEveryDay
+        if ($scheduleDaysResult.IsValid) {
+            $scheduleDays = @($scheduleDaysResult.Days)
+        } else {
+            $errors += $scheduleDaysResult.Message
+        }
+    }
+
     $ipAddress = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "IPAddress" -DefaultValue "")).Trim()
     $subnetMask = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "SubnetMask" -DefaultValue "255.255.255.0")).Trim()
     $gateway = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "Gateway" -DefaultValue "")).Trim()
@@ -6613,6 +6831,9 @@ function Get-ProfileValidationResult {
         AutoApply = $autoApply
         MatchSSID = $matchSsid
         MatchGatewayMac = $matchGatewayMac
+        ScheduleEnabled = $scheduleEnabled
+        ScheduleTime = if ($scheduleEnabled) { $scheduleTime } else { "" }
+        ScheduleDays = if ($scheduleEnabled) { ,([object[]]@($scheduleDays)) } else { ,([object[]]@()) }
         UseDHCP = $useDhcp
         IPAddress = $ipAddress
         SubnetMask = $subnetMask
@@ -7253,6 +7474,10 @@ function Load-ProfileToEditor {
     $script:chkProfileAutoApply.IsChecked = [bool]$profile.AutoApply
     $script:txtProfileMatchSsid.Text = if ($profile.MatchSSID) { $profile.MatchSSID } else { "" }
     $script:txtProfileGatewayMac.Text = if ($profile.MatchGatewayMac) { $profile.MatchGatewayMac } else { "" }
+    $script:chkProfileSchedule.IsChecked = [bool]$profile.ScheduleEnabled
+    $script:txtProfileScheduleTime.Text = if ($profile.ScheduleTime) { $profile.ScheduleTime } else { "08:00" }
+    $scheduleDaysText = ConvertTo-ProfileScheduleDaysText -Days $profile.ScheduleDays
+    $script:txtProfileScheduleDays.Text = if ([string]::IsNullOrWhiteSpace($scheduleDaysText)) { "Every day" } else { $scheduleDaysText }
     $script:chkProfileDHCP.IsChecked = $profile.UseDHCP
     $script:txtProfileIP.Text = $profile.IPAddress
     $script:txtProfileSubnet.Text = $profile.SubnetMask
@@ -7292,6 +7517,9 @@ function Save-Profile {
         AutoApply = [bool]$script:chkProfileAutoApply.IsChecked
         MatchSSID = $script:txtProfileMatchSsid.Text.Trim()
         MatchGatewayMac = $script:txtProfileGatewayMac.Text.Trim()
+        ScheduleEnabled = [bool]$script:chkProfileSchedule.IsChecked
+        ScheduleTime = $script:txtProfileScheduleTime.Text.Trim()
+        ScheduleDays = $script:txtProfileScheduleDays.Text.Trim()
         UseDHCP = $script:chkProfileDHCP.IsChecked
         IPAddress = $script:txtProfileIP.Text
         SubnetMask = $script:txtProfileSubnet.Text
@@ -7459,7 +7687,7 @@ function Invoke-ApplyProfileObject {
     $target = Get-ProfileApplyTarget -ProfileData $ProfileData
     if (-not $target.IsValid) {
         Update-Status $target.Message -Type Error
-        if ($Source -ne "Auto") {
+        if ($Source -notin @("Auto", "Scheduled")) {
             Show-MessageBox -Message $target.Message -Title "Profile Validation Failed" -Icon Error
         }
         return $false
@@ -7467,7 +7695,7 @@ function Invoke-ApplyProfileObject {
 
     Update-Status "Applying profile '$($ProfileData.Name)'..."
 
-    $quietApply = ($Source -eq "Auto")
+    $quietApply = ($Source -in @("Auto", "Scheduled"))
     $success = Invoke-NetworkMutation -Adapter $Adapter -ActionName "Apply profile '$($ProfileData.Name)'" -Quiet:$quietApply -ScriptBlock {
         Invoke-AdapterIPTarget -Adapter $Adapter -Target $target
         Invoke-AdapterDNSTarget -Adapter $Adapter -Target $target
@@ -7521,6 +7749,57 @@ function Invoke-AutoApplyProfile {
     $script:LastAutoApplySignature = ""
     $script:LastAutoApplyAttemptKey = ""
     Write-OperationLog -Action "Profile auto-apply" -Result "NoMatch" -Detail "Trigger=$Trigger; Signature=$signatureKey"
+}
+
+function Get-ScheduledProfileAdapter {
+    $signature = Get-CurrentNetworkSignature
+    if ($signature -and $signature.Adapter) { return $signature.Adapter }
+
+    $selected = Get-SelectedAdapter
+    if ($selected) { return $selected }
+
+    return (Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1)
+}
+
+function Invoke-ScheduledProfileSwitch {
+    param(
+        [datetime]$Now = (Get-Date),
+        [string]$Trigger = "ScheduleTimer"
+    )
+
+    $dueProfiles = @()
+    foreach ($candidate in Get-Profiles) {
+        if (Test-ProfileScheduleDue -ProfileData $candidate -Now $Now) {
+            $dueProfiles += $candidate
+        }
+    }
+
+    if ($dueProfiles.Count -eq 0) { return }
+
+    $profile = $dueProfiles[0]
+    $dueKey = Get-ProfileScheduleDueKey -ProfileData $profile -Now $Now
+    if ($script:LastScheduledProfileKey -eq $dueKey) {
+        Write-OperationLog -Action "Profile schedule" -Result "Skipped" -Detail "Trigger=$Trigger; Profile=$($profile.Name); already applied for this minute"
+        return
+    }
+
+    $adapter = Get-ScheduledProfileAdapter
+    if ($null -eq $adapter) {
+        Write-OperationLog -Action "Profile schedule" -Result "NoAdapter" -Detail "Trigger=$Trigger; Profile=$($profile.Name)"
+        Update-Status "Scheduled profile '$($profile.Name)' skipped: no active adapter" -Type Warning
+        return
+    }
+
+    if ($dueProfiles.Count -gt 1) {
+        $skipped = @($dueProfiles | Select-Object -Skip 1 | ForEach-Object { $_.Name }) -join ", "
+        Write-OperationLog -Action "Profile schedule" -Result "MultipleDue" -Detail "Trigger=$Trigger; Applying=$($profile.Name); Skipped=$skipped"
+    }
+
+    Write-OperationLog -Action "Profile schedule" -Result "Due" -Detail "Trigger=$Trigger; Profile=$($profile.Name); Adapter=$($adapter.Name); Time=$($Now.ToString('o'))"
+    $applied = Invoke-ApplyProfileObject -ProfileData $profile -Adapter $adapter -Source "Scheduled"
+    if ($applied) {
+        $script:LastScheduledProfileKey = $dueKey
+    }
 }
 
 function Register-NetworkChangeAutoApply {
@@ -7625,6 +7904,14 @@ function Show-ProfileDiff {
     Add-DiffLine -Label "DNS Mode" -CurrentValue $currentDnsMode -TargetValue $targetDnsMode
     Add-DiffLine -Label "DNS Servers" -CurrentValue $(if ($currentDns -and $currentDns.ServerAddresses) { $currentDns.ServerAddresses -join ", " } else { "" }) -TargetValue $(if ($script:chkProfileDnsDHCP.IsChecked) { "Automatic" } else { (@($script:txtProfileDns1.Text.Trim(), $script:txtProfileDns2.Text.Trim()) | Where-Object { $_ }) -join ", " })
     Add-DiffLine -Label "Auto-Apply" -CurrentValue "--" -TargetValue $(if ($script:chkProfileAutoApply.IsChecked) { "Enabled" } else { "Disabled" })
+    $schedulePreview = if ($script:chkProfileSchedule.IsChecked) {
+        $dayPreview = ConvertTo-ProfileScheduleDaysText -Days $script:txtProfileScheduleDays.Text
+        if ([string]::IsNullOrWhiteSpace($dayPreview)) { $dayPreview = "Every day" }
+        "$($script:txtProfileScheduleTime.Text.Trim()) $dayPreview"
+    } else {
+        "Disabled"
+    }
+    Add-DiffLine -Label "Schedule" -CurrentValue "--" -TargetValue $schedulePreview
     Add-DiffLine -Label "Match SSID" -CurrentValue "--" -TargetValue $script:txtProfileMatchSsid.Text.Trim()
     Add-DiffLine -Label "Gateway MAC" -CurrentValue "--" -TargetValue (ConvertTo-CleanMacAddress -MacAddress $script:txtProfileGatewayMac.Text)
     if ($script:chkProfileNetworkCategory.IsChecked) {
@@ -8245,6 +8532,9 @@ $btnNewProfile.Add_Click({
     $script:chkProfileAutoApply.IsChecked = $false
     $script:txtProfileMatchSsid.Text = ""
     $script:txtProfileGatewayMac.Text = ""
+    $script:chkProfileSchedule.IsChecked = $false
+    $script:txtProfileScheduleTime.Text = "08:00"
+    $script:txtProfileScheduleDays.Text = "Every day"
     $script:chkProfileDHCP.IsChecked = $true
     $script:txtProfileIP.Text = ""
     $script:txtProfileSubnet.Text = "255.255.255.0"
@@ -8313,6 +8603,13 @@ $script:AutoProfileTimer.Add_Tick({
 $script:AutoProfileTimer.Start()
 Register-NetworkChangeAutoApply
 
+$script:ScheduleProfileTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:ScheduleProfileTimer.Interval = [TimeSpan]::FromMinutes(1)
+$script:ScheduleProfileTimer.Add_Tick({
+    Invoke-ScheduledProfileSwitch -Trigger "ScheduleTimer"
+})
+$script:ScheduleProfileTimer.Start()
+
 # ============================================================================
 # CLEANUP ON WINDOW CLOSE
 # ============================================================================
@@ -8333,6 +8630,9 @@ $window.Add_Closing({
     }
     if ($script:AutoProfileTimer) {
         $script:AutoProfileTimer.Stop()
+    }
+    if ($script:ScheduleProfileTimer) {
+        $script:ScheduleProfileTimer.Stop()
     }
     Unregister-NetworkChangeAutoApply
     $script:ConnStatusTimer.Stop()
@@ -8357,6 +8657,7 @@ Update-PublicIP
 Show-WifiActionState
 Invoke-WifiNetworkScan
 Invoke-AutoApplyProfile -Trigger "Startup"
+Invoke-ScheduledProfileSwitch -Trigger "Startup"
 
 # Select first adapter if available
 if ($lstAdapters.Items.Count -gt 0) {

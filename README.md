@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.28.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.29.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -81,6 +81,7 @@
 - Schema-versioned profiles with validation, duplicate protection, atomic writes, and import summaries
 - Configurable profile storage with custom folder/OneDrive migration, conflict detection, backup manifests, health checks, and local-storage revert
 - Event-driven auto-apply profiles when the current SSID or gateway MAC matches saved rules, with timer fallback
+- Scheduled profile switching by day and time through the same rollback-protected apply path
 - Preview profile differences against the selected adapter before applying
 - Optional profile actions for Windows Public/Private network category, system proxy, default printer, and mapped network drives
 - Quick-apply profiles to any adapter
@@ -178,7 +179,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.28.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.29.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
@@ -201,6 +202,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Go to Profiles tab
    - Click "Create New Profile"
    - Capture current SSID/gateway MAC when the profile should auto-apply
+   - Optionally schedule a profile for a recurring day/time switch
    - Optionally set environment actions such as network category, proxy, default printer, or mapped drives
    - Click "Preview Diff" to review changes against the selected adapter
    - Fill in details and save

@@ -9,7 +9,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### DNS Over HTTPS/TLS/QUIC
 
 ### Profiles
-- Schedule profile switches (home at 6pm, work at 8am)
 
 ### Diagnostics
 - MTR-style continuous traceroute with per-hop latency history
