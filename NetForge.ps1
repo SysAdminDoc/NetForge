@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.30.0
+    Version: 1.31.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.30.0"
+$script:AppVersion = "1.31.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -72,6 +72,8 @@ $script:MtrPowerShell = $null
 $script:MtrHistory = @{}
 $script:MtrTarget = ""
 $script:MtrCycle = 0
+$script:PortScanRunning = $false
+$script:PortScanPowerShell = $null
 $script:CachedPublicIP = $null
 $script:PublicIpLookupEnabled = $true
 $script:ExternalSpeedTestEnabled = $true
@@ -183,6 +185,7 @@ $script:AccessibilityNames = @{
     btnPing = "Run ping"
     btnTraceroute = "Run traceroute"
     btnMtrTrace = "Start MTR trace"
+    btnPortScan = "Run port scan"
     btnNslookup = "Run NSLookup"
 }
 $script:AccessibilityTabOrder = @(
@@ -194,7 +197,7 @@ $script:AccessibilityTabOrder = @(
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
-    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnNslookup",
+    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnNslookup",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy"
 )
 
@@ -601,6 +604,8 @@ function Get-DynamicLocalizationKeyList {
         "button.continuousPing.stop",
         "button.mtr.start",
         "button.mtr.stop",
+        "button.portScan.idle",
+        "button.portScan.running",
         "button.speedTest.idle",
         "button.speedTest.running",
         "footer.adminStatusFormat"
@@ -1137,7 +1142,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.30.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.31.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2049,6 +2054,7 @@ function Apply-Localization {
                                             <Button x:Name="btnPing" Content="Ping" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnTraceroute" Content="Traceroute" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnMtrTrace" Content="Start MTR" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnPortScan" Content="Port Scan" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnNslookup" Content="NSLookup" Style="{StaticResource ModernButton}"/>
                                         </StackPanel>
 
@@ -2290,7 +2296,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.30.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.31.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -8448,6 +8454,249 @@ function Toggle-MtrTrace {
     Invoke-MtrProbeCycle
 }
 
+function ConvertTo-UInt32IPv4 {
+    param([string]$Address)
+
+    $ip = [System.Net.IPAddress]::Parse($Address)
+    $bytes = $ip.GetAddressBytes()
+    if ($bytes.Length -ne 4) {
+        throw "Only IPv4 targets are supported for CIDR port scans."
+    }
+    if ([BitConverter]::IsLittleEndian) { [Array]::Reverse($bytes) }
+    return [BitConverter]::ToUInt32($bytes, 0)
+}
+
+function ConvertFrom-UInt32IPv4 {
+    param([uint32]$Value)
+
+    $bytes = [BitConverter]::GetBytes($Value)
+    if ([BitConverter]::IsLittleEndian) { [Array]::Reverse($bytes) }
+    return ([System.Net.IPAddress]::new($bytes)).ToString()
+}
+
+function Get-PortScanTargetList {
+    param([string]$Target)
+
+    $text = ([string]$Target).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        throw "Port scan target is required."
+    }
+
+    if ($text -notmatch '/') {
+        return @($text)
+    }
+
+    if ($text -notmatch '^(.+)/(\d{1,2})$') {
+        throw "CIDR target must look like 192.168.1.0/24."
+    }
+
+    $baseAddress = $Matches[1].Trim()
+    $prefix = [int]$Matches[2]
+    if ($prefix -lt 24 -or $prefix -gt 32) {
+        throw "CIDR port scans are limited to /24 through /32."
+    }
+
+    $baseInt = [uint64](ConvertTo-UInt32IPv4 -Address $baseAddress)
+    $size = [uint64][math]::Pow(2, (32 - $prefix))
+    $network = [uint64]([math]::Floor([double]($baseInt / $size)) * $size)
+    $first = $network
+    $last = $network + $size - 1
+    if ($prefix -le 30) {
+        $first++
+        $last--
+    }
+
+    $targets = @()
+    for ($value = $first; $value -le $last; $value++) {
+        $targets += (ConvertFrom-UInt32IPv4 -Value ([uint32]$value))
+    }
+
+    return @($targets)
+}
+
+function Get-DefaultPortScanPorts {
+    param([int]$TargetCount = 1)
+
+    if ($TargetCount -gt 1) {
+        return @(80, 443, 445, 3389)
+    }
+
+    return @(22, 53, 80, 135, 139, 443, 445, 3389, 5985, 5986, 8080, 8443)
+}
+
+function Get-PortServiceName {
+    param([int]$Port)
+
+    $services = @{
+        22 = "SSH"
+        53 = "DNS"
+        80 = "HTTP"
+        135 = "RPC"
+        139 = "NetBIOS"
+        443 = "HTTPS"
+        445 = "SMB"
+        3389 = "RDP"
+        5985 = "WinRM"
+        5986 = "WinRM TLS"
+        8080 = "HTTP alt"
+        8443 = "HTTPS alt"
+    }
+
+    if ($services.ContainsKey($Port)) { return $services[$Port] }
+    return "tcp/$Port"
+}
+
+function Format-PortScanRows {
+    param(
+        [object[]]$Results,
+        [string]$Target,
+        [int]$TargetCount,
+        [int[]]$Ports,
+        [int]$ElapsedMs
+    )
+
+    $openResults = @($Results | Where-Object { $_.Status -eq "Open" } | Sort-Object Target, Port)
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("Port scan for $Target") | Out-Null
+    $sb.AppendLine("Targets: $TargetCount    Ports: $($Ports -join ', ')    Duration: $ElapsedMs ms") | Out-Null
+    $sb.AppendLine("") | Out-Null
+
+    if ($openResults.Count -eq 0) {
+        $sb.AppendLine("No open ports found in the scanned set.") | Out-Null
+        return $sb.ToString()
+    }
+
+    $sb.AppendLine("Target              Port  Service     Latency") | Out-Null
+    $sb.AppendLine("------------------  ----  ----------  -------") | Out-Null
+    foreach ($item in $openResults) {
+        $service = Get-PortServiceName -Port ([int]$item.Port)
+        $line = "{0,-18}  {1,4}  {2,-10}  {3,5}ms" -f $item.Target, $item.Port, $service, $item.LatencyMs
+        $sb.AppendLine($line) | Out-Null
+    }
+
+    return $sb.ToString()
+}
+
+function Invoke-PortScan {
+    if ($script:PortScanRunning) { return }
+
+    $target = $script:txtPingTarget.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
+        return
+    }
+
+    try {
+        $targets = @(Get-PortScanTargetList -Target $target)
+        $ports = @(Get-DefaultPortScanPorts -TargetCount $targets.Count)
+        $scanCount = $targets.Count * $ports.Count
+        if ($scanCount -gt 1024) {
+            throw "Port scan is capped at 1024 TCP probes; narrow the CIDR target."
+        }
+    } catch {
+        Update-Status "Port scan rejected: $($_.Exception.Message)" -Type Error
+        Show-MessageBox -Message $_.Exception.Message -Title "Port Scan" -Icon Warning
+        return
+    }
+
+    $script:PortScanRunning = $true
+    $script:btnPortScan.IsEnabled = $false
+    $script:btnPortScan.Content = Get-UiString -Key "button.portScan.running" -DefaultValue "Scanning..."
+    $script:txtDiagOutput.Text = "Scanning $($targets.Count) target(s) across $($ports.Count) TCP port(s)..."
+    Update-Status "Running port scan..."
+    Write-OperationLog -Action "Port scan" -Result "Started" -Detail "Target=$target; Targets=$($targets.Count); Ports=$($ports -join ',')"
+
+    $ps = [PowerShell]::Create()
+    $script:PortScanPowerShell = $ps
+    $ps.AddScript({
+        param($scanTargets, $scanPorts, $timeoutMs)
+
+        $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $pending = New-Object System.Collections.ArrayList
+        $open = @()
+
+        foreach ($scanTarget in @($scanTargets)) {
+            foreach ($scanPort in @($scanPorts)) {
+                $client = New-Object System.Net.Sockets.TcpClient
+                $probeWatch = [System.Diagnostics.Stopwatch]::StartNew()
+                try {
+                    $async = $client.BeginConnect([string]$scanTarget, [int]$scanPort, $null, $null)
+                    [void]$pending.Add([pscustomobject]@{
+                        Target = [string]$scanTarget
+                        Port = [int]$scanPort
+                        Client = $client
+                        Async = $async
+                        Watch = $probeWatch
+                    })
+                } catch {
+                    $client.Close()
+                }
+            }
+        }
+
+        while ($pending.Count -gt 0) {
+            for ($i = $pending.Count - 1; $i -ge 0; $i--) {
+                $probe = $pending[$i]
+                if ($probe.Async.IsCompleted) {
+                    try {
+                        $probe.Client.EndConnect($probe.Async)
+                        if ($probe.Client.Connected) {
+                            $open += [pscustomobject]@{
+                                Target = $probe.Target
+                                Port = $probe.Port
+                                Status = "Open"
+                                LatencyMs = [math]::Max(0, [int]$probe.Watch.ElapsedMilliseconds)
+                            }
+                        }
+                    } catch {
+                        [void]$_.Exception.Message
+                    } finally {
+                        $probe.Client.Close()
+                        $pending.RemoveAt($i)
+                    }
+                } elseif ($probe.Watch.ElapsedMilliseconds -ge $timeoutMs) {
+                    $probe.Client.Close()
+                    $pending.RemoveAt($i)
+                }
+            }
+            Start-Sleep -Milliseconds 25
+        }
+
+        $stopwatch.Stop()
+        return [pscustomobject]@{
+            Results = @($open)
+            ElapsedMs = [int]$stopwatch.ElapsedMilliseconds
+        }
+    }).AddArgument($targets).AddArgument($ports).AddArgument(700) | Out-Null
+
+    $handle = $ps.BeginInvoke()
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $data = @($ps.EndInvoke($handle))
+                $scanResult = $data[0]
+                $script:txtDiagOutput.Text = Format-PortScanRows -Results @($scanResult.Results) -Target $target -TargetCount $targets.Count -Ports $ports -ElapsedMs $scanResult.ElapsedMs
+                Update-Status "Port scan complete"
+                Write-OperationLog -Action "Port scan" -Result "Succeeded" -Detail "Target=$target; Open=$(@($scanResult.Results).Count); DurationMs=$($scanResult.ElapsedMs)"
+            } catch {
+                Update-Status "Port scan failed: $($_.Exception.Message)" -Type Error
+                $script:txtDiagOutput.Text = "Port scan failed: $($_.Exception.Message)"
+                Write-OperationLog -Action "Port scan" -Result "Failed" -Detail $_.Exception.Message
+            } finally {
+                $script:PortScanRunning = $false
+                $script:btnPortScan.IsEnabled = $true
+                $script:btnPortScan.Content = Get-UiString -Key "button.portScan.idle" -DefaultValue "Port Scan"
+                if ($script:PortScanPowerShell -eq $ps) { $script:PortScanPowerShell = $null }
+                $ps.Dispose()
+                $timer.Stop()
+            }
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
 function Invoke-Nslookup {
     $target = $script:txtPingTarget.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($target)) {
@@ -8831,6 +9080,7 @@ $btnNetworkReset.Add_Click({ Invoke-NetworkReset })
 $btnPing.Add_Click({ Invoke-Ping })
 $btnTraceroute.Add_Click({ Invoke-Traceroute })
 $btnMtrTrace.Add_Click({ Toggle-MtrTrace })
+$btnPortScan.Add_Click({ Invoke-PortScan })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
 
 # Diagnostics button handlers
@@ -8875,6 +9125,13 @@ $window.Add_Closing({
     }
     if ($script:MtrRunning) {
         Stop-MtrTrace
+    }
+    if ($script:PortScanPowerShell) {
+        try {
+            $script:PortScanPowerShell.Stop()
+        } catch {
+            Write-OperationLog -Action "Port scan stop" -Result "Warning" -Detail $_.Exception.Message
+        }
     }
     if ($script:EncryptedDnsHealthTimer) {
         $script:EncryptedDnsHealthTimer.Stop()

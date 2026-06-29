@@ -33,6 +33,8 @@
     "button.nslookup": "NSLookup",
     "button.ping": "Ping",
     "button.pingTest": "Prueba de ping (10x)",
+    "button.portScan.idle": "Escanear puertos",
+    "button.portScan.running": "Escaneando...",
     "button.previewDiff": "Vista previa",
     "button.refreshAdapters": "Actualizar adaptadores",
     "button.registerDoh": "Registrar DoH",

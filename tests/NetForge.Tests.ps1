@@ -633,6 +633,48 @@ Describe 'MTR history helpers' {
     }
 }
 
+Describe 'Port scan helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'ConvertTo-UInt32IPv4',
+            'ConvertFrom-UInt32IPv4',
+            'Get-PortScanTargetList',
+            'Get-DefaultPortScanPorts',
+            'Get-PortServiceName',
+            'Format-PortScanRows'
+        )
+    }
+
+    It 'expands bounded IPv4 CIDR targets for LAN discovery' {
+        $targets = Get-PortScanTargetList -Target '192.168.50.0/30'
+
+        $targets.Count | Should -Be 2
+        $targets[0] | Should -Be '192.168.50.1'
+        $targets[1] | Should -Be '192.168.50.2'
+        { Get-PortScanTargetList -Target '192.168.0.0/16' } | Should -Throw '*limited to /24 through /32*'
+    }
+
+    It 'uses a broader host port set and compact CIDR discovery set' {
+        (Get-DefaultPortScanPorts -TargetCount 1) | Should -Contain 5985
+        ((Get-DefaultPortScanPorts -TargetCount 12) -join ',') | Should -Be '80,443,445,3389'
+    }
+
+    It 'formats open TCP services and empty scan results' {
+        $rows = Format-PortScanRows -Target 'server.local' -TargetCount 1 -Ports @(80, 443) -ElapsedMs 42 -Results @(
+            [pscustomobject]@{ Target = 'server.local'; Port = 443; Status = 'Open'; LatencyMs = 12 },
+            [pscustomobject]@{ Target = 'server.local'; Port = 80; Status = 'Closed'; LatencyMs = -1 }
+        )
+
+        $rows | Should -Match 'Port scan for server.local'
+        $rows | Should -Match 'HTTPS'
+        $rows | Should -Match '443'
+        $rows | Should -Not -Match 'Closed'
+
+        $empty = Format-PortScanRows -Target 'server.local' -TargetCount 1 -Ports @(80) -ElapsedMs 10 -Results @()
+        $empty | Should -Match 'No open ports'
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

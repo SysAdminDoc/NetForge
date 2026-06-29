@@ -11,7 +11,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### Profiles
 
 ### Diagnostics
-- Port scanner (nmap-lite via raw sockets) for LAN device discovery
 - Packet capture to `.pcap` via Npcap wrapper + optional Wireshark launch
 - Cable diagnostics (DDM/DOM SFP reads on server NICs that support it)
 - Wi-Fi spectrum view (channel utilization) with BSSID list
