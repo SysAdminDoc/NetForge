@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P2
-- [ ] P2 - Centralize version and release metadata
-  Why: Script, README badge, changelog, working notes, and dist zip are still updated manually and can drift across releases.
-  Evidence: `NetForge.ps1:7`, `NetForge.ps1:47`, `README.md`, `CHANGELOG.md`, working notes, release zip naming.
-  Touches: `NetForge.ps1`, README, changelog, working notes, release packaging script.
-  Acceptance: One version source updates script header/UI, README badge, changelog heading, release zip name, and working notes; local verification fails on mismatch.
-  Complexity: S
-
 - [ ] P2 - Ship signed/checksummed release artifacts
   Why: A high-privilege PowerShell network tool should make authenticity and install path clear.
   Evidence: PowerShell signing docs, execution policy docs, current release zip artifact.

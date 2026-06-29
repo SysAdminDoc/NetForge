@@ -223,7 +223,8 @@ Describe 'Profile storage migration' {
             'Write-ProfileStoreBackupManifest'
         )
         $script:ProfileSchemaVersion = 1
-        $script:AppVersion = '1.21.0'
+        $versionMetadata = Get-Content -Raw -LiteralPath (Join-Path $script:RepoRoot 'version.json') | ConvertFrom-Json
+        $script:AppVersion = [string]$versionMetadata.Version
     }
 
     It 'normalizes equivalent profile store paths' {
