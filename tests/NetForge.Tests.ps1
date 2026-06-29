@@ -387,6 +387,58 @@ Describe 'Profile QR payload helpers' {
     }
 }
 
+Describe 'CLI profile apply helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Resolve-CliProfile',
+            'Resolve-CliAdapter'
+        )
+        $script:ProfilesPath = 'C:\Profiles'
+    }
+
+    It 'resolves a saved profile name case-insensitively' {
+        $profiles = @(
+            [pscustomobject]@{ Name = 'Home' },
+            [pscustomobject]@{ Name = 'Work' }
+        )
+
+        $profile = Resolve-CliProfile -ProfileName 'home' -Profiles $profiles
+
+        $profile.Name | Should -Be 'Home'
+    }
+
+    It 'reports available profiles when a CLI profile is missing' {
+        $profiles = @(
+            [pscustomobject]@{ Name = 'Home' },
+            [pscustomobject]@{ Name = 'Work' }
+        )
+
+        { Resolve-CliProfile -ProfileName 'Travel' -Profiles $profiles } | Should -Throw "*Available profiles: Home, Work*"
+    }
+
+    It 'defaults to the first active adapter' {
+        $adapters = @(
+            [pscustomobject]@{ Name = 'Ethernet'; ifIndex = 4; InterfaceDescription = 'Intel Ethernet'; Status = 'Disconnected' },
+            [pscustomobject]@{ Name = 'Wi-Fi'; ifIndex = 9; InterfaceDescription = 'Intel Wi-Fi'; Status = 'Up' }
+        )
+
+        $adapter = Resolve-CliAdapter -Adapters $adapters
+
+        $adapter.Name | Should -Be 'Wi-Fi'
+    }
+
+    It 'resolves adapters by interface index' {
+        $adapters = @(
+            [pscustomobject]@{ Name = 'Ethernet'; ifIndex = 4; InterfaceDescription = 'Intel Ethernet'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Wi-Fi'; ifIndex = 9; InterfaceDescription = 'Intel Wi-Fi'; Status = 'Up' }
+        )
+
+        $adapter = Resolve-CliAdapter -AdapterName '4' -Adapters $adapters
+
+        $adapter.Name | Should -Be 'Ethernet'
+    }
+}
+
 Describe 'Encrypted DNS endpoint helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

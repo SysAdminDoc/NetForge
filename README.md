@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.43.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.44.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -89,6 +89,7 @@
 - Quick-apply profiles to any adapter
 - System tray profile switching against the selected or first active adapter
 - Import/export profiles as JSON or PNG QR codes, plus import Windows WLAN profile XML from `netsh wlan export profile`
+- CLI profile apply for scripts with `-ApplyProfile`, optional `-AdapterName`, and `-Silent`
 - Perfect for switching between work, home, and other networks
 
 ### Network Tools
@@ -193,6 +194,15 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 .\NetForge.ps1
 ```
 
+### CLI Profile Apply
+```powershell
+# Apply a saved profile to the first active adapter without success output
+.\NetForge.ps1 -ApplyProfile Home -Silent
+
+# Apply a saved profile to a specific adapter name or interface index
+.\NetForge.ps1 -ApplyProfile Work -AdapterName "Wi-Fi"
+```
+
 ### Local Checks
 ```powershell
 .\tools\Test-NetForge.ps1
@@ -200,7 +210,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.43.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.44.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
@@ -228,6 +238,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Click "Preview Diff" to review changes against the selected adapter
    - Fill in details and save
    - Use the header Import button to import NetForge JSON exports or Windows WLAN profile XML exports
+   - Use `.\NetForge.ps1 -ApplyProfile Home -Silent` from scripts to apply a saved profile without launching the window
 5. **Manage WiFi**:
    - Go to the WiFi tab
    - Click "Scan Networks"

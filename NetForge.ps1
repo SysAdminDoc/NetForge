@@ -7,13 +7,16 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.43.0
+    Version: 1.44.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
 #Requires -Version 5.1
 
 param(
+    [string]$ApplyProfile = "",
+    [string]$AdapterName = "",
+    [switch]$Silent,
     [switch]$Debug
 )
 
@@ -24,7 +27,49 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
 if (-not $isAdmin) {
     $scriptPath = $MyInvocation.MyCommand.Path
     if ($scriptPath) {
-        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`"" -Verb RunAs
+        function ConvertTo-ElevationArgument {
+            param([string]$Value)
+
+            $text = [string]$Value
+            if ($text -match '[\s"]') {
+                return '"' + ($text -replace '"', '\"') + '"'
+            }
+            return $text
+        }
+
+        $cliMode = -not [string]::IsNullOrWhiteSpace($ApplyProfile)
+        $arguments = @(
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            (ConvertTo-ElevationArgument -Value $scriptPath)
+        )
+        if (-not [string]::IsNullOrWhiteSpace($ApplyProfile)) {
+            $arguments += "-ApplyProfile"
+            $arguments += (ConvertTo-ElevationArgument -Value $ApplyProfile)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($AdapterName)) {
+            $arguments += "-AdapterName"
+            $arguments += (ConvertTo-ElevationArgument -Value $AdapterName)
+        }
+        if ($Silent) { $arguments += "-Silent" }
+        if ($Debug) { $arguments += "-Debug" }
+
+        $startArgs = @{
+            FilePath = "powershell.exe"
+            ArgumentList = ($arguments -join " ")
+            Verb = "RunAs"
+        }
+        if ($cliMode) {
+            $startArgs["Wait"] = $true
+            $startArgs["PassThru"] = $true
+        }
+
+        $process = Start-Process @startArgs
+        if ($cliMode -and $process) {
+            exit $process.ExitCode
+        }
     } else {
         Write-Host "Please run this script as Administrator." -ForegroundColor Red
         pause
@@ -45,7 +90,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.43.0"
+$script:AppVersion = "1.44.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -1324,7 +1369,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.43.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.44.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2626,7 +2671,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.43.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.44.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -9504,7 +9549,7 @@ function Invoke-ApplyProfileObject {
     $target = Get-ProfileApplyTarget -ProfileData $ProfileData
     if (-not $target.IsValid) {
         Update-Status $target.Message -Type Error
-        if ($Source -notin @("Auto", "Scheduled", "Tray")) {
+        if ($Source -notin @("Auto", "Scheduled", "Tray", "Cli")) {
             Show-MessageBox -Message $target.Message -Title "Profile Validation Failed" -Icon Error
         }
         return $false
@@ -9512,7 +9557,7 @@ function Invoke-ApplyProfileObject {
 
     Update-Status "Applying profile '$($ProfileData.Name)'..."
 
-    $quietApply = ($Source -in @("Auto", "Scheduled", "Tray"))
+    $quietApply = ($Source -in @("Auto", "Scheduled", "Tray", "Cli"))
     $success = Invoke-NetworkMutation -Adapter $Adapter -ActionName "Apply profile '$($ProfileData.Name)'" -Quiet:$quietApply -ScriptBlock {
         Invoke-AdapterIPTarget -Adapter $Adapter -Target $target
         Invoke-AdapterDNSTarget -Adapter $Adapter -Target $target
@@ -9522,8 +9567,10 @@ function Invoke-ApplyProfileObject {
     if ($success) {
         $script:LastAutoAppliedProfile = if ($Source -eq "Auto") { $ProfileData.Name } else { $script:LastAutoAppliedProfile }
         Update-Status "Profile '$($ProfileData.Name)' applied successfully" -Type Success
-        Start-Sleep -Milliseconds 500
-        Update-AdapterDisplay
+        if ($Source -ne "Cli" -and $script:txtAdapterName) {
+            Start-Sleep -Milliseconds 500
+            Update-AdapterDisplay
+        }
         return $true
     }
 
@@ -9850,6 +9897,113 @@ function Apply-Profile {
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
 
     [void](Invoke-ApplyProfileObject -ProfileData $profile -Adapter $adapter -Source "Manual")
+}
+
+function Resolve-CliProfile {
+    param(
+        [string]$ProfileName,
+        [object[]]$Profiles = $null
+    )
+
+    $name = ([string]$ProfileName).Trim()
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        throw "Use -ApplyProfile with a saved profile name."
+    }
+
+    if ($null -eq $Profiles) {
+        $Profiles = @(Get-Profiles)
+    }
+
+    $matches = @($Profiles | Where-Object { $_.Name -ieq $name })
+    if ($matches.Count -eq 1) {
+        return $matches[0]
+    }
+
+    if ($matches.Count -gt 1) {
+        throw "Profile '$name' is ambiguous; remove duplicate profile files before using CLI apply."
+    }
+
+    $available = @($Profiles | ForEach-Object { $_.Name } | Sort-Object)
+    $availableText = if ($available.Count -gt 0) { $available -join ", " } else { "none" }
+    throw "Profile '$name' was not found in $script:ProfilesPath. Available profiles: $availableText."
+}
+
+function Resolve-CliAdapter {
+    param(
+        [string]$AdapterName = "",
+        [object[]]$Adapters = $null
+    )
+
+    $selector = ([string]$AdapterName).Trim()
+    if ($null -eq $Adapters) {
+        if ([string]::IsNullOrWhiteSpace($selector)) {
+            $Adapters = @(Get-NetworkAdapters)
+        } else {
+            $Adapters = @(Get-NetAdapter | Sort-Object Name)
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($selector)) {
+        $active = @($Adapters | Where-Object { $_.Status -eq "Up" })
+        if ($active.Count -gt 0) { return $active[0] }
+        if ($Adapters.Count -gt 0) { return $Adapters[0] }
+        throw "No network adapters are available."
+    }
+
+    $matches = @($Adapters | Where-Object {
+        $_.Name -ieq $selector -or
+        [string]$_.ifIndex -eq $selector -or
+        $_.InterfaceDescription -ieq $selector
+    })
+
+    if ($matches.Count -eq 0) {
+        $matches = @($Adapters | Where-Object {
+            $_.Name -like "*$selector*" -or $_.InterfaceDescription -like "*$selector*"
+        })
+    }
+
+    if ($matches.Count -eq 1) {
+        return $matches[0]
+    }
+
+    if ($matches.Count -gt 1) {
+        $matchText = @($matches | ForEach-Object { "$($_.Name) [$($_.ifIndex)]" }) -join ", "
+        throw "Adapter '$selector' is ambiguous: $matchText."
+    }
+
+    $available = @($Adapters | ForEach-Object { "$($_.Name) [$($_.ifIndex)]" })
+    $availableText = if ($available.Count -gt 0) { $available -join ", " } else { "none" }
+    throw "Adapter '$selector' was not found. Available adapters: $availableText."
+}
+
+function Invoke-CliApplyProfile {
+    param(
+        [string]$ProfileName,
+        [string]$AdapterSelector = "",
+        [switch]$Quiet
+    )
+
+    try {
+        $profile = Resolve-CliProfile -ProfileName $ProfileName
+        $adapter = Resolve-CliAdapter -AdapterName $AdapterSelector
+        $success = Invoke-ApplyProfileObject -ProfileData $profile -Adapter $adapter -Source "Cli"
+
+        if (-not $success) {
+            Write-OperationLog -Action "CLI apply profile" -Result "Failed" -Detail "Profile=$($profile.Name); Adapter=$($adapter.Name)"
+            exit 1
+        }
+
+        Write-OperationLog -Action "CLI apply profile" -Result "Succeeded" -Detail "Profile=$($profile.Name); Adapter=$($adapter.Name)"
+        if (-not $Quiet) {
+            Write-Host "Applied profile '$($profile.Name)' to adapter '$($adapter.Name)'."
+        }
+        exit 0
+    } catch {
+        $message = $_.Exception.Message
+        Write-OperationLog -Action "CLI apply profile" -Result "Failed" -Detail $message
+        Write-Error $message
+        exit 1
+    }
 }
 
 function Invoke-TrayDispatcherAction {
@@ -11486,6 +11640,10 @@ function Import-Configuration {
             Write-ProfileImportLog -Lines @("Import failed:", $_.Exception.Message)
         }
     }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ApplyProfile)) {
+    Invoke-CliApplyProfile -ProfileName $ApplyProfile -AdapterSelector $AdapterName -Quiet:$Silent
 }
 
 # ============================================================================
