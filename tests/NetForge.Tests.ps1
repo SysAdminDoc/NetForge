@@ -483,6 +483,54 @@ Describe 'DNS provider catalog' {
     }
 }
 
+Describe 'DNS preset apply target helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIP',
+            'Get-ApplyValidationResult',
+            'Get-DnsPresetApplyTarget'
+        )
+    }
+
+    It 'builds an automatic DNS target for DHCP presets' {
+        $target = Get-DnsPresetApplyTarget -PresetName 'DHCP (Automatic)' -PresetData ([pscustomobject]@{
+            Primary = 'DHCP'
+            Secondary = 'DHCP'
+        })
+
+        $target.IsValid | Should -BeTrue
+        $target.UseAutomatic | Should -BeTrue
+        $target.Servers.Count | Should -Be 0
+        $target.StatusMessage | Should -Match 'automatic'
+    }
+
+    It 'includes unique IPv4 and IPv6 servers when requested' {
+        $target = Get-DnsPresetApplyTarget -PresetName 'Example DNS' -PresetData ([pscustomobject]@{
+            Primary = '1.1.1.1'
+            Secondary = '1.0.0.1'
+            PrimaryV6 = '2606:4700:4700::1111'
+            SecondaryV6 = '2606:4700:4700::1111'
+        }) -IncludeIPv6 $true
+
+        $target.IsValid | Should -BeTrue
+        $target.UseAutomatic | Should -BeFalse
+        $target.Servers | Should -Contain '1.1.1.1'
+        $target.Servers | Should -Contain '1.0.0.1'
+        $target.Servers | Should -Contain '2606:4700:4700::1111'
+        @($target.Servers | Where-Object { $_ -eq '2606:4700:4700::1111' }).Count | Should -Be 1
+    }
+
+    It 'rejects invalid preset server addresses' {
+        $target = Get-DnsPresetApplyTarget -PresetName 'Broken DNS' -PresetData ([pscustomobject]@{
+            Primary = '999.999.999.999'
+            Secondary = ''
+        })
+
+        $target.IsValid | Should -BeFalse
+        $target.Message | Should -Match 'invalid server'
+    }
+}
+
 Describe 'Localization resources' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

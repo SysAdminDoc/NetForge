@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.39.0
+    Version: 1.40.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -39,12 +39,13 @@ Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.39.0"
+$script:AppVersion = "1.40.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -100,6 +101,8 @@ $script:AutoProfileTimer = $null
 $script:ScheduleProfileTimer = $null
 $script:NetworkChangeHandlers = @{}
 $script:NetworkChangeSubscribed = $false
+$script:TrayIcon = $null
+$script:TrayContextMenu = $null
 $script:AccessibilityNames = @{
     lstAdapters = "Network adapter list"
     btnRefresh = "Refresh adapters"
@@ -1184,7 +1187,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.39.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.40.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2479,7 +2482,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.39.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.40.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3108,6 +3111,60 @@ function Get-IPv6ApplyTarget {
     }
 }
 
+function Get-DnsPresetApplyTarget {
+    param(
+        [string]$PresetName,
+        [object]$PresetData,
+        [bool]$IncludeIPv6 = $false
+    )
+
+    $displayName = ([string]$PresetName).Trim()
+    if ([string]::IsNullOrWhiteSpace($displayName)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "DNS preset name is required."
+    }
+    if ($null -eq $PresetData) {
+        return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$displayName' has no data."
+    }
+
+    if ([string]$PresetData.Primary -eq "DHCP") {
+        return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+            UseAutomatic = $true
+            Servers = @()
+            StatusMessage = "DNS preset '$displayName' set to automatic"
+        }
+    }
+
+    $servers = @()
+    foreach ($server in @($PresetData.Primary, $PresetData.Secondary)) {
+        if ([string]::IsNullOrWhiteSpace($server)) { continue }
+        if (-not (Test-ValidIP -IP $server)) {
+            return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$displayName' contains invalid server '$server'."
+        }
+        $servers += $server
+    }
+
+    if ($IncludeIPv6) {
+        foreach ($server in @($PresetData.PrimaryV6, $PresetData.SecondaryV6)) {
+            if ([string]::IsNullOrWhiteSpace($server)) { continue }
+            if (-not (Test-ValidIP -IP $server)) {
+                return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$displayName' contains invalid IPv6 server '$server'."
+            }
+            $servers += $server
+        }
+    }
+
+    $servers = @($servers | Select-Object -Unique)
+    if ($servers.Count -eq 0) {
+        return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$displayName' has no usable DNS servers."
+    }
+
+    return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+        UseAutomatic = $false
+        Servers = $servers
+        StatusMessage = "DNS preset '$displayName' applied"
+    }
+}
+
 function Get-DNSApplyTarget {
     if ($script:rbDnsDHCP.IsChecked) {
         return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
@@ -3123,44 +3180,7 @@ function Get-DNSApplyTarget {
             return Get-ApplyValidationResult -IsValid $false -Message "Please select a DNS preset."
         }
 
-        $preset = $selected.Tag.Data
-        if ($preset.Primary -eq "DHCP") {
-            return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
-                UseAutomatic = $true
-                Servers = @()
-                StatusMessage = "DNS preset '$($selected.Tag.Name)' set to automatic"
-            }
-        }
-
-        $servers = @()
-        foreach ($server in @($preset.Primary, $preset.Secondary)) {
-            if ([string]::IsNullOrWhiteSpace($server)) { continue }
-            if (-not (Test-ValidIP -IP $server)) {
-                return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$($selected.Tag.Name)' contains invalid server '$server'."
-            }
-            $servers += $server
-        }
-
-        if ($script:chkIPv6Dns.IsChecked) {
-            foreach ($server in @($preset.PrimaryV6, $preset.SecondaryV6)) {
-                if ([string]::IsNullOrWhiteSpace($server)) { continue }
-                if (-not (Test-ValidIP -IP $server)) {
-                    return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$($selected.Tag.Name)' contains invalid IPv6 server '$server'."
-                }
-                $servers += $server
-            }
-        }
-
-        $servers = @($servers | Select-Object -Unique)
-        if ($servers.Count -eq 0) {
-            return Get-ApplyValidationResult -IsValid $false -Message "DNS preset '$($selected.Tag.Name)' has no usable DNS servers."
-        }
-
-        return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
-            UseAutomatic = $false
-            Servers = $servers
-            StatusMessage = "DNS preset '$($selected.Tag.Name)' applied"
-        }
+        return Get-DnsPresetApplyTarget -PresetName $selected.Tag.Name -PresetData $selected.Tag.Data -IncludeIPv6 ([bool]$script:chkIPv6Dns.IsChecked)
     }
 
     $primary = $script:txtDnsPrimary.Text.Trim()
@@ -6096,6 +6116,10 @@ function Refresh-DnsPresets {
 
         $script:lstDnsPresets.Items.Add($item) | Out-Null
     }
+
+    if ($script:TrayIcon) {
+        Update-TrayMenu
+    }
 }
 
 function Update-SelectedDnsDisplay {
@@ -8625,6 +8649,9 @@ function Refresh-ProfileList {
     }
 
     Update-ProfileStoreDisplay
+    if ($script:TrayIcon) {
+        Update-TrayMenu
+    }
 }
 
 function Load-ProfileToEditor {
@@ -8850,7 +8877,7 @@ function Invoke-ApplyProfileObject {
     $target = Get-ProfileApplyTarget -ProfileData $ProfileData
     if (-not $target.IsValid) {
         Update-Status $target.Message -Type Error
-        if ($Source -notin @("Auto", "Scheduled")) {
+        if ($Source -notin @("Auto", "Scheduled", "Tray")) {
             Show-MessageBox -Message $target.Message -Title "Profile Validation Failed" -Icon Error
         }
         return $false
@@ -8858,7 +8885,7 @@ function Invoke-ApplyProfileObject {
 
     Update-Status "Applying profile '$($ProfileData.Name)'..."
 
-    $quietApply = ($Source -in @("Auto", "Scheduled"))
+    $quietApply = ($Source -in @("Auto", "Scheduled", "Tray"))
     $success = Invoke-NetworkMutation -Adapter $Adapter -ActionName "Apply profile '$($ProfileData.Name)'" -Quiet:$quietApply -ScriptBlock {
         Invoke-AdapterIPTarget -Adapter $Adapter -Target $target
         Invoke-AdapterDNSTarget -Adapter $Adapter -Target $target
@@ -9196,6 +9223,269 @@ function Apply-Profile {
     if ($result -ne [System.Windows.MessageBoxResult]::Yes) { return }
 
     [void](Invoke-ApplyProfileObject -ProfileData $profile -Adapter $adapter -Source "Manual")
+}
+
+function Invoke-TrayDispatcherAction {
+    param([scriptblock]$Action)
+
+    if ($null -eq $Action) { return }
+
+    $runner = {
+        try {
+            & $Action
+        } catch {
+            $message = $_.Exception.Message
+            Write-OperationLog -Action "System tray action" -Result "Failed" -Detail $message
+            Update-Status "System tray action failed: $message" -Type Error
+            Show-TrayBalloon -Title "NetForge action failed" -Message $message -Icon Error
+        }
+    }.GetNewClosure()
+
+    if ($window.Dispatcher.CheckAccess()) {
+        & $runner
+    } else {
+        [void]$window.Dispatcher.BeginInvoke([action]$runner)
+    }
+}
+
+function New-TrayMenuItem {
+    param(
+        [string]$Text,
+        [scriptblock]$Action = $null,
+        [bool]$Enabled = $true
+    )
+
+    $item = New-Object System.Windows.Forms.ToolStripMenuItem
+    $item.Text = $Text
+    $item.Enabled = $Enabled
+
+    if ($Action) {
+        $menuAction = $Action.GetNewClosure()
+        $item.Add_Click({
+            Invoke-TrayDispatcherAction -Action $menuAction
+        }.GetNewClosure())
+    }
+
+    return $item
+}
+
+function Show-TrayBalloon {
+    param(
+        [string]$Title,
+        [string]$Message,
+        [System.Windows.Forms.ToolTipIcon]$Icon = [System.Windows.Forms.ToolTipIcon]::Info
+    )
+
+    if ($null -eq $script:TrayIcon) { return }
+
+    try {
+        $script:TrayIcon.BalloonTipTitle = $Title
+        $script:TrayIcon.BalloonTipText = $Message
+        $script:TrayIcon.BalloonTipIcon = $Icon
+        $script:TrayIcon.ShowBalloonTip(4000)
+    } catch {
+        Write-OperationLog -Action "System tray balloon" -Result "Failed" -Detail $_.Exception.Message
+    }
+}
+
+function Show-MainWindowFromTray {
+    if ($window.WindowState -eq [System.Windows.WindowState]::Minimized) {
+        $window.WindowState = [System.Windows.WindowState]::Normal
+    }
+    $window.Show()
+    [void]$window.Activate()
+    Update-Status "NetForge restored from system tray" -Type Info
+}
+
+function Set-MainWindowTrayHidden {
+    if ($null -eq $script:TrayIcon) { return }
+
+    $window.Hide()
+    Update-Status "NetForge hidden to system tray" -Type Info
+    Show-TrayBalloon -Title "NetForge" -Message "NetForge is running in the system tray. Double-click the icon to reopen it." -Icon Info
+}
+
+function Get-TrayApplyAdapter {
+    $selected = Get-SelectedAdapter
+    if ($null -ne $selected) { return $selected }
+
+    $adapters = @(Get-NetworkAdapters)
+    $active = $adapters | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+    if ($null -ne $active) { return $active }
+
+    return ($adapters | Select-Object -First 1)
+}
+
+function Invoke-TrayDnsPreset {
+    param(
+        [string]$PresetName,
+        [object]$PresetData
+    )
+
+    $adapter = Get-TrayApplyAdapter
+    if ($null -eq $adapter) {
+        Update-Status "Tray DNS apply skipped: no adapter available" -Type Warning
+        Show-TrayBalloon -Title "NetForge DNS" -Message "No network adapter is available." -Icon Warning
+        return
+    }
+
+    $includeIPv6 = $false
+    if ($script:chkIPv6Dns -and $script:chkIPv6Dns.IsChecked) {
+        $includeIPv6 = $true
+    }
+
+    $target = Get-DnsPresetApplyTarget -PresetName $PresetName -PresetData $PresetData -IncludeIPv6 $includeIPv6
+    if (-not $target.IsValid) {
+        Update-Status $target.Message -Type Error
+        Show-TrayBalloon -Title "NetForge DNS" -Message $target.Message -Icon Error
+        return
+    }
+
+    Update-Status "Applying tray DNS preset '$PresetName'..."
+    $success = Invoke-NetworkMutation -Adapter $adapter -ActionName "Tray DNS preset '$PresetName'" -Quiet -ScriptBlock {
+        Invoke-AdapterDNSTarget -Adapter $adapter -Target $target
+    }
+
+    if ($success) {
+        Update-AdapterDetails
+        $message = "$($target.StatusMessage) to $($adapter.Name)"
+        Update-Status $message -Type Success
+        Show-TrayBalloon -Title "NetForge DNS applied" -Message $message -Icon Info
+    } else {
+        Show-TrayBalloon -Title "NetForge DNS failed" -Message "Could not apply '$PresetName' to $($adapter.Name). Previous state was restored when possible." -Icon Error
+    }
+}
+
+function Invoke-TrayProfile {
+    param([pscustomobject]$ProfileData)
+
+    $adapter = Get-TrayApplyAdapter
+    if ($null -eq $adapter) {
+        Update-Status "Tray profile apply skipped: no adapter available" -Type Warning
+        Show-TrayBalloon -Title "NetForge profile" -Message "No network adapter is available." -Icon Warning
+        return
+    }
+
+    if ($null -eq $ProfileData) {
+        Update-Status "Tray profile apply skipped: no profile selected" -Type Warning
+        Show-TrayBalloon -Title "NetForge profile" -Message "No profile data is available." -Icon Warning
+        return
+    }
+
+    $applied = Invoke-ApplyProfileObject -ProfileData $ProfileData -Adapter $adapter -Source "Tray"
+    if ($applied) {
+        $message = "Profile '$($ProfileData.Name)' applied to $($adapter.Name)"
+        Update-Status $message -Type Success
+        Show-TrayBalloon -Title "NetForge profile applied" -Message $message -Icon Info
+    } else {
+        Show-TrayBalloon -Title "NetForge profile failed" -Message "Could not apply profile '$($ProfileData.Name)' to $($adapter.Name)." -Icon Error
+    }
+}
+
+function Update-TrayMenu {
+    if ($null -eq $script:TrayIcon) { return }
+
+    $oldMenu = $script:TrayContextMenu
+    $menu = New-Object System.Windows.Forms.ContextMenuStrip
+    $menu.ShowImageMargin = $false
+
+    [void]$menu.Items.Add((New-TrayMenuItem -Text "Open NetForge" -Action { Show-MainWindowFromTray }))
+    [void]$menu.Items.Add((New-TrayMenuItem -Text "Hide Window" -Action { Set-MainWindowTrayHidden }))
+    [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+
+    $dnsRoot = New-TrayMenuItem -Text "Quick DNS"
+    $dnsEntries = @($script:DnsPresets.GetEnumerator() | Sort-Object @{ Expression = { if ($_.Value.Category) { [string]$_.Value.Category } else { "Other" } } }, @{ Expression = { [string]$_.Key } })
+    if ($dnsEntries.Count -eq 0) {
+        [void]$dnsRoot.DropDownItems.Add((New-TrayMenuItem -Text "No DNS presets available" -Enabled $false))
+    } else {
+        $categoryMenus = [ordered]@{}
+        foreach ($entry in $dnsEntries) {
+            $category = if ($entry.Value.Category) { [string]$entry.Value.Category } else { "Other" }
+            if (-not $categoryMenus.Contains($category)) {
+                $categoryItem = New-TrayMenuItem -Text $category
+                $categoryMenus[$category] = $categoryItem
+                [void]$dnsRoot.DropDownItems.Add($categoryItem)
+            }
+
+            $presetName = [string]$entry.Key
+            $presetData = $entry.Value
+            $presetAction = { Invoke-TrayDnsPreset -PresetName $presetName -PresetData $presetData }.GetNewClosure()
+            [void]$categoryMenus[$category].DropDownItems.Add((New-TrayMenuItem -Text $presetName -Action $presetAction))
+        }
+    }
+    [void]$menu.Items.Add($dnsRoot)
+
+    $profileRoot = New-TrayMenuItem -Text "Profiles"
+    $profiles = @(Get-Profiles | Sort-Object Name)
+    if ($profiles.Count -eq 0) {
+        [void]$profileRoot.DropDownItems.Add((New-TrayMenuItem -Text "No saved profiles" -Enabled $false))
+    } else {
+        foreach ($profile in $profiles) {
+            $profileData = $profile
+            $profileAction = { Invoke-TrayProfile -ProfileData $profileData }.GetNewClosure()
+            [void]$profileRoot.DropDownItems.Add((New-TrayMenuItem -Text $profile.Name -Action $profileAction))
+        }
+    }
+    [void]$menu.Items.Add($profileRoot)
+
+    [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+    [void]$menu.Items.Add((New-TrayMenuItem -Text "Refresh Menu" -Action { Update-TrayMenu }))
+    [void]$menu.Items.Add((New-TrayMenuItem -Text "Exit NetForge" -Action { $window.Close() }))
+
+    $script:TrayContextMenu = $menu
+    $script:TrayIcon.ContextMenuStrip = $menu
+
+    if ($oldMenu) {
+        $oldMenu.Dispose()
+    }
+}
+
+function Initialize-SystemTray {
+    if ($script:TrayIcon) { return }
+
+    $icon = [System.Drawing.SystemIcons]::Application
+    $iconPath = Join-Path $script:ScriptRoot "icon.ico"
+    if (Test-Path -LiteralPath $iconPath) {
+        try {
+            $icon = New-Object System.Drawing.Icon($iconPath)
+        } catch {
+            Write-OperationLog -Action "System tray icon" -Result "Fallback" -Detail $_.Exception.Message
+        }
+    }
+
+    $script:TrayIcon = New-Object System.Windows.Forms.NotifyIcon
+    $script:TrayIcon.Icon = $icon
+    $script:TrayIcon.Text = "NetForge v$script:AppVersion"
+    $script:TrayIcon.Visible = $true
+    $script:TrayIcon.Add_DoubleClick({
+        Invoke-TrayDispatcherAction -Action { Show-MainWindowFromTray }
+    })
+
+    $window.Add_StateChanged({
+        if ($window.WindowState -eq [System.Windows.WindowState]::Minimized) {
+            Set-MainWindowTrayHidden
+        }
+    })
+
+    Update-TrayMenu
+    Write-OperationLog -Action "System tray" -Result "Started" -Detail "Quick DNS/profile menu initialized"
+}
+
+function Remove-SystemTray {
+    if ($script:TrayIcon) {
+        try {
+            $script:TrayIcon.Visible = $false
+            $script:TrayIcon.Dispose()
+        } catch {
+            Write-OperationLog -Action "System tray" -Result "DisposeFailed" -Detail $_.Exception.Message
+        }
+        $script:TrayIcon = $null
+    }
+
+    if ($script:TrayContextMenu) {
+        $script:TrayContextMenu.Dispose()
+        $script:TrayContextMenu = $null
+    }
 }
 
 # ============================================================================
@@ -10811,6 +11101,7 @@ $window.Add_Closing({
         $script:ScheduleProfileTimer.Stop()
     }
     Unregister-NetworkChangeAutoApply
+    Remove-SystemTray
     $script:ConnStatusTimer.Stop()
 })
 
@@ -10826,6 +11117,7 @@ Refresh-ProfileList
 Update-ProfileStoreDisplay
 Initialize-AccessibilityMetadata
 Apply-Localization
+Initialize-SystemTray
 Initialize-EndpointPolicyControls
 Show-RestoreSnapshotButtonState
 Update-ConnectionStatus

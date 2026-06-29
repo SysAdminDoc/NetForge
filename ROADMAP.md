@@ -15,7 +15,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### IPv6 & Advanced
 
 ### UX
-- System tray mode with quick DNS / profile switcher
 - Dark theme alternatives (Catppuccin, Nord)
 - Hotkey to apply "Home" or "Work" profile
 - Compact mode for laptops
