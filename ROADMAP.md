@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P3
-- [ ] P3 - Add optional standard-user helper service
-  Why: Running the entire GUI elevated increases blast radius; a small broker can constrain privileged network mutations.
-  Evidence: Windows service pattern in `gpailler/DnsProxy`, current `#Requires`/auto-elevation flow in `NetForge.ps1:19-31`.
-  Touches: helper service project or script, IPC contract, command authorization, installer/release package.
-  Acceptance: GUI can run unelevated, privileged actions are sent to a signed local helper with an allowlisted command contract, and logs show caller/action/result.
-  Complexity: XL
-
 - [ ] P3 - Expand profiles to Windows network category, proxy, printers, and mapped drives
   Why: Mature switchers treat a network profile as an environment, not just IP/DNS.
   Evidence: NetSetMan, argon-network-switcher, Microsoft Network List Manager docs, existing roadmap profile research.
