@@ -31,6 +31,8 @@
     "button.mtr.start": "Start MTR",
     "button.mtr.stop": "Stop MTR",
     "button.nslookup": "NSLookup",
+    "button.packetCapture.start": "Start Capture",
+    "button.packetCapture.stop": "Stop Capture",
     "button.ping": "Ping",
     "button.pingTest": "Ping Test (10x)",
     "button.portScan.idle": "Port Scan",

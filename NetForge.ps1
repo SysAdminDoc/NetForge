@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.31.0
+    Version: 1.32.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.31.0"
+$script:AppVersion = "1.32.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -74,6 +74,9 @@ $script:MtrTarget = ""
 $script:MtrCycle = 0
 $script:PortScanRunning = $false
 $script:PortScanPowerShell = $null
+$script:PacketCaptureRunning = $false
+$script:PacketCaptureEtlPath = ""
+$script:PacketCapturePcapPath = ""
 $script:CachedPublicIP = $null
 $script:PublicIpLookupEnabled = $true
 $script:ExternalSpeedTestEnabled = $true
@@ -186,6 +189,7 @@ $script:AccessibilityNames = @{
     btnTraceroute = "Run traceroute"
     btnMtrTrace = "Start MTR trace"
     btnPortScan = "Run port scan"
+    btnPacketCapture = "Start packet capture"
     btnNslookup = "Run NSLookup"
 }
 $script:AccessibilityTabOrder = @(
@@ -197,7 +201,7 @@ $script:AccessibilityTabOrder = @(
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
-    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnNslookup",
+    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnPacketCapture", "btnNslookup",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy"
 )
 
@@ -606,6 +610,8 @@ function Get-DynamicLocalizationKeyList {
         "button.mtr.stop",
         "button.portScan.idle",
         "button.portScan.running",
+        "button.packetCapture.start",
+        "button.packetCapture.stop",
         "button.speedTest.idle",
         "button.speedTest.running",
         "footer.adminStatusFormat"
@@ -1142,7 +1148,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.31.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.32.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2055,6 +2061,7 @@ function Apply-Localization {
                                             <Button x:Name="btnTraceroute" Content="Traceroute" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnMtrTrace" Content="Start MTR" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPortScan" Content="Port Scan" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnPacketCapture" Content="Start Capture" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnNslookup" Content="NSLookup" Style="{StaticResource ModernButton}"/>
                                         </StackPanel>
 
@@ -2296,7 +2303,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.31.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.32.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -8697,6 +8704,140 @@ function Invoke-PortScan {
     $timer.Start()
 }
 
+function Get-PacketCaptureDirectory {
+    return (Join-Path $script:ConfigPath "Captures")
+}
+
+function Get-PacketCaptureFileSet {
+    param(
+        [string]$Directory,
+        [datetime]$Timestamp = (Get-Date)
+    )
+
+    $stamp = $Timestamp.ToString("yyyyMMdd-HHmmss")
+    return [pscustomobject]@{
+        Directory = $Directory
+        EtlPath = Join-Path $Directory "netforge-capture-$stamp.etl"
+        PcapPath = Join-Path $Directory "netforge-capture-$stamp.pcapng"
+    }
+}
+
+function Get-PacketCaptureToolStatus {
+    $pktmon = Get-Command pktmon.exe -ErrorAction SilentlyContinue
+    $wireshark = Get-Command wireshark.exe -ErrorAction SilentlyContinue
+
+    return [pscustomobject]@{
+        PktmonPath = if ($pktmon) { $pktmon.Source } else { "" }
+        WiresharkPath = if ($wireshark) { $wireshark.Source } else { "" }
+        HasPktmon = ($null -ne $pktmon)
+        HasWireshark = ($null -ne $wireshark)
+    }
+}
+
+function Format-PacketCaptureSummary {
+    param(
+        [string]$EtlPath,
+        [string]$PcapPath,
+        [bool]$OpenedWireshark,
+        [string[]]$StopOutput = @(),
+        [string[]]$ConvertOutput = @()
+    )
+
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("Packet capture complete") | Out-Null
+    $sb.AppendLine("ETL: $EtlPath") | Out-Null
+    $sb.AppendLine("PCAPNG: $PcapPath") | Out-Null
+    $sb.AppendLine("Wireshark: $(if ($OpenedWireshark) { 'launched' } else { 'not available or not launched' })") | Out-Null
+    if ($StopOutput.Count -gt 0) {
+        $sb.AppendLine("") | Out-Null
+        $sb.AppendLine("pktmon stop:") | Out-Null
+        foreach ($line in $StopOutput) { $sb.AppendLine([string]$line) | Out-Null }
+    }
+    if ($ConvertOutput.Count -gt 0) {
+        $sb.AppendLine("") | Out-Null
+        $sb.AppendLine("pktmon etl2pcap:") | Out-Null
+        foreach ($line in $ConvertOutput) { $sb.AppendLine([string]$line) | Out-Null }
+    }
+
+    return $sb.ToString()
+}
+
+function Start-PacketCapture {
+    if ($script:PacketCaptureRunning) { return }
+
+    $tools = Get-PacketCaptureToolStatus
+    if (-not $tools.HasPktmon) {
+        Update-Status "Packet capture requires pktmon.exe" -Type Error
+        Show-MessageBox -Message "pktmon.exe was not found on this Windows installation." -Title "Packet Capture" -Icon Error
+        return
+    }
+
+    $captureDir = Get-PacketCaptureDirectory
+    if (-not (Test-Path -LiteralPath $captureDir)) {
+        New-Item -Path $captureDir -ItemType Directory -Force | Out-Null
+    }
+
+    $files = Get-PacketCaptureFileSet -Directory $captureDir
+    $args = @("start", "--capture", "--comp", "nics", "--pkt-size", "0", "--file-name", $files.EtlPath, "--file-size", "128")
+    $output = & $tools.PktmonPath @args 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $script:txtDiagOutput.Text = $output | Out-String
+        Update-Status "Packet capture failed to start" -Type Error
+        Write-OperationLog -Action "Packet capture" -Result "StartFailed" -Detail (($output | Out-String).Trim())
+        return
+    }
+
+    $script:PacketCaptureRunning = $true
+    $script:PacketCaptureEtlPath = $files.EtlPath
+    $script:PacketCapturePcapPath = $files.PcapPath
+    $script:btnPacketCapture.Content = Get-UiString -Key "button.packetCapture.stop" -DefaultValue "Stop Capture"
+    $script:txtDiagOutput.Text = "Packet capture running on NIC components.`nETL: $($files.EtlPath)`nClick Stop Capture to convert to PCAPNG."
+    Update-Status "Packet capture running"
+    Write-OperationLog -Action "Packet capture" -Result "Started" -Detail "ETL=$($files.EtlPath)"
+}
+
+function Stop-PacketCapture {
+    param([switch]$OpenWireshark)
+
+    if (-not $script:PacketCaptureRunning) { return }
+
+    $tools = Get-PacketCaptureToolStatus
+    $script:PacketCaptureRunning = $false
+    $script:btnPacketCapture.Content = Get-UiString -Key "button.packetCapture.start" -DefaultValue "Start Capture"
+
+    $stopOutput = @()
+    $convertOutput = @()
+    $openedWireshark = $false
+    try {
+        $stopOutput = @(& $tools.PktmonPath stop 2>&1)
+        $convertOutput = @(& $tools.PktmonPath etl2pcap $script:PacketCaptureEtlPath --out $script:PacketCapturePcapPath 2>&1)
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $script:PacketCapturePcapPath -PathType Leaf)) {
+            throw "pktmon conversion did not produce $($script:PacketCapturePcapPath)."
+        }
+
+        if ($OpenWireshark -and $tools.HasWireshark) {
+            Start-Process -FilePath $tools.WiresharkPath -ArgumentList $script:PacketCapturePcapPath
+            $openedWireshark = $true
+        }
+
+        $script:txtDiagOutput.Text = Format-PacketCaptureSummary -EtlPath $script:PacketCaptureEtlPath -PcapPath $script:PacketCapturePcapPath -OpenedWireshark:$openedWireshark -StopOutput $stopOutput -ConvertOutput $convertOutput
+        Update-Status "Packet capture saved to $($script:PacketCapturePcapPath)" -Type Success
+        Write-OperationLog -Action "Packet capture" -Result "Succeeded" -Detail "PCAPNG=$($script:PacketCapturePcapPath); Wireshark=$openedWireshark"
+    } catch {
+        $script:txtDiagOutput.Text = "Packet capture stop/convert failed: $($_.Exception.Message)`n`n$($stopOutput | Out-String)`n$($convertOutput | Out-String)"
+        Update-Status "Packet capture conversion failed" -Type Error
+        Write-OperationLog -Action "Packet capture" -Result "Failed" -Detail $_.Exception.Message
+    }
+}
+
+function Toggle-PacketCapture {
+    if ($script:PacketCaptureRunning) {
+        Stop-PacketCapture -OpenWireshark
+    } else {
+        Start-PacketCapture
+    }
+}
+
 function Invoke-Nslookup {
     $target = $script:txtPingTarget.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($target)) {
@@ -9081,6 +9222,7 @@ $btnPing.Add_Click({ Invoke-Ping })
 $btnTraceroute.Add_Click({ Invoke-Traceroute })
 $btnMtrTrace.Add_Click({ Toggle-MtrTrace })
 $btnPortScan.Add_Click({ Invoke-PortScan })
+$btnPacketCapture.Add_Click({ Toggle-PacketCapture })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
 
 # Diagnostics button handlers
@@ -9132,6 +9274,9 @@ $window.Add_Closing({
         } catch {
             Write-OperationLog -Action "Port scan stop" -Result "Warning" -Detail $_.Exception.Message
         }
+    }
+    if ($script:PacketCaptureRunning) {
+        Stop-PacketCapture
     }
     if ($script:EncryptedDnsHealthTimer) {
         $script:EncryptedDnsHealthTimer.Stop()

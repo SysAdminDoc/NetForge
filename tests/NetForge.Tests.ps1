@@ -675,6 +675,31 @@ Describe 'Port scan helpers' {
     }
 }
 
+Describe 'Packet capture helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-PacketCaptureFileSet',
+            'Format-PacketCaptureSummary'
+        )
+    }
+
+    It 'builds timestamped ETL and PCAPNG capture paths' {
+        $files = Get-PacketCaptureFileSet -Directory 'C:\Temp\NetForge' -Timestamp ([datetime]'2026-06-29T14:15:30')
+
+        $files.EtlPath | Should -Be 'C:\Temp\NetForge\netforge-capture-20260629-141530.etl'
+        $files.PcapPath | Should -Be 'C:\Temp\NetForge\netforge-capture-20260629-141530.pcapng'
+    }
+
+    It 'formats packet capture conversion summaries' {
+        $summary = Format-PacketCaptureSummary -EtlPath 'capture.etl' -PcapPath 'capture.pcapng' -OpenedWireshark:$true -StopOutput @('Stopped') -ConvertOutput @('Converted')
+
+        $summary | Should -Match 'Packet capture complete'
+        $summary | Should -Match 'capture.pcapng'
+        $summary | Should -Match 'Wireshark: launched'
+        $summary | Should -Match 'pktmon etl2pcap'
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

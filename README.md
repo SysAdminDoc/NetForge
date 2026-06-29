@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.31.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.32.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -107,6 +107,8 @@
   - MTR-style route tracing with per-hop sent/received/loss and latency history
 - **Port Scanning**:
   - Host or bounded IPv4 CIDR scan for common LAN service ports with open-service output
+- **Packet Capture**:
+  - Start/stop Windows `pktmon` captures, convert to Wireshark-readable `.pcapng`, and launch Wireshark when installed
 
 ### Diagnostics Tab
 - **Ping Test**: 10-ping burst with min/avg/max/loss statistics
@@ -183,7 +185,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.31.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.32.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
