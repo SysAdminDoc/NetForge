@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.47.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.48.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -111,6 +111,9 @@
 - **RDP Profile Launch**:
   - Apply a saved profile, launch `mstsc.exe` to a host or `.rdp` file, and monitor the RDP client
   - Revert the captured pre-RDP network state automatically when RDP exits, or manually from Network Tools
+- **App Interface Guard**:
+  - Restrict a selected executable to one allowed adapter by creating Windows Firewall/WFP outbound blocks on other current adapters
+  - Refresh, inspect, and remove NetForge-owned per-app interface rules from Network Tools
 - **Detailed Adapter Information**:
   - Interface index and type
   - Link speed and media state
@@ -219,7 +222,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.47.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.48.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
@@ -253,15 +256,19 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Enter a host or `.rdp` file and saved profile name
    - Click "Launch RDP with Profile"
    - NetForge reverts the captured pre-RDP network state when the RDP client exits
-6. **Diagnose reachability**:
+6. **Restrict an app to one interface** (optional):
+   - Go to Network Tools
+   - Browse to an `.exe`, choose the allowed adapter, and click "Apply Guard"
+   - NetForge blocks that app on other current adapters using Windows Firewall interface filters
+7. **Diagnose reachability**:
    - Go to Network Tools
    - Enter a host, URL, IP address, or `host:port`
    - Click "Why Can't I Reach X?" to check DNS, gateway, route, TCP/firewall, and MTU signals
-7. **Manage WiFi**:
+8. **Manage WiFi**:
    - Go to the WiFi tab
    - Click "Scan Networks"
    - Select a network and click "Connect" or "Disconnect"
-8. **Control external diagnostics**:
+9. **Control external diagnostics**:
    - Go to Diagnostics
    - Disable public-IP lookup or external speed-test downloads when working offline or privately
    - Select the HTTPS speed-test endpoint and click "Save Policy"

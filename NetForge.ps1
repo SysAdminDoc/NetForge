@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.47.0
+    Version: 1.48.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -90,7 +90,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.47.0"
+$script:AppVersion = "1.48.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -158,6 +158,7 @@ $script:NetworkChangeHandlers = @{}
 $script:NetworkChangeSubscribed = $false
 $script:TrayIcon = $null
 $script:TrayContextMenu = $null
+$script:AppRoutingRuleGroup = "NetForge App Routing"
 $script:RdpProcess = $null
 $script:RdpRestoreSnapshot = $null
 $script:RdpMonitorTimer = $null
@@ -259,6 +260,13 @@ $script:AccessibilityNames = @{
     btnLaunchRdpProfile = "Launch Remote Desktop with profile"
     btnRevertRdpProfile = "Revert Remote Desktop profile"
     txtRdpStatus = "Remote Desktop profile launch status"
+    txtAppRoutingProgram = "Application executable path for interface guard"
+    btnBrowseAppRoutingProgram = "Browse for application executable"
+    cmbAppRoutingInterface = "Allowed app routing interface"
+    btnApplyAppRouting = "Apply app interface guard"
+    btnRemoveAppRouting = "Remove selected app interface guard"
+    btnRefreshAppRouting = "Refresh app interface guards"
+    lstAppRoutingRules = "NetForge app interface guard list"
     chkPublicIpLookup = "Enable public IP lookup"
     chkExternalSpeedTest = "Allow external speed test downloads"
     cmbSpeedTestEndpoint = "Speed test endpoint"
@@ -311,6 +319,7 @@ $script:AccessibilityTabOrder = @(
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
+    "txtAppRoutingProgram", "btnBrowseAppRoutingProgram", "cmbAppRoutingInterface", "btnApplyAppRouting", "btnRemoveAppRouting", "btnRefreshAppRouting", "lstAppRoutingRules",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
     "txtHostsGroupName", "txtHostsAddress", "txtHostsNames", "btnHostsAddEntry", "btnHostsToggleGroup", "btnHostsRemoveGroup", "btnHostsRefresh", "btnHostsApply", "lstHostsGroups",
@@ -1394,7 +1403,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.47.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.48.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2381,6 +2390,46 @@ function Apply-Localization {
                                     </Grid>
                                 </Border>
 
+                                <!-- App Interface Guard -->
+                                <TextBlock Text="APP INTERFACE GUARD" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,10,12">
+                                            <TextBlock Text="Program path" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtAppRoutingProgram" Style="{StaticResource ModernTextBox}" Text=""/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="10,20,0,12">
+                                            <Button x:Name="btnBrowseAppRoutingProgram" Content="Browse" Style="{StaticResource ModernButton}" Padding="16,8"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,12">
+                                            <TextBlock Text="Allowed interface" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <ComboBox x:Name="cmbAppRoutingInterface" Style="{StaticResource ModernComboBox}"/>
+                                        </StackPanel>
+                                        <WrapPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="10,20,0,12">
+                                            <Button x:Name="btnApplyAppRouting" Content="Apply Guard" Style="{StaticResource PrimaryButton}" Margin="0,0,12,0" Padding="16,8"/>
+                                            <Button x:Name="btnRemoveAppRouting" Content="Remove Guard" Style="{StaticResource DangerButton}" Margin="0,0,12,0" Padding="16,8"/>
+                                            <Button x:Name="btnRefreshAppRouting" Content="Refresh Guards" Style="{StaticResource ModernButton}" Padding="16,8"/>
+                                        </WrapPanel>
+
+                                        <TextBlock x:Name="txtAppRoutingStatus" Grid.Row="2" Grid.ColumnSpan="3" Text="Blocks the selected app on other current adapters using Windows Firewall interface filters." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <ListBox x:Name="lstAppRoutingRules" Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource ModernListBox}" Height="120"/>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Network Diagnostics -->
                                 <TextBlock Text="NETWORK DIAGNOSTICS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
 
@@ -2750,7 +2799,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.47.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.48.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -10630,6 +10679,346 @@ function Invoke-RdpProfileLaunch {
     }
 }
 
+function ConvertTo-AppRoutingSafeRuleText {
+    param(
+        $Value,
+        [int]$MaxLength = 96
+    )
+
+    if ($MaxLength -lt 8) { $MaxLength = 8 }
+    $text = if ($null -eq $Value) { "" } else { ([string]$Value).Trim() }
+    if ([string]::IsNullOrWhiteSpace($text)) { return "App interface guard" }
+
+    $text = [regex]::Replace($text, '[\x00-\x1F\x7F]', ' ')
+    $text = [regex]::Replace($text, '\s+', ' ').Trim()
+    if ($text.Length -le $MaxLength) { return $text }
+
+    return ($text.Substring(0, $MaxLength - 3) + "...")
+}
+
+function Get-AppRoutingFirewallRuleName {
+    param(
+        [string]$ProgramPath,
+        [string]$InterfaceAlias
+    )
+
+    $seed = "$ProgramPath|$InterfaceAlias"
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($seed)
+        $hash = ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace "-", "").Substring(0, 16).ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+
+    $safeAlias = ([string]$InterfaceAlias -replace '[^A-Za-z0-9_-]', '_')
+    if ($safeAlias.Length -gt 28) { $safeAlias = $safeAlias.Substring(0, 28) }
+    return "NetForge-AppRoute-$hash-$safeAlias"
+}
+
+function Get-AppRoutingPolicyPlan {
+    param(
+        [string]$ProgramPath,
+        [string]$InterfaceAlias,
+        [string]$RuleName = "",
+        [object[]]$Adapters = @()
+    )
+
+    $messages = New-Object System.Collections.Generic.List[string]
+    $resolvedProgram = ""
+    $programText = ([string]$ProgramPath).Trim()
+    if ([string]::IsNullOrWhiteSpace($programText)) {
+        $messages.Add("Program path is required.")
+    } else {
+        try {
+            $expanded = [Environment]::ExpandEnvironmentVariables($programText)
+            if (-not [System.IO.Path]::IsPathRooted($expanded)) {
+                $messages.Add("Program path must be a rooted path to an executable.")
+            } else {
+                $resolvedProgram = [System.IO.Path]::GetFullPath($expanded)
+                if (-not (Test-Path -LiteralPath $resolvedProgram -PathType Leaf)) {
+                    $messages.Add("Program path was not found.")
+                } elseif ([System.IO.Path]::GetExtension($resolvedProgram) -ine ".exe") {
+                    $messages.Add("Program path must point to an .exe file.")
+                }
+            }
+        } catch {
+            $messages.Add("Program path is not valid: $($_.Exception.Message)")
+        }
+    }
+
+    $interfaceText = ([string]$InterfaceAlias).Trim()
+    if ([string]::IsNullOrWhiteSpace($interfaceText)) {
+        $messages.Add("Allowed interface is required.")
+    }
+
+    $adapterList = @($Adapters | Where-Object { $_ -and $_.PSObject.Properties["Name"] })
+    if ($adapterList.Count -eq 0) {
+        try {
+            $adapterList = @(Get-NetAdapter -ErrorAction Stop | Sort-Object Name)
+        } catch {
+            $messages.Add("Could not enumerate network adapters: $($_.Exception.Message)")
+        }
+    }
+
+    $matchedAdapter = $null
+    if (-not [string]::IsNullOrWhiteSpace($interfaceText) -and $adapterList.Count -gt 0) {
+        $matchedAdapter = @($adapterList | Where-Object { [string]$_.Name -ieq $interfaceText } | Select-Object -First 1)
+        if ($matchedAdapter.Count -gt 0) {
+            $matchedAdapter = $matchedAdapter[0]
+            $interfaceText = [string]$matchedAdapter.Name
+        } else {
+            $messages.Add("Allowed interface '$interfaceText' was not found.")
+        }
+    }
+
+    $blockedAliases = @()
+    if ($matchedAdapter) {
+        $blockedAliases = @(
+            $adapterList |
+                Where-Object { $_.Name -and ([string]$_.Name -ine $interfaceText) } |
+                ForEach-Object { [string]$_.Name } |
+                Select-Object -Unique
+        )
+    }
+
+    $programLeaf = if ([string]::IsNullOrWhiteSpace($resolvedProgram)) { "app" } else { [System.IO.Path]::GetFileNameWithoutExtension($resolvedProgram) }
+    $displayName = if ([string]::IsNullOrWhiteSpace($RuleName)) {
+        "$programLeaf via $interfaceText"
+    } else {
+        [string]$RuleName
+    }
+    $displayName = ConvertTo-AppRoutingSafeRuleText -Value $displayName -MaxLength 96
+
+    return [pscustomobject]@{
+        IsValid = ($messages.Count -eq 0)
+        Message = ($messages -join " ")
+        ProgramPath = $resolvedProgram
+        InterfaceAlias = $interfaceText
+        RuleName = $displayName
+        RuleGroup = $script:AppRoutingRuleGroup
+        BlockedAliases = @($blockedAliases)
+    }
+}
+
+function Format-AppRoutingRuleRows {
+    param([object[]]$Rules)
+
+    $ruleList = @($Rules)
+    if ($ruleList.Count -eq 0) {
+        return "No NetForge app interface guards are installed."
+    }
+
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($rule in $ruleList) {
+        $program = if ($rule.Program) { [string]$rule.Program } else { "Any program" }
+        $interfaceAlias = if ($rule.InterfaceAlias) { [string]$rule.InterfaceAlias } else { "Any interface" }
+        $enabled = if ($rule.Enabled) { [string]$rule.Enabled } else { "Unknown" }
+        $sb.AppendLine([string]$rule.DisplayName) | Out-Null
+        $sb.AppendLine("  Program: $program") | Out-Null
+        $sb.AppendLine("  Blocked interface: $interfaceAlias") | Out-Null
+        $sb.AppendLine("  Enabled: $enabled") | Out-Null
+    }
+
+    return $sb.ToString()
+}
+
+function Get-AppRoutingFirewallRules {
+    $results = @()
+    try {
+        $rules = @(Get-NetFirewallRule -Group $script:AppRoutingRuleGroup -ErrorAction SilentlyContinue | Sort-Object DisplayName)
+        foreach ($rule in $rules) {
+            $appFilter = $rule | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue | Select-Object -First 1
+            $interfaceFilter = $rule | Get-NetFirewallInterfaceFilter -ErrorAction SilentlyContinue | Select-Object -First 1
+            $results += [pscustomobject]@{
+                RuleName = [string]$rule.Name
+                DisplayName = [string]$rule.DisplayName
+                Program = if ($appFilter) { [string]$appFilter.Program } else { "" }
+                InterfaceAlias = if ($interfaceFilter -and $interfaceFilter.InterfaceAlias) { (@($interfaceFilter.InterfaceAlias) -join ", ") } else { "" }
+                Enabled = [string]$rule.Enabled
+                Action = [string]$rule.Action
+                Direction = [string]$rule.Direction
+            }
+        }
+    } catch {
+        Write-OperationLog -Action "App interface guard" -Result "RefreshFailed" -Detail $_.Exception.Message
+    }
+
+    return @($results)
+}
+
+function Set-AppRoutingStatus {
+    param(
+        [string]$Message,
+        [string]$Type = "Info"
+    )
+
+    if ($script:txtAppRoutingStatus) {
+        $script:txtAppRoutingStatus.Text = $Message
+    }
+    if ($Type -ne "Info") {
+        Update-Status $Message -Type $Type
+    }
+}
+
+function Refresh-AppRoutingInterfaceList {
+    if (-not $script:cmbAppRoutingInterface) { return }
+
+    $selectedAlias = ""
+    if ($script:cmbAppRoutingInterface.SelectedItem -and $script:cmbAppRoutingInterface.SelectedItem.Tag) {
+        $selectedAlias = [string]$script:cmbAppRoutingInterface.SelectedItem.Tag
+    } else {
+        try {
+            $selectedAdapter = Get-SelectedAdapter
+            if ($selectedAdapter) { $selectedAlias = [string]$selectedAdapter.Name }
+        } catch {
+            $selectedAlias = ""
+        }
+    }
+
+    $script:cmbAppRoutingInterface.Items.Clear()
+    try {
+        foreach ($adapter in @(Get-NetAdapter -ErrorAction Stop | Sort-Object Name)) {
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = "$($adapter.Name) ($($adapter.Status))"
+            $item.Tag = [string]$adapter.Name
+            [void]$script:cmbAppRoutingInterface.Items.Add($item)
+            if (-not [string]::IsNullOrWhiteSpace($selectedAlias) -and [string]$adapter.Name -ieq $selectedAlias) {
+                $script:cmbAppRoutingInterface.SelectedItem = $item
+            }
+        }
+        if (-not $script:cmbAppRoutingInterface.SelectedItem -and $script:cmbAppRoutingInterface.Items.Count -gt 0) {
+            $script:cmbAppRoutingInterface.SelectedIndex = 0
+        }
+    } catch {
+        Set-AppRoutingStatus -Message "Could not enumerate adapters for app interface guard: $($_.Exception.Message)" -Type Warning
+    }
+}
+
+function Refresh-AppRoutingRuleList {
+    if ($script:lstAppRoutingRules) {
+        $script:lstAppRoutingRules.Items.Clear()
+    }
+
+    $rules = @(Get-AppRoutingFirewallRules)
+    if ($script:lstAppRoutingRules) {
+        foreach ($rule in $rules) {
+            $item = New-Object System.Windows.Controls.ListBoxItem
+            $programLeaf = if ($rule.Program) { [System.IO.Path]::GetFileName($rule.Program) } else { "Any program" }
+            $item.Content = "$programLeaf blocked on $($rule.InterfaceAlias)"
+            $item.Tag = $rule
+            [void]$script:lstAppRoutingRules.Items.Add($item)
+        }
+    }
+
+    if ($rules.Count -eq 0) {
+        Set-AppRoutingStatus -Message "No NetForge app interface guards are installed."
+    } else {
+        Set-AppRoutingStatus -Message "$($rules.Count) NetForge app interface guard rule(s) installed."
+    }
+}
+
+function Initialize-AppRoutingControls {
+    Refresh-AppRoutingInterfaceList
+    Refresh-AppRoutingRuleList
+}
+
+function Get-SelectedAppRoutingInterfaceAlias {
+    if ($script:cmbAppRoutingInterface -and $script:cmbAppRoutingInterface.SelectedItem -and $script:cmbAppRoutingInterface.SelectedItem.Tag) {
+        return [string]$script:cmbAppRoutingInterface.SelectedItem.Tag
+    }
+    return ""
+}
+
+function Browse-AppRoutingProgram {
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Filter = "Executable Files (*.exe)|*.exe|All Files (*.*)|*.*"
+    $dialog.Title = "Select application executable"
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        $script:txtAppRoutingProgram.Text = $dialog.FileName
+    }
+}
+
+function Remove-AppRoutingPolicyByProgram {
+    param([string]$ProgramPath)
+
+    $resolvedProgram = ""
+    if (-not [string]::IsNullOrWhiteSpace($ProgramPath)) {
+        try {
+            $resolvedProgram = [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables(([string]$ProgramPath).Trim()))
+        } catch {
+            $resolvedProgram = ([string]$ProgramPath).Trim()
+        }
+    }
+
+    $removed = 0
+    foreach ($rule in @(Get-AppRoutingFirewallRules | Where-Object { [string]$_.Program -ieq $resolvedProgram })) {
+        Remove-NetFirewallRule -Name $rule.RuleName -Confirm:$false -ErrorAction Stop
+        $removed++
+    }
+
+    return $removed
+}
+
+function Apply-AppRoutingPolicy {
+    $programPath = if ($script:txtAppRoutingProgram) { [string]$script:txtAppRoutingProgram.Text } else { "" }
+    $interfaceAlias = Get-SelectedAppRoutingInterfaceAlias
+    $plan = Get-AppRoutingPolicyPlan -ProgramPath $programPath -InterfaceAlias $interfaceAlias
+    if (-not $plan.IsValid) {
+        Set-AppRoutingStatus -Message $plan.Message -Type Error
+        return
+    }
+
+    try {
+        $removed = Remove-AppRoutingPolicyByProgram -ProgramPath $plan.ProgramPath
+        $created = 0
+        foreach ($blockedAlias in @($plan.BlockedAliases)) {
+            $ruleName = Get-AppRoutingFirewallRuleName -ProgramPath $plan.ProgramPath -InterfaceAlias $blockedAlias
+            $displayName = "$($plan.RuleName) - block $blockedAlias"
+            $description = "NetForge app interface guard: allows $($plan.ProgramPath) only on $($plan.InterfaceAlias) by blocking outbound traffic on $blockedAlias."
+            New-NetFirewallRule -Name $ruleName -DisplayName $displayName -Group $script:AppRoutingRuleGroup -Description $description -Enabled True -Profile Any -Direction Outbound -Action Block -Program $plan.ProgramPath -InterfaceAlias $blockedAlias -ErrorAction Stop | Out-Null
+            $created++
+        }
+
+        Refresh-AppRoutingRuleList
+        $message = "App interface guard applied for $([System.IO.Path]::GetFileName($plan.ProgramPath)): allowed on $($plan.InterfaceAlias), blocked on $created other current adapter(s)."
+        if ($created -eq 0) {
+            $message = "App interface guard saved no firewall rules because no other current adapters were found."
+        }
+        Write-OperationLog -Action "App interface guard" -Result "Applied" -Detail "Program=$($plan.ProgramPath); Allowed=$($plan.InterfaceAlias); Created=$created; Removed=$removed"
+        Set-AppRoutingStatus -Message $message -Type Success
+    } catch {
+        $message = "App interface guard failed: $($_.Exception.Message)"
+        Write-OperationLog -Action "App interface guard" -Result "Failed" -Detail $message
+        Set-AppRoutingStatus -Message $message -Type Error
+    }
+}
+
+function Remove-SelectedAppRoutingPolicy {
+    $programPath = ""
+    if ($script:lstAppRoutingRules -and $script:lstAppRoutingRules.SelectedItem -and $script:lstAppRoutingRules.SelectedItem.Tag) {
+        $programPath = [string]$script:lstAppRoutingRules.SelectedItem.Tag.Program
+    } elseif ($script:txtAppRoutingProgram) {
+        $programPath = [string]$script:txtAppRoutingProgram.Text
+    }
+
+    if ([string]::IsNullOrWhiteSpace($programPath)) {
+        Set-AppRoutingStatus -Message "Select an app interface guard rule or enter a program path to remove." -Type Warning
+        return
+    }
+
+    try {
+        $removed = Remove-AppRoutingPolicyByProgram -ProgramPath $programPath
+        Refresh-AppRoutingRuleList
+        Write-OperationLog -Action "App interface guard" -Result "Removed" -Detail "Program=$programPath; Removed=$removed"
+        Set-AppRoutingStatus -Message "Removed $removed app interface guard rule(s) for $([System.IO.Path]::GetFileName($programPath))." -Type Success
+    } catch {
+        $message = "App interface guard removal failed: $($_.Exception.Message)"
+        Write-OperationLog -Action "App interface guard" -Result "RemoveFailed" -Detail $message
+        Set-AppRoutingStatus -Message $message -Type Error
+    }
+}
+
 function Invoke-TrayDispatcherAction {
     param([scriptblock]$Action)
 
@@ -12617,6 +13006,7 @@ $chkCompactMode.Add_Unchecked({
 $lstAdapters.Add_SelectionChanged({
     Update-AdapterDisplay
     Refresh-StaticRouteList
+    Refresh-AppRoutingInterfaceList
 })
 
 $chkAdvancedAdapters.Add_Checked({
@@ -12765,6 +13155,13 @@ $btnRestoreNetworkState.Add_Click({ Invoke-RestoreLastNetworkState })
 $btnExportDiagnostics.Add_Click({ Export-DiagnosticsBundle })
 $btnLaunchRdpProfile.Add_Click({ Invoke-RdpProfileLaunch })
 $btnRevertRdpProfile.Add_Click({ [void](Invoke-RdpProfileRevert -Reason "manual") })
+$btnBrowseAppRoutingProgram.Add_Click({ Browse-AppRoutingProgram })
+$btnApplyAppRouting.Add_Click({ Apply-AppRoutingPolicy })
+$btnRemoveAppRouting.Add_Click({ Remove-SelectedAppRoutingPolicy })
+$btnRefreshAppRouting.Add_Click({
+    Refresh-AppRoutingInterfaceList
+    Refresh-AppRoutingRuleList
+})
 $btnResetWinsock.Add_Click({ Invoke-ResetWinsock })
 $btnResetTCP.Add_Click({ Invoke-ResetTCP })
 $btnNetworkReset.Add_Click({ Invoke-NetworkReset })
@@ -12889,6 +13286,7 @@ Initialize-CompactModeControl
 Initialize-SystemTray
 Initialize-EndpointPolicyControls
 Initialize-DiscordWebhookControls
+Initialize-AppRoutingControls
 Show-RestoreSnapshotButtonState
 Update-ConnectionStatus
 Update-PublicIP

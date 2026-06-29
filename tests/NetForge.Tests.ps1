@@ -1082,6 +1082,64 @@ Describe 'Static route helpers' {
     }
 }
 
+Describe 'App interface guard helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'ConvertTo-AppRoutingSafeRuleText',
+            'Get-AppRoutingFirewallRuleName',
+            'Get-AppRoutingPolicyPlan',
+            'Format-AppRoutingRuleRows'
+        )
+        $script:AppRoutingRuleGroup = 'NetForge App Routing'
+    }
+
+    It 'plans outbound app blocks for every adapter except the allowed interface' {
+        $program = Join-Path $TestDrive 'browser.exe'
+        Set-Content -LiteralPath $program -Value 'stub' -Encoding ASCII
+        $adapters = @(
+            [pscustomobject]@{ Name = 'Wi-Fi'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Ethernet'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Clinic VPN'; Status = 'Up' }
+        )
+
+        $plan = Get-AppRoutingPolicyPlan -ProgramPath $program -InterfaceAlias 'Clinic VPN' -Adapters $adapters
+
+        $plan.IsValid | Should -BeTrue
+        $plan.ProgramPath | Should -Be ([System.IO.Path]::GetFullPath($program))
+        $plan.InterfaceAlias | Should -Be 'Clinic VPN'
+        $plan.BlockedAliases | Should -Contain 'Wi-Fi'
+        $plan.BlockedAliases | Should -Contain 'Ethernet'
+        $plan.BlockedAliases | Should -Not -Contain 'Clinic VPN'
+        $plan.RuleGroup | Should -Be 'NetForge App Routing'
+        Get-AppRoutingFirewallRuleName -ProgramPath $plan.ProgramPath -InterfaceAlias 'Wi-Fi' | Should -Match '^NetForge-AppRoute-[a-f0-9]{16}-Wi-Fi$'
+    }
+
+    It 'rejects missing executables and unknown allowed interfaces' {
+        $program = Join-Path $TestDrive 'notepad.txt'
+        Set-Content -LiteralPath $program -Value 'stub' -Encoding ASCII
+        $adapters = @([pscustomobject]@{ Name = 'Wi-Fi'; Status = 'Up' })
+
+        $badProgram = Get-AppRoutingPolicyPlan -ProgramPath $program -InterfaceAlias 'Wi-Fi' -Adapters $adapters
+        $badInterface = Get-AppRoutingPolicyPlan -ProgramPath (Join-Path $TestDrive 'missing.exe') -InterfaceAlias 'VPN' -Adapters $adapters
+
+        $badProgram.IsValid | Should -BeFalse
+        $badProgram.Message | Should -Match '\.exe'
+        $badInterface.IsValid | Should -BeFalse
+        $badInterface.Message | Should -Match 'was not found'
+    }
+
+    It 'formats app interface guard rule rows' {
+        $rows = Format-AppRoutingRuleRows -Rules @(
+            [pscustomobject]@{ DisplayName = 'browser via VPN - block Wi-Fi'; Program = 'C:\Apps\browser.exe'; InterfaceAlias = 'Wi-Fi'; Enabled = 'True' }
+        )
+
+        $rows | Should -Match 'browser via VPN'
+        $rows | Should -Match 'C:\\Apps\\browser\.exe'
+        $rows | Should -Match 'Blocked interface: Wi-Fi'
+        (Format-AppRoutingRuleRows -Rules @()) | Should -Match 'No NetForge app interface guards'
+    }
+}
+
 Describe 'Hosts file group helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(
