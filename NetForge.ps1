@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.35.0
+    Version: 1.36.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.35.0"
+$script:AppVersion = "1.36.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -119,6 +119,10 @@ $script:AccessibilityNames = @{
     txtSubnet = "Subnet mask"
     txtGateway = "Default gateway"
     txtPrefix = "CIDR prefix length"
+    chkConfigureIPv6Address = "Configure static IPv6 address"
+    txtIPv6Address = "Static IPv6 address"
+    txtIPv6Prefix = "IPv6 prefix length"
+    txtIPv6Gateway = "IPv6 default gateway"
     btnApplyIP = "Apply IP configuration"
     rbDnsDHCP = "Use automatic DNS"
     rbDnsPreset = "Use DNS preset"
@@ -202,7 +206,7 @@ $script:AccessibilityNames = @{
 }
 $script:AccessibilityTabOrder = @(
     "lstAdapters", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
-    "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "btnApplyIP",
+    "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "chkConfigureIPv6Address", "txtIPv6Address", "txtIPv6Prefix", "txtIPv6Gateway", "btnApplyIP",
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
     "lstProfiles", "btnNewProfile", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
@@ -1159,7 +1163,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.35.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.36.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1467,6 +1471,39 @@ function Apply-Localization {
                                             <TextBox x:Name="txtPrefix" Style="{StaticResource ModernTextBox}" Text="24"/>
                                         </StackPanel>
                                     </Grid>
+                                </Border>
+
+                                <TextBlock Text="IPv6 ADDRESS CONFIGURATION" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <CheckBox x:Name="chkConfigureIPv6Address" Content="Configure static IPv6 address" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,16"/>
+                                        <Grid x:Name="pnlIPv6StaticConfig" IsEnabled="False" Opacity="0.6">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,16">
+                                                <TextBlock Text="IPv6 Address" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBox x:Name="txtIPv6Address" Style="{StaticResource ModernTextBox}" Text="2001:db8::100"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
+                                                <TextBlock Text="IPv6 Prefix Length" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBox x:Name="txtIPv6Prefix" Style="{StaticResource ModernTextBox}" Text="64"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,0">
+                                                <TextBlock Text="IPv6 Gateway (optional)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBox x:Name="txtIPv6Gateway" Style="{StaticResource ModernTextBox}" Text=""/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
                                 </Border>
 
                                 <!-- Apply Button -->
@@ -2335,7 +2372,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.35.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.36.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -2516,6 +2553,24 @@ function Test-ValidIPv4PrefixLength {
     return ($PrefixLength -ge 1 -and $PrefixLength -le 32)
 }
 
+function Test-ValidIPv6Address {
+    param([string]$IP)
+
+    if ([string]::IsNullOrWhiteSpace($IP)) { return $false }
+    try {
+        $parsed = [System.Net.IPAddress]::Parse($IP)
+        return ($parsed.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6)
+    } catch {
+        return $false
+    }
+}
+
+function Test-ValidIPv6PrefixLength {
+    param([int]$PrefixLength)
+
+    return ($PrefixLength -ge 1 -and $PrefixLength -le 128)
+}
+
 function Get-ApplyValidationResult {
     param(
         [bool]$IsValid,
@@ -2601,7 +2656,26 @@ function Get-AdapterNetworkSnapshot {
             }
         })
 
+    $ipv6Addresses = @(Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+        Where-Object { $_.PrefixOrigin -eq "Manual" -and $_.IPAddress -ne "::1" -and $_.IPAddress -notlike "fe80:*" } |
+        ForEach-Object {
+            [pscustomobject]@{
+                IPAddress = $_.IPAddress
+                PrefixLength = [int]$_.PrefixLength
+                PrefixOrigin = [string]$_.PrefixOrigin
+            }
+        })
+
     $routes = @(Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            [pscustomobject]@{
+                NextHop = $_.NextHop
+                RouteMetric = $_.RouteMetric
+            }
+        })
+
+    $ipv6Routes = @(Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "::/0" -ErrorAction SilentlyContinue |
+        Where-Object { (-not $_.PSObject.Properties["RouteProtocol"]) -or [string]$_.RouteProtocol -eq "NetMgmt" } |
         ForEach-Object {
             [pscustomobject]@{
                 NextHop = $_.NextHop
@@ -2633,6 +2707,8 @@ function Get-AdapterNetworkSnapshot {
         Dhcp = [string]$ipInterface.Dhcp
         IPv4Addresses = $addresses
         DefaultRoutes = $routes
+        IPv6Addresses = $ipv6Addresses
+        IPv6DefaultRoutes = $ipv6Routes
         DnsAutomatic = ($staticDnsServers.Count -eq 0)
         StaticDnsServers = $staticDnsServers
         EffectiveDnsServers = $effectiveDnsServers
@@ -2699,6 +2775,35 @@ function Restore-NetworkSnapshot {
                     }
                     New-NetRoute @routeParams | Out-Null
                 }
+            }
+        }
+
+        Get-NetIPAddress -InterfaceIndex $Snapshot.InterfaceIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+            Where-Object { $_.PrefixOrigin -eq "Manual" -and $_.IPAddress -ne "::1" -and $_.IPAddress -notlike "fe80:*" } |
+            Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+
+        Get-NetRoute -InterfaceIndex $Snapshot.InterfaceIndex -DestinationPrefix "::/0" -ErrorAction SilentlyContinue |
+            Where-Object { (-not $_.PSObject.Properties["RouteProtocol"]) -or [string]$_.RouteProtocol -eq "NetMgmt" } |
+            Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+
+        foreach ($address in @($Snapshot.IPv6Addresses)) {
+            if ((Test-ValidIPv6Address -IP $address.IPAddress) -and (Test-ValidIPv6PrefixLength -PrefixLength ([int]$address.PrefixLength))) {
+                New-NetIPAddress -InterfaceIndex $Snapshot.InterfaceIndex -IPAddress $address.IPAddress -PrefixLength ([int]$address.PrefixLength) -ErrorAction Stop | Out-Null
+            }
+        }
+
+        foreach ($route in @($Snapshot.IPv6DefaultRoutes)) {
+            if (Test-ValidIPv6Address -IP $route.NextHop) {
+                $routeParams = @{
+                    InterfaceIndex = $Snapshot.InterfaceIndex
+                    DestinationPrefix = "::/0"
+                    NextHop = $route.NextHop
+                    ErrorAction = "Stop"
+                }
+                if ($null -ne $route.RouteMetric) {
+                    $routeParams.RouteMetric = [int]$route.RouteMetric
+                }
+                New-NetRoute @routeParams | Out-Null
             }
         }
 
@@ -2795,10 +2900,30 @@ function Invoke-NetworkMutation {
 }
 
 function Get-IPApplyTarget {
+    $configureIPv6 = ($script:chkConfigureIPv6Address -and $script:chkConfigureIPv6Address.IsChecked)
+    $ipv6Target = Get-IPv6ApplyTarget `
+        -ConfigureIPv6 $configureIPv6 `
+        -IPv6Address $script:txtIPv6Address.Text `
+        -IPv6PrefixText $script:txtIPv6Prefix.Text `
+        -IPv6Gateway $script:txtIPv6Gateway.Text
+
+    if (-not $ipv6Target.IsValid) {
+        return $ipv6Target
+    }
+
+    $statusParts = @()
     if ($script:rbDHCP.IsChecked) {
+        $statusParts += "DHCP enabled"
+        if ($ipv6Target.ConfigureIPv6) {
+            $statusParts += "static IPv6 $($ipv6Target.IPv6Address) configured"
+        }
         return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
             UseDHCP = $true
-            StatusMessage = "DHCP enabled"
+            ConfigureIPv6 = $ipv6Target.ConfigureIPv6
+            IPv6Address = $ipv6Target.IPv6Address
+            IPv6PrefixLength = $ipv6Target.IPv6PrefixLength
+            IPv6Gateway = $ipv6Target.IPv6Gateway
+            StatusMessage = ($statusParts -join "; ")
         }
     }
 
@@ -2817,12 +2942,62 @@ function Get-IPApplyTarget {
         return Get-ApplyValidationResult -IsValid $false -Message "Invalid default gateway IPv4 address."
     }
 
+    $statusParts += "Static IP $ip configured"
+    if ($ipv6Target.ConfigureIPv6) {
+        $statusParts += "static IPv6 $($ipv6Target.IPv6Address) configured"
+    }
+
     return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
         UseDHCP = $false
         IPAddress = $ip
         Gateway = $gateway
         PrefixLength = $prefix
-        StatusMessage = "Static IP $ip configured"
+        ConfigureIPv6 = $ipv6Target.ConfigureIPv6
+        IPv6Address = $ipv6Target.IPv6Address
+        IPv6PrefixLength = $ipv6Target.IPv6PrefixLength
+        IPv6Gateway = $ipv6Target.IPv6Gateway
+        StatusMessage = ($statusParts -join "; ")
+    }
+}
+
+function Get-IPv6ApplyTarget {
+    param(
+        [bool]$ConfigureIPv6,
+        [string]$IPv6Address,
+        [string]$IPv6PrefixText,
+        [string]$IPv6Gateway
+    )
+
+    if (-not $ConfigureIPv6) {
+        return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+            ConfigureIPv6 = $false
+            IPv6Address = ""
+            IPv6PrefixLength = 0
+            IPv6Gateway = ""
+        }
+    }
+
+    $address = ([string]$IPv6Address).Trim()
+    $gateway = ([string]$IPv6Gateway).Trim()
+    $prefix = 0
+
+    if (-not (Test-ValidIPv6Address -IP $address)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Invalid IPv6 address format."
+    }
+
+    if (-not [int]::TryParse(([string]$IPv6PrefixText).Trim(), [ref]$prefix) -or -not (Test-ValidIPv6PrefixLength -PrefixLength $prefix)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "IPv6 prefix length must be a number from 1 to 128."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($gateway) -and -not (Test-ValidIPv6Address -IP $gateway)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Invalid IPv6 default gateway address."
+    }
+
+    return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+        ConfigureIPv6 = $true
+        IPv6Address = $address
+        IPv6PrefixLength = $prefix
+        IPv6Gateway = $gateway
     }
 }
 
@@ -2998,20 +3173,35 @@ function Invoke-AdapterIPTarget {
             Remove-NetIPAddress -Confirm:$false -ErrorAction Stop
         Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
             Remove-NetRoute -Confirm:$false -ErrorAction Stop
-        return
+    } else {
+        Set-NetIPInterface -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
+        Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
+            Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+        Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+            Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+
+        New-NetIPAddress -InterfaceIndex $Adapter.ifIndex -IPAddress $Target.IPAddress -PrefixLength $Target.PrefixLength -ErrorAction Stop | Out-Null
+
+        if (Test-ValidIPv4Address -IP $Target.Gateway) {
+            New-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $Target.Gateway -ErrorAction Stop | Out-Null
+        }
     }
 
-    Set-NetIPInterface -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
-    Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-        Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
-        Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-    Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
-        Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+    if ($Target.ConfigureIPv6) {
+        Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+            Where-Object { $_.PrefixOrigin -eq "Manual" -and $_.IPAddress -ne "::1" -and $_.IPAddress -notlike "fe80:*" } |
+            Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
 
-    New-NetIPAddress -InterfaceIndex $Adapter.ifIndex -IPAddress $Target.IPAddress -PrefixLength $Target.PrefixLength -ErrorAction Stop | Out-Null
+        Get-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "::/0" -ErrorAction SilentlyContinue |
+            Where-Object { (-not $_.PSObject.Properties["RouteProtocol"]) -or [string]$_.RouteProtocol -eq "NetMgmt" } |
+            Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
 
-    if (Test-ValidIPv4Address -IP $Target.Gateway) {
-        New-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -NextHop $Target.Gateway -ErrorAction Stop | Out-Null
+        New-NetIPAddress -InterfaceIndex $Adapter.ifIndex -IPAddress $Target.IPv6Address -PrefixLength $Target.IPv6PrefixLength -ErrorAction Stop | Out-Null
+
+        if (Test-ValidIPv6Address -IP $Target.IPv6Gateway) {
+            New-NetRoute -InterfaceIndex $Adapter.ifIndex -DestinationPrefix "::/0" -NextHop $Target.IPv6Gateway -ErrorAction Stop | Out-Null
+        }
     }
 }
 
@@ -3489,6 +3679,18 @@ function Get-SelectedAdapter {
     return $selected.Tag
 }
 
+function Set-IPv6ConfigurationControlState {
+    if ($script:pnlIPv6StaticConfig -and $script:chkConfigureIPv6Address) {
+        if ($script:chkConfigureIPv6Address.IsChecked) {
+            $script:pnlIPv6StaticConfig.IsEnabled = $true
+            $script:pnlIPv6StaticConfig.Opacity = 1.0
+        } else {
+            $script:pnlIPv6StaticConfig.IsEnabled = $false
+            $script:pnlIPv6StaticConfig.Opacity = 0.6
+        }
+    }
+}
+
 function Update-AdapterDisplay {
     $adapter = Get-SelectedAdapter
     if ($null -eq $adapter) {
@@ -3496,6 +3698,11 @@ function Update-AdapterDisplay {
         $script:txtCurrentIP.Text = "--"
         $script:txtMAC.Text = "--"
         $script:txtStatus.Text = "--"
+        if ($script:chkConfigureIPv6Address) { $script:chkConfigureIPv6Address.IsChecked = $false }
+        if ($script:txtIPv6Address) { $script:txtIPv6Address.Text = "" }
+        if ($script:txtIPv6Prefix) { $script:txtIPv6Prefix.Text = "64" }
+        if ($script:txtIPv6Gateway) { $script:txtIPv6Gateway.Text = "" }
+        Set-IPv6ConfigurationControlState
         $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#6e7681")
         Show-MacOverrideDisplay
         Show-InterfaceMetricDisplay
@@ -3537,8 +3744,28 @@ function Update-AdapterDisplay {
         } else {
             $script:rbStatic.IsChecked = $true
         }
+
+        $ipv6Config = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+            Where-Object { $_.PrefixOrigin -eq "Manual" -and $_.IPAddress -ne "::1" -and $_.IPAddress -notlike "fe80:*" } |
+            Select-Object -First 1
+        if ($ipv6Config) {
+            $script:chkConfigureIPv6Address.IsChecked = $true
+            $script:txtIPv6Address.Text = $ipv6Config.IPAddress
+            $script:txtIPv6Prefix.Text = $ipv6Config.PrefixLength.ToString()
+            $ipv6Gateway = Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "::/0" -ErrorAction SilentlyContinue |
+                Where-Object { (-not $_.PSObject.Properties["RouteProtocol"]) -or [string]$_.RouteProtocol -eq "NetMgmt" } |
+                Select-Object -First 1
+            $script:txtIPv6Gateway.Text = if ($ipv6Gateway -and $ipv6Gateway.NextHop -ne "::") { $ipv6Gateway.NextHop } else { "" }
+        } else {
+            $script:chkConfigureIPv6Address.IsChecked = $false
+            $script:txtIPv6Address.Text = ""
+            $script:txtIPv6Prefix.Text = "64"
+            $script:txtIPv6Gateway.Text = ""
+        }
+        Set-IPv6ConfigurationControlState
     } catch {
         $script:txtCurrentIP.Text = "Error"
+        Write-OperationLog -Action "Update IP configuration display" -Result "Warning" -Detail $_.Exception.Message
     }
 
     Update-AdapterDetails
@@ -9677,6 +9904,9 @@ $rbStatic.Add_Checked({
     $script:pnlStaticIP.IsEnabled = $true
     $script:pnlStaticIP.Opacity = 1.0
 })
+
+$chkConfigureIPv6Address.Add_Checked({ Set-IPv6ConfigurationControlState })
+$chkConfigureIPv6Address.Add_Unchecked({ Set-IPv6ConfigurationControlState })
 
 $rbDnsDHCP.Add_Checked({
     $script:pnlCustomDns.IsEnabled = $false

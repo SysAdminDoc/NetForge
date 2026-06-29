@@ -13,7 +13,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### Diagnostics
 
 ### IPv6 & Advanced
-- IPv6 address/prefix configuration UI (currently IPv4-centric)
 - Static route editor
 - Hosts file editor with entry-group toggles
 - Adapter binding priority (IPv4-first vs IPv6-first)

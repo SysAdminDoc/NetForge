@@ -37,6 +37,10 @@ Describe 'Profile validation' {
             'Test-ValidIP',
             'Test-ValidIPv4Address',
             'Test-ValidIPv4PrefixLength',
+            'Test-ValidIPv6Address',
+            'Test-ValidIPv6PrefixLength',
+            'Get-ApplyValidationResult',
+            'Get-IPv6ApplyTarget',
             'ConvertTo-CleanMacAddress',
             'Test-ValidMacAddress',
             'Get-ProfileProperty',
@@ -116,6 +120,28 @@ Describe 'Profile validation' {
         $result.Profile.MappedDrives.Count | Should -Be 1
         $result.Profile.MappedDrives[0].DriveLetter | Should -Be 'Z'
         $result.Profile.MappedDrives[0].RemotePath | Should -Be '\\fileserver\share'
+    }
+
+    It 'validates optional static IPv6 apply targets' {
+        Test-ValidIPv6Address -IP '2001:db8::100' | Should -BeTrue
+        Test-ValidIPv6Address -IP '192.168.1.20' | Should -BeFalse
+        Test-ValidIPv6PrefixLength -PrefixLength 64 | Should -BeTrue
+        Test-ValidIPv6PrefixLength -PrefixLength 129 | Should -BeFalse
+
+        $target = Get-IPv6ApplyTarget -ConfigureIPv6 $true -IPv6Address '2001:db8::100' -IPv6PrefixText '64' -IPv6Gateway 'fe80::1'
+        $target.IsValid | Should -BeTrue
+        $target.ConfigureIPv6 | Should -BeTrue
+        $target.IPv6Address | Should -Be '2001:db8::100'
+        $target.IPv6PrefixLength | Should -Be 64
+        $target.IPv6Gateway | Should -Be 'fe80::1'
+
+        $disabled = Get-IPv6ApplyTarget -ConfigureIPv6 $false -IPv6Address '' -IPv6PrefixText '' -IPv6Gateway ''
+        $disabled.IsValid | Should -BeTrue
+        $disabled.ConfigureIPv6 | Should -BeFalse
+
+        $badGateway = Get-IPv6ApplyTarget -ConfigureIPv6 $true -IPv6Address '2001:db8::100' -IPv6PrefixText '64' -IPv6Gateway '192.168.1.1'
+        $badGateway.IsValid | Should -BeFalse
+        $badGateway.Message | Should -Match 'IPv6 default gateway'
     }
 
     It 'normalizes scheduled profile switches' {
