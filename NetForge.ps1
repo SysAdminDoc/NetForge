@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.26.0
+    Version: 1.27.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.26.0"
+$script:AppVersion = "1.27.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -61,7 +61,7 @@ $script:StringResources = @{}
 $script:DefaultStringResources = @{}
 $script:LocalizationStatus = "Embedded English UI text"
 $script:LocalizationMissingKeys = @()
-$script:ProfileSchemaVersion = 1
+$script:ProfileSchemaVersion = 2
 $script:ProfileStoreLoadWarning = ""
 $script:ContinuousPingRunning = $false
 $script:ContinuousPingPS = $null
@@ -142,6 +142,16 @@ $script:AccessibilityNames = @{
     txtProfileMatchSsid = "Profile match SSID"
     txtProfileGatewayMac = "Profile gateway MAC"
     btnCaptureProfileMatch = "Capture current network match"
+    chkProfileNetworkCategory = "Set Windows network category"
+    cmbProfileNetworkCategory = "Profile network category"
+    chkProfileProxy = "Set system proxy"
+    chkProfileProxyEnabled = "Enable system proxy"
+    txtProfileProxyServer = "Profile proxy server"
+    txtProfileProxyBypass = "Profile proxy bypass list"
+    chkProfilePrinter = "Set default printer"
+    txtProfilePrinterName = "Profile default printer name"
+    chkProfileMappedDrives = "Map network drives"
+    txtProfileMappedDrives = "Profile mapped drive definitions"
     btnSaveProfile = "Save profile"
     btnProfileDiff = "Preview profile differences"
     btnApplyProfile = "Apply selected profile"
@@ -167,7 +177,8 @@ $script:AccessibilityTabOrder = @(
     "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "btnApplyIP",
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
     "lstProfiles", "btnNewProfile", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
-    "txtProfileName", "chkProfileAutoApply", "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
+    "txtProfileName", "chkProfileAutoApply", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
+    "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy"
 )
@@ -1109,7 +1120,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.26.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.27.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1895,6 +1906,58 @@ function Apply-Localization {
                                             </StackPanel>
                                         </Border>
 
+                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                            <StackPanel>
+                                                <TextBlock Text="Environment Actions" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="240"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox x:Name="chkProfileNetworkCategory" Grid.Column="0" Content="Set Windows network category" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center"/>
+                                                    <ComboBox x:Name="cmbProfileNetworkCategory" Grid.Column="1" Style="{StaticResource ModernComboBox}">
+                                                        <ComboBoxItem Content="Private" IsSelected="True"/>
+                                                        <ComboBoxItem Content="Public"/>
+                                                    </ComboBox>
+                                                </Grid>
+
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="240"/>
+                                                        <ColumnDefinition Width="160"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox x:Name="chkProfileProxy" Grid.Column="0" Content="Set system proxy" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center"/>
+                                                    <CheckBox x:Name="chkProfileProxyEnabled" Grid.Column="1" Content="Enable proxy" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center"/>
+                                                    <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                                                        <TextBlock Text="Proxy server" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBox x:Name="txtProfileProxyServer" Style="{StaticResource ModernTextBox}"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="3" Margin="8,0,0,0">
+                                                        <TextBlock Text="Bypass list" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBox x:Name="txtProfileProxyBypass" Style="{StaticResource ModernTextBox}"/>
+                                                    </StackPanel>
+                                                </Grid>
+
+                                                <Grid Margin="0,0,0,12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="240"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <CheckBox x:Name="chkProfilePrinter" Grid.Column="0" Content="Set default printer" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center"/>
+                                                    <TextBox x:Name="txtProfilePrinterName" Grid.Column="1" Style="{StaticResource ModernTextBox}"/>
+                                                </Grid>
+
+                                                <StackPanel>
+                                                    <CheckBox x:Name="chkProfileMappedDrives" Content="Map network drives" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,8"/>
+                                                    <TextBlock Text="One drive per line, for example Z: \\server\share" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                    <TextBox x:Name="txtProfileMappedDrives" Style="{StaticResource ModernTextBox}" Height="72" TextWrapping="Wrap" AcceptsReturn="True"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+
                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                             <Button x:Name="btnSaveProfile" Content="Save Profile" Style="{StaticResource PrimaryButton}" Margin="0,0,8,0" Padding="20,10"/>
                                             <Button x:Name="btnProfileDiff" Content="Preview Diff" Style="{StaticResource ModernButton}" Margin="0,0,8,0" Padding="20,10"/>
@@ -2188,7 +2251,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.26.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.27.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -2475,6 +2538,8 @@ function Get-AdapterNetworkSnapshot {
         }
     }
     $effectiveDnsServers = @($effectiveDnsServers | Select-Object -Unique)
+    $networkProfile = Get-NetConnectionProfile -InterfaceIndex $Adapter.ifIndex -ErrorAction SilentlyContinue | Select-Object -First 1
+    $networkCategory = if ($networkProfile) { [string]$networkProfile.NetworkCategory } else { "" }
 
     return [pscustomobject]@{
         CapturedAt = (Get-Date).ToString("o")
@@ -2487,6 +2552,12 @@ function Get-AdapterNetworkSnapshot {
         DnsAutomatic = ($staticDnsServers.Count -eq 0)
         StaticDnsServers = $staticDnsServers
         EffectiveDnsServers = $effectiveDnsServers
+        Environment = [pscustomobject]@{
+            NetworkCategory = $networkCategory
+            Proxy = Get-SystemProxySnapshot
+            DefaultPrinterName = Get-DefaultPrinterName
+            MappedDrives = @(Get-MappedDriveState)
+        }
     }
 }
 
@@ -2555,6 +2626,21 @@ function Restore-NetworkSnapshot {
                 Set-DnsClientServerAddress -InterfaceIndex $Snapshot.InterfaceIndex -ServerAddresses $dnsServers -ErrorAction Stop
             } else {
                 Set-DnsClientServerAddress -InterfaceIndex $Snapshot.InterfaceIndex -ResetServerAddresses -ErrorAction Stop
+            }
+        }
+
+        if ($Snapshot.Environment) {
+            if (-not [string]::IsNullOrWhiteSpace($Snapshot.Environment.NetworkCategory)) {
+                Set-NetConnectionProfile -InterfaceIndex $Snapshot.InterfaceIndex -NetworkCategory $Snapshot.Environment.NetworkCategory -ErrorAction SilentlyContinue
+            }
+            if ($Snapshot.Environment.Proxy) {
+                Set-SystemProxyState -Enabled ([bool]$Snapshot.Environment.Proxy.Enabled) -Server ([string]$Snapshot.Environment.Proxy.Server) -Bypass ([string]$Snapshot.Environment.Proxy.Bypass)
+            }
+            if (-not [string]::IsNullOrWhiteSpace($Snapshot.Environment.DefaultPrinterName)) {
+                Set-DefaultPrinterByName -Name $Snapshot.Environment.DefaultPrinterName
+            }
+            if ($null -ne $Snapshot.Environment.MappedDrives) {
+                Set-MappedDriveState -MappedDrives $Snapshot.Environment.MappedDrives
             }
         }
 
@@ -2769,6 +2855,32 @@ function Get-ProfileApplyTarget {
         if (-not [string]::IsNullOrWhiteSpace($secondary)) { $dnsServers += $secondary }
     }
 
+    $configureNetworkCategory = [bool]$ProfileData.ConfigureNetworkCategory
+    $networkCategory = if ($ProfileData.NetworkCategory) { ([string]$ProfileData.NetworkCategory).Trim() } else { "" }
+    if ($configureNetworkCategory -and $networkCategory -notin @("Public", "Private")) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Profile '$($ProfileData.Name)' has an invalid network category."
+    }
+
+    $configureProxy = [bool]$ProfileData.ConfigureProxy
+    $proxyEnabled = [bool]$ProfileData.ProxyEnabled
+    $proxyServer = if ($ProfileData.ProxyServer) { ([string]$ProfileData.ProxyServer).Trim() } else { "" }
+    $proxyBypass = if ($ProfileData.ProxyBypass) { ([string]$ProfileData.ProxyBypass).Trim() } else { "" }
+    if ($configureProxy -and $proxyEnabled -and [string]::IsNullOrWhiteSpace($proxyServer)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Profile '$($ProfileData.Name)' enables proxy but has no proxy server."
+    }
+
+    $configureDefaultPrinter = [bool]$ProfileData.ConfigureDefaultPrinter
+    $defaultPrinterName = if ($ProfileData.DefaultPrinterName) { ([string]$ProfileData.DefaultPrinterName).Trim() } else { "" }
+    if ($configureDefaultPrinter -and [string]::IsNullOrWhiteSpace($defaultPrinterName)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Profile '$($ProfileData.Name)' has no default printer name."
+    }
+
+    $configureMappedDrives = [bool]$ProfileData.ConfigureMappedDrives
+    $mappedDriveValidation = Normalize-MappedDriveList -MappedDrives $ProfileData.MappedDrives
+    if ($configureMappedDrives -and -not $mappedDriveValidation.IsValid) {
+        return Get-ApplyValidationResult -IsValid $false -Message $mappedDriveValidation.Message
+    }
+
     return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
         UseDHCP = $useDhcp
         IPAddress = $ipAddress
@@ -2776,6 +2888,16 @@ function Get-ProfileApplyTarget {
         PrefixLength = if ($useDhcp) { 0 } else { $prefix }
         UseAutomatic = $useDnsAutomatic
         Servers = @($dnsServers | Select-Object -Unique)
+        ConfigureNetworkCategory = $configureNetworkCategory
+        NetworkCategory = $networkCategory
+        ConfigureProxy = $configureProxy
+        ProxyEnabled = $proxyEnabled
+        ProxyServer = $proxyServer
+        ProxyBypass = $proxyBypass
+        ConfigureDefaultPrinter = $configureDefaultPrinter
+        DefaultPrinterName = $defaultPrinterName
+        ConfigureMappedDrives = $configureMappedDrives
+        MappedDrives = [object[]]@($mappedDriveValidation.MappedDrives)
     }
 }
 
@@ -2826,6 +2948,29 @@ function Invoke-AdapterDNSTarget {
     }
 
     Set-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ServerAddresses $servers -ErrorAction Stop
+}
+
+function Invoke-ProfileEnvironmentTarget {
+    param(
+        $Adapter,
+        [pscustomobject]$Target
+    )
+
+    if ($Target.ConfigureNetworkCategory) {
+        Set-NetConnectionProfile -InterfaceIndex $Adapter.ifIndex -NetworkCategory $Target.NetworkCategory -ErrorAction Stop
+    }
+
+    if ($Target.ConfigureProxy) {
+        Set-SystemProxyState -Enabled ([bool]$Target.ProxyEnabled) -Server $Target.ProxyServer -Bypass $Target.ProxyBypass
+    }
+
+    if ($Target.ConfigureDefaultPrinter) {
+        Set-DefaultPrinterByName -Name $Target.DefaultPrinterName
+    }
+
+    if ($Target.ConfigureMappedDrives) {
+        Set-MappedDriveState -MappedDrives $Target.MappedDrives
+    }
 }
 
 function ConvertTo-CleanMacAddress {
@@ -6001,6 +6146,193 @@ function Get-ProfileFilePath {
     return (Join-Path $script:ProfilesPath (Get-SafeProfileFileName -Name $Name))
 }
 
+function ConvertFrom-MappedDriveText {
+    param([string]$Text)
+
+    $drives = @()
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $drives }
+
+    foreach ($line in ($Text -split "`r?`n")) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+        if ($trimmed -notmatch '^([A-Za-z]):?\s*(?:=|->)?\s*(\\\\[^\s\\]+\\[^\s]+)\s*$') {
+            throw "Mapped drive line '$trimmed' must look like Z: \\server\share."
+        }
+
+        $driveLetter = $Matches[1].ToUpperInvariant()
+        $remotePath = $Matches[2].Trim()
+        $drives += [pscustomobject]@{
+            DriveLetter = $driveLetter
+            RemotePath = $remotePath
+            Persistent = $true
+        }
+    }
+
+    return @($drives)
+}
+
+function ConvertTo-MappedDriveText {
+    param($MappedDrives)
+
+    $lines = @()
+    foreach ($drive in @($MappedDrives)) {
+        if ($null -eq $drive) { continue }
+        $letter = ([string](Get-ProfileProperty -ProfileData $drive -Name "DriveLetter" -DefaultValue "")).Trim().TrimEnd(":").ToUpperInvariant()
+        $remote = ([string](Get-ProfileProperty -ProfileData $drive -Name "RemotePath" -DefaultValue "")).Trim()
+        if ([string]::IsNullOrWhiteSpace($letter) -or [string]::IsNullOrWhiteSpace($remote)) { continue }
+        $lines += "$letter`: $remote"
+    }
+
+    return ($lines -join "`r`n")
+}
+
+function Normalize-MappedDriveList {
+    param($MappedDrives)
+
+    $errors = @()
+    $normalized = @()
+
+    if ($null -eq $MappedDrives) {
+        return [pscustomobject]@{ IsValid = $true; MappedDrives = @(); Message = "" }
+    }
+
+    if ($MappedDrives -is [string]) {
+        try {
+            $MappedDrives = ConvertFrom-MappedDriveText -Text $MappedDrives
+        } catch {
+            return [pscustomobject]@{ IsValid = $false; MappedDrives = @(); Message = $_.Exception.Message }
+        }
+    }
+
+    foreach ($drive in @($MappedDrives)) {
+        if ($null -eq $drive) { continue }
+
+        $driveLetter = ([string](Get-ProfileProperty -ProfileData $drive -Name "DriveLetter" -DefaultValue "")).Trim().TrimEnd(":").ToUpperInvariant()
+        $remotePath = ([string](Get-ProfileProperty -ProfileData $drive -Name "RemotePath" -DefaultValue "")).Trim()
+        $persistent = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $drive -Name "Persistent" -DefaultValue $true) -DefaultValue $true
+
+        if ($driveLetter -notmatch '^[A-Z]$') {
+            $errors += "Mapped drive letters must be A-Z."
+            continue
+        }
+        if ($remotePath -notmatch '^\\\\[^\\]+\\[^\\]+') {
+            $errors += "Mapped drive $driveLetter`: must target a UNC path."
+            continue
+        }
+        if ($normalized | Where-Object { $_.DriveLetter -eq $driveLetter }) {
+            $errors += "Mapped drive $driveLetter`: is duplicated."
+            continue
+        }
+
+        $normalized += [pscustomobject]@{
+            DriveLetter = $driveLetter
+            RemotePath = $remotePath
+            Persistent = $persistent
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($errors.Count -eq 0)
+        MappedDrives = [object[]]@($normalized)
+        Message = ($errors -join " ")
+    }
+}
+
+function Get-SystemProxySnapshot {
+    $path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+    $values = Get-ItemProperty -LiteralPath $path -ErrorAction SilentlyContinue
+
+    return [pscustomobject]@{
+        Enabled = ($values -and [int]$values.ProxyEnable -eq 1)
+        Server = if ($values -and $values.ProxyServer) { [string]$values.ProxyServer } else { "" }
+        Bypass = if ($values -and $values.ProxyOverride) { [string]$values.ProxyOverride } else { "" }
+    }
+}
+
+function Set-SystemProxyState {
+    param(
+        [bool]$Enabled,
+        [string]$Server = "",
+        [string]$Bypass = ""
+    )
+
+    $path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+    Set-ItemProperty -LiteralPath $path -Name ProxyEnable -Value ($(if ($Enabled) { 1 } else { 0 })) -ErrorAction Stop
+    Set-ItemProperty -LiteralPath $path -Name ProxyServer -Value $Server -ErrorAction Stop
+    Set-ItemProperty -LiteralPath $path -Name ProxyOverride -Value $Bypass -ErrorAction Stop
+}
+
+function Get-DefaultPrinterName {
+    $printer = Get-CimInstance -ClassName Win32_Printer -ErrorAction SilentlyContinue | Where-Object { $_.Default } | Select-Object -First 1
+    if ($printer) { return [string]$printer.Name }
+    return ""
+}
+
+function Set-DefaultPrinterByName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return }
+    $printer = Get-CimInstance -ClassName Win32_Printer -ErrorAction Stop | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+    if (-not $printer) {
+        throw "Printer '$Name' was not found."
+    }
+
+    $result = Invoke-CimMethod -InputObject $printer -MethodName SetDefaultPrinter -ErrorAction Stop
+    if ($result.ReturnValue -ne 0) {
+        throw "SetDefaultPrinter returned $($result.ReturnValue)."
+    }
+}
+
+function Get-MappedDriveState {
+    $drives = @()
+    $rows = @(Get-CimInstance -ClassName Win32_MappedLogicalDisk -ErrorAction SilentlyContinue)
+    foreach ($row in $rows) {
+        $letter = ([string]$row.DeviceID).Trim().TrimEnd(":").ToUpperInvariant()
+        $remote = ([string]$row.ProviderName).Trim()
+        if ($letter -match '^[A-Z]$' -and $remote -match '^\\\\') {
+            $drives += [pscustomobject]@{
+                DriveLetter = $letter
+                RemotePath = $remote
+                Persistent = $true
+            }
+        }
+    }
+
+    return @($drives)
+}
+
+function Set-MappedDriveState {
+    param($MappedDrives)
+
+    $targetValidation = Normalize-MappedDriveList -MappedDrives $MappedDrives
+    if (-not $targetValidation.IsValid) {
+        throw $targetValidation.Message
+    }
+
+    $targetDrives = @($targetValidation.MappedDrives)
+    $currentDrives = @(Get-MappedDriveState)
+    $targetLetters = @($targetDrives | ForEach-Object { $_.DriveLetter })
+
+    foreach ($current in $currentDrives) {
+        if ($targetLetters -notcontains $current.DriveLetter) {
+            & net.exe use "$($current.DriveLetter):" /delete /y | Out-Null
+        }
+    }
+
+    foreach ($drive in $targetDrives) {
+        $existing = $currentDrives | Where-Object { $_.DriveLetter -eq $drive.DriveLetter } | Select-Object -First 1
+        if ($existing -and $existing.RemotePath -ne $drive.RemotePath) {
+            & net.exe use "$($drive.DriveLetter):" /delete /y | Out-Null
+        }
+
+        $persistentArg = if ($drive.Persistent) { "/persistent:yes" } else { "/persistent:no" }
+        & net.exe use "$($drive.DriveLetter):" $drive.RemotePath $persistentArg | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to map drive $($drive.DriveLetter): to $($drive.RemotePath)."
+        }
+    }
+}
+
 function Get-ProfileValidationResult {
     param([pscustomobject]$ProfileData)
 
@@ -6072,6 +6404,37 @@ function Get-ProfileValidationResult {
         }
     }
 
+    $configureNetworkCategory = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "ConfigureNetworkCategory" -DefaultValue $false) -DefaultValue $false
+    $networkCategory = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "NetworkCategory" -DefaultValue "Private")).Trim()
+    if ($configureNetworkCategory -and $networkCategory -notin @("Public", "Private")) {
+        $errors += "Network category must be Public or Private."
+    }
+
+    $configureProxy = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "ConfigureProxy" -DefaultValue $false) -DefaultValue $false
+    $proxyEnabled = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "ProxyEnabled" -DefaultValue $false) -DefaultValue $false
+    $proxyServer = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "ProxyServer" -DefaultValue "")).Trim()
+    $proxyBypass = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "ProxyBypass" -DefaultValue "")).Trim()
+    if ($configureProxy -and $proxyEnabled) {
+        if ([string]::IsNullOrWhiteSpace($proxyServer)) {
+            $errors += "Enabled proxy profiles need a proxy server."
+        } elseif ($proxyServer -match '\s') {
+            $errors += "Proxy server cannot contain whitespace."
+        }
+    }
+
+    $configureDefaultPrinter = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "ConfigureDefaultPrinter" -DefaultValue $false) -DefaultValue $false
+    $defaultPrinterName = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "DefaultPrinterName" -DefaultValue "")).Trim()
+    if ($configureDefaultPrinter -and [string]::IsNullOrWhiteSpace($defaultPrinterName)) {
+        $errors += "Default printer profiles need a printer name."
+    }
+
+    $configureMappedDrives = ConvertTo-ProfileBoolean -Value (Get-ProfileProperty -ProfileData $ProfileData -Name "ConfigureMappedDrives" -DefaultValue $false) -DefaultValue $false
+    $mappedDriveInput = Get-ProfileProperty -ProfileData $ProfileData -Name "MappedDrives" -DefaultValue @()
+    $mappedDriveValidation = Normalize-MappedDriveList -MappedDrives $mappedDriveInput
+    if ($configureMappedDrives -and -not $mappedDriveValidation.IsValid) {
+        $errors += $mappedDriveValidation.Message
+    }
+
     $createdAt = ([string](Get-ProfileProperty -ProfileData $ProfileData -Name "CreatedAt" -DefaultValue "")).Trim()
     if ([string]::IsNullOrWhiteSpace($createdAt)) {
         $createdAt = (Get-Date).ToString("o")
@@ -6105,6 +6468,16 @@ function Get-ProfileValidationResult {
         UseDHCPForDNS = $useDnsAutomatic
         PrimaryDNS = $primaryDns
         SecondaryDNS = $secondaryDns
+        ConfigureNetworkCategory = $configureNetworkCategory
+        NetworkCategory = if ($configureNetworkCategory) { $networkCategory } else { "" }
+        ConfigureProxy = $configureProxy
+        ProxyEnabled = $proxyEnabled
+        ProxyServer = if ($configureProxy) { $proxyServer } else { "" }
+        ProxyBypass = if ($configureProxy) { $proxyBypass } else { "" }
+        ConfigureDefaultPrinter = $configureDefaultPrinter
+        DefaultPrinterName = if ($configureDefaultPrinter) { $defaultPrinterName } else { "" }
+        ConfigureMappedDrives = $configureMappedDrives
+        MappedDrives = if ($configureMappedDrives) { ,([object[]]@($mappedDriveValidation.MappedDrives)) } else { ,([object[]]@()) }
         CreatedAt = $createdAt
         UpdatedAt = $updatedAt
     }
@@ -6735,6 +7108,21 @@ function Load-ProfileToEditor {
     $script:chkProfileDnsDHCP.IsChecked = $profile.UseDHCPForDNS
     $script:txtProfileDns1.Text = $profile.PrimaryDNS
     $script:txtProfileDns2.Text = $profile.SecondaryDNS
+    $script:chkProfileNetworkCategory.IsChecked = [bool]$profile.ConfigureNetworkCategory
+    foreach ($item in @($script:cmbProfileNetworkCategory.Items)) {
+        if ([string]$item.Content -eq [string]$profile.NetworkCategory) {
+            $script:cmbProfileNetworkCategory.SelectedItem = $item
+            break
+        }
+    }
+    $script:chkProfileProxy.IsChecked = [bool]$profile.ConfigureProxy
+    $script:chkProfileProxyEnabled.IsChecked = [bool]$profile.ProxyEnabled
+    $script:txtProfileProxyServer.Text = if ($profile.ProxyServer) { $profile.ProxyServer } else { "" }
+    $script:txtProfileProxyBypass.Text = if ($profile.ProxyBypass) { $profile.ProxyBypass } else { "" }
+    $script:chkProfilePrinter.IsChecked = [bool]$profile.ConfigureDefaultPrinter
+    $script:txtProfilePrinterName.Text = if ($profile.DefaultPrinterName) { $profile.DefaultPrinterName } else { "" }
+    $script:chkProfileMappedDrives.IsChecked = [bool]$profile.ConfigureMappedDrives
+    $script:txtProfileMappedDrives.Text = ConvertTo-MappedDriveText -MappedDrives $profile.MappedDrives
 }
 
 function Save-Profile {
@@ -6759,6 +7147,16 @@ function Save-Profile {
         UseDHCPForDNS = $script:chkProfileDnsDHCP.IsChecked
         PrimaryDNS = $script:txtProfileDns1.Text
         SecondaryDNS = $script:txtProfileDns2.Text
+        ConfigureNetworkCategory = [bool]$script:chkProfileNetworkCategory.IsChecked
+        NetworkCategory = if ($script:cmbProfileNetworkCategory.SelectedItem) { [string]$script:cmbProfileNetworkCategory.SelectedItem.Content } else { "Private" }
+        ConfigureProxy = [bool]$script:chkProfileProxy.IsChecked
+        ProxyEnabled = [bool]$script:chkProfileProxyEnabled.IsChecked
+        ProxyServer = $script:txtProfileProxyServer.Text
+        ProxyBypass = $script:txtProfileProxyBypass.Text
+        ConfigureDefaultPrinter = [bool]$script:chkProfilePrinter.IsChecked
+        DefaultPrinterName = $script:txtProfilePrinterName.Text
+        ConfigureMappedDrives = [bool]$script:chkProfileMappedDrives.IsChecked
+        MappedDrives = $script:txtProfileMappedDrives.Text
         CreatedAt = (Get-Date).ToString("o")
         UpdatedAt = (Get-Date).ToString("o")
     }
@@ -6920,6 +7318,7 @@ function Invoke-ApplyProfileObject {
     $success = Invoke-NetworkMutation -Adapter $Adapter -ActionName "Apply profile '$($ProfileData.Name)'" -Quiet:$quietApply -ScriptBlock {
         Invoke-AdapterIPTarget -Adapter $Adapter -Target $target
         Invoke-AdapterDNSTarget -Adapter $Adapter -Target $target
+        Invoke-ProfileEnvironmentTarget -Adapter $Adapter -Target $target
     }
 
     if ($success) {
@@ -7075,6 +7474,25 @@ function Show-ProfileDiff {
     Add-DiffLine -Label "Auto-Apply" -CurrentValue "--" -TargetValue $(if ($script:chkProfileAutoApply.IsChecked) { "Enabled" } else { "Disabled" })
     Add-DiffLine -Label "Match SSID" -CurrentValue "--" -TargetValue $script:txtProfileMatchSsid.Text.Trim()
     Add-DiffLine -Label "Gateway MAC" -CurrentValue "--" -TargetValue (ConvertTo-CleanMacAddress -MacAddress $script:txtProfileGatewayMac.Text)
+    if ($script:chkProfileNetworkCategory.IsChecked) {
+        $currentProfile = Get-NetConnectionProfile -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue | Select-Object -First 1
+        $currentCategory = if ($currentProfile) { [string]$currentProfile.NetworkCategory } else { "" }
+        $targetCategory = if ($script:cmbProfileNetworkCategory.SelectedItem) { [string]$script:cmbProfileNetworkCategory.SelectedItem.Content } else { "Private" }
+        Add-DiffLine -Label "Network Category" -CurrentValue $currentCategory -TargetValue $targetCategory
+    }
+    if ($script:chkProfileProxy.IsChecked) {
+        $proxy = Get-SystemProxySnapshot
+        $currentProxy = if ($proxy.Enabled) { "Enabled $($proxy.Server)" } else { "Disabled" }
+        $targetProxy = if ($script:chkProfileProxyEnabled.IsChecked) { "Enabled $($script:txtProfileProxyServer.Text.Trim())" } else { "Disabled" }
+        Add-DiffLine -Label "System Proxy" -CurrentValue $currentProxy -TargetValue $targetProxy
+        Add-DiffLine -Label "Proxy Bypass" -CurrentValue $proxy.Bypass -TargetValue $script:txtProfileProxyBypass.Text.Trim()
+    }
+    if ($script:chkProfilePrinter.IsChecked) {
+        Add-DiffLine -Label "Default Printer" -CurrentValue (Get-DefaultPrinterName) -TargetValue $script:txtProfilePrinterName.Text.Trim()
+    }
+    if ($script:chkProfileMappedDrives.IsChecked) {
+        Add-DiffLine -Label "Mapped Drives" -CurrentValue (ConvertTo-MappedDriveText -MappedDrives (Get-MappedDriveState)) -TargetValue $script:txtProfileMappedDrives.Text.Trim()
+    }
 
     $script:txtProfileDiffOutput.Text = $script:profileDiffLines -join "`n"
     $script:profileDiffLines = $null
@@ -7692,6 +8110,16 @@ $btnNewProfile.Add_Click({
     $script:chkProfileDnsDHCP.IsChecked = $true
     $script:txtProfileDns1.Text = ""
     $script:txtProfileDns2.Text = ""
+    $script:chkProfileNetworkCategory.IsChecked = $false
+    if ($script:cmbProfileNetworkCategory.Items.Count -gt 0) { $script:cmbProfileNetworkCategory.SelectedIndex = 0 }
+    $script:chkProfileProxy.IsChecked = $false
+    $script:chkProfileProxyEnabled.IsChecked = $false
+    $script:txtProfileProxyServer.Text = ""
+    $script:txtProfileProxyBypass.Text = ""
+    $script:chkProfilePrinter.IsChecked = $false
+    $script:txtProfilePrinterName.Text = ""
+    $script:chkProfileMappedDrives.IsChecked = $false
+    $script:txtProfileMappedDrives.Text = ""
 })
 $btnDeleteProfile.Add_Click({ Delete-Profile })
 $btnChooseProfileStore.Add_Click({ Invoke-ChooseProfileStore })

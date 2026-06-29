@@ -42,13 +42,16 @@ Describe 'Profile validation' {
             'Get-ProfileProperty',
             'ConvertTo-ProfileBoolean',
             'Get-SafeProfileFileName',
+            'ConvertFrom-MappedDriveText',
+            'ConvertTo-MappedDriveText',
+            'Normalize-MappedDriveList',
             'Get-ProfileValidationResult',
             'Write-ProfileFileAtomic'
         )
-        $script:ProfileSchemaVersion = 1
+        $script:ProfileSchemaVersion = 2
     }
 
-    It 'normalizes a legacy static profile to schema version 1' {
+    It 'normalizes a legacy static profile to the current schema version' {
         $profile = [pscustomobject]@{
             Name = 'Clinic LAN'
             Description = 'Static clinic profile'
@@ -68,10 +71,41 @@ Describe 'Profile validation' {
         $result = Get-ProfileValidationResult -ProfileData $profile
 
         $result.IsValid | Should -BeTrue
-        $result.Profile.SchemaVersion | Should -Be 1
+        $result.Profile.SchemaVersion | Should -Be 2
         $result.Profile.AutoApply | Should -BeTrue
         $result.Profile.MatchGatewayMac | Should -Be '001122334455'
+        $result.Profile.ConfigureProxy | Should -BeFalse
+        $result.Profile.MappedDrives.Count | Should -Be 0
         $result.SafeFileName | Should -Be 'Clinic_LAN.json'
+    }
+
+    It 'normalizes optional profile environment actions' {
+        $profile = [pscustomobject]@{
+            Name = 'Clinic Environment'
+            UseDHCP = $true
+            UseDHCPForDNS = $true
+            ConfigureNetworkCategory = $true
+            NetworkCategory = 'Private'
+            ConfigureProxy = $true
+            ProxyEnabled = $true
+            ProxyServer = 'proxy.clinic.local:8080'
+            ProxyBypass = '<local>'
+            ConfigureDefaultPrinter = $true
+            DefaultPrinterName = 'Front Desk'
+            ConfigureMappedDrives = $true
+            MappedDrives = "Z: \\fileserver\share"
+        }
+
+        $result = Get-ProfileValidationResult -ProfileData $profile
+
+        $result.IsValid | Should -BeTrue
+        $result.Profile.ConfigureNetworkCategory | Should -BeTrue
+        $result.Profile.NetworkCategory | Should -Be 'Private'
+        $result.Profile.ProxyServer | Should -Be 'proxy.clinic.local:8080'
+        $result.Profile.DefaultPrinterName | Should -Be 'Front Desk'
+        $result.Profile.MappedDrives.Count | Should -Be 1
+        $result.Profile.MappedDrives[0].DriveLetter | Should -Be 'Z'
+        $result.Profile.MappedDrives[0].RemotePath | Should -Be '\\fileserver\share'
     }
 
     It 'rejects invalid profile data before writing' {
@@ -91,6 +125,41 @@ Describe 'Profile validation' {
         $result.Message | Should -Match 'primary DNS'
     }
 
+    It 'rejects invalid environment profile actions before writing' {
+        $profile = [pscustomobject]@{
+            Name = 'Bad Environment'
+            UseDHCP = $true
+            UseDHCPForDNS = $true
+            ConfigureNetworkCategory = $true
+            NetworkCategory = 'Domain'
+            ConfigureProxy = $true
+            ProxyEnabled = $true
+            ProxyServer = ''
+            ConfigureDefaultPrinter = $true
+            DefaultPrinterName = ''
+            ConfigureMappedDrives = $true
+            MappedDrives = 'Z: not-a-unc-path'
+        }
+
+        $result = Get-ProfileValidationResult -ProfileData $profile
+
+        $result.IsValid | Should -BeFalse
+        $result.Message | Should -Match 'Network category'
+        $result.Message | Should -Match 'proxy server'
+        $result.Message | Should -Match 'printer name'
+        $result.Message | Should -Match 'Mapped drive'
+    }
+
+    It 'round-trips mapped drive text' {
+        $drives = ConvertFrom-MappedDriveText -Text "Y: \\server\apps`r`nZ:=\\server\data"
+        $text = ConvertTo-MappedDriveText -MappedDrives $drives
+
+        $drives.Count | Should -Be 2
+        $drives[0].DriveLetter | Should -Be 'Y'
+        $text | Should -Match 'Y: \\\\server\\apps'
+        $text | Should -Match 'Z: \\\\server\\data'
+    }
+
     It 'writes profile JSON atomically' {
         $profile = [pscustomobject]@{
             Name = 'Atomic'
@@ -104,7 +173,7 @@ Describe 'Profile validation' {
         $roundTrip = Get-Content -Raw $filePath | ConvertFrom-Json
 
         $roundTrip.Name | Should -Be 'Atomic'
-        $roundTrip.SchemaVersion | Should -Be 1
+        $roundTrip.SchemaVersion | Should -Be 2
     }
 }
 
@@ -414,6 +483,9 @@ Describe 'Profile storage migration' {
             'Get-ProfileProperty',
             'ConvertTo-ProfileBoolean',
             'Get-SafeProfileFileName',
+            'ConvertFrom-MappedDriveText',
+            'ConvertTo-MappedDriveText',
+            'Normalize-MappedDriveList',
             'Get-ProfileValidationResult',
             'Resolve-ProfileStorePath',
             'Test-SamePath',
@@ -424,7 +496,7 @@ Describe 'Profile storage migration' {
             'Get-ProfileStoreMigrationPlan',
             'Write-ProfileStoreBackupManifest'
         )
-        $script:ProfileSchemaVersion = 1
+        $script:ProfileSchemaVersion = 2
         $versionMetadata = Get-Content -Raw -LiteralPath (Join-Path $script:RepoRoot 'version.json') | ConvertFrom-Json
         $script:AppVersion = [string]$versionMetadata.Version
     }
