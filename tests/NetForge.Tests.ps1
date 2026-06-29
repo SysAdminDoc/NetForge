@@ -439,6 +439,41 @@ Describe 'CLI profile apply helpers' {
     }
 }
 
+Describe 'RDP profile launch helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-RdpLaunchPlan'
+        )
+    }
+
+    It 'builds a mstsc host launch argument' {
+        $plan = Get-RdpLaunchPlan -Target 'rdp.example.com:3390'
+
+        $plan.IsValid | Should -BeTrue
+        $plan.FilePath | Should -Be 'mstsc.exe'
+        $plan.ArgumentList | Should -Be '/v:rdp.example.com:3390'
+        $plan.DisplayTarget | Should -Be 'rdp.example.com:3390'
+    }
+
+    It 'rejects raw mstsc option text in host mode' {
+        $plan = Get-RdpLaunchPlan -Target '/admin rdp.example.com'
+
+        $plan.IsValid | Should -BeFalse
+        $plan.Message | Should -Match 'Use a saved .rdp file'
+    }
+
+    It 'quotes an existing RDP file path' {
+        $rdpPath = Join-Path $TestDrive 'Work Profile.rdp'
+        Set-Content -LiteralPath $rdpPath -Value 'full address:s:rdp.example.com' -Encoding ASCII
+
+        $plan = Get-RdpLaunchPlan -Target $rdpPath
+
+        $plan.IsValid | Should -BeTrue
+        $plan.ArgumentList | Should -Be ('"' + $rdpPath + '"')
+        $plan.DisplayTarget | Should -Be $rdpPath
+    }
+}
+
 Describe 'Encrypted DNS endpoint helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

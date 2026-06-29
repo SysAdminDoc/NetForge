@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.44.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.45.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -90,6 +90,7 @@
 - System tray profile switching against the selected or first active adapter
 - Import/export profiles as JSON or PNG QR codes, plus import Windows WLAN profile XML from `netsh wlan export profile`
 - CLI profile apply for scripts with `-ApplyProfile`, optional `-AdapterName`, and `-Silent`
+- Remote Desktop launch workflow that applies a profile first and reverts the previous network state when RDP exits
 - Perfect for switching between work, home, and other networks
 
 ### Network Tools
@@ -106,6 +107,9 @@
 - **Hosts File Groups**:
   - Stage grouped hosts entries, toggle groups enabled/disabled, and write a NetForge-managed hosts section
   - Preserve unmanaged hosts lines and create a timestamped backup before applying changes
+- **RDP Profile Launch**:
+  - Apply a saved profile, launch `mstsc.exe` to a host or `.rdp` file, and monitor the RDP client
+  - Revert the captured pre-RDP network state automatically when RDP exits, or manually from Network Tools
 - **Detailed Adapter Information**:
   - Interface index and type
   - Link speed and media state
@@ -210,7 +214,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.44.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.45.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
@@ -239,11 +243,16 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Fill in details and save
    - Use the header Import button to import NetForge JSON exports or Windows WLAN profile XML exports
    - Use `.\NetForge.ps1 -ApplyProfile Home -Silent` from scripts to apply a saved profile without launching the window
-5. **Manage WiFi**:
+5. **Launch RDP with a profile** (optional):
+   - Go to Network Tools
+   - Enter a host or `.rdp` file and saved profile name
+   - Click "Launch RDP with Profile"
+   - NetForge reverts the captured pre-RDP network state when the RDP client exits
+6. **Manage WiFi**:
    - Go to the WiFi tab
    - Click "Scan Networks"
    - Select a network and click "Connect" or "Disconnect"
-6. **Control external diagnostics**:
+7. **Control external diagnostics**:
    - Go to Diagnostics
    - Disable public-IP lookup or external speed-test downloads when working offline or privately
    - Select the HTTPS speed-test endpoint and click "Save Policy"

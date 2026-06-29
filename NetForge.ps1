@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.44.0
+    Version: 1.45.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -90,7 +90,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.44.0"
+$script:AppVersion = "1.45.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -153,6 +153,10 @@ $script:NetworkChangeHandlers = @{}
 $script:NetworkChangeSubscribed = $false
 $script:TrayIcon = $null
 $script:TrayContextMenu = $null
+$script:RdpProcess = $null
+$script:RdpRestoreSnapshot = $null
+$script:RdpMonitorTimer = $null
+$script:RdpLaunchTarget = ""
 $script:ThemeSelectorInitializing = $false
 $script:CompactModeInitializing = $false
 $script:CompactOriginalMetrics = @{}
@@ -244,6 +248,12 @@ $script:AccessibilityNames = @{
     btnRenewIP = "Renew IP address"
     btnRestoreNetworkState = "Restore last network state"
     btnExportDiagnostics = "Export diagnostics"
+    txtRdpTarget = "Remote Desktop host or RDP file"
+    txtRdpProfileName = "Remote Desktop profile name"
+    txtRdpAdapterName = "Remote Desktop adapter name or interface index"
+    btnLaunchRdpProfile = "Launch Remote Desktop with profile"
+    btnRevertRdpProfile = "Revert Remote Desktop profile"
+    txtRdpStatus = "Remote Desktop profile launch status"
     chkPublicIpLookup = "Enable public IP lookup"
     chkExternalSpeedTest = "Allow external speed test downloads"
     cmbSpeedTestEndpoint = "Speed test endpoint"
@@ -291,7 +301,7 @@ $script:AccessibilityTabOrder = @(
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
-    "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
+    "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
     "txtHostsGroupName", "txtHostsAddress", "txtHostsNames", "btnHostsAddEntry", "btnHostsToggleGroup", "btnHostsRemoveGroup", "btnHostsRefresh", "btnHostsApply", "lstHostsGroups",
@@ -1369,7 +1379,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.44.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.45.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2316,6 +2326,44 @@ function Apply-Localization {
                                     </WrapPanel>
                                 </Border>
 
+                                <!-- Remote Desktop Profile Launch -->
+                                <TextBlock Text="REMOTE DESKTOP PROFILE LAUNCH" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,12">
+                                            <TextBlock Text="Host or .rdp file" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtRdpTarget" Style="{StaticResource ModernTextBox}" Text="server.example.com"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0,10,12">
+                                            <TextBlock Text="Profile" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtRdpProfileName" Style="{StaticResource ModernTextBox}" Text=""/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="10,0,0,12">
+                                            <TextBlock Text="Adapter optional" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtRdpAdapterName" Style="{StaticResource ModernTextBox}" Text=""/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,12">
+                                            <Button x:Name="btnLaunchRdpProfile" Content="Launch RDP with Profile" Style="{StaticResource PrimaryButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnRevertRdpProfile" Content="Revert RDP Profile" Style="{StaticResource ModernButton}" IsEnabled="False"/>
+                                        </StackPanel>
+
+                                        <TextBlock x:Name="txtRdpStatus" Grid.Row="2" Grid.ColumnSpan="3" Text="Enter a host and saved profile, or leave Profile blank to use the selected profile." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Network Diagnostics -->
                                 <TextBlock Text="NETWORK DIAGNOSTICS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
 
@@ -2671,7 +2719,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.44.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.45.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -9549,7 +9597,7 @@ function Invoke-ApplyProfileObject {
     $target = Get-ProfileApplyTarget -ProfileData $ProfileData
     if (-not $target.IsValid) {
         Update-Status $target.Message -Type Error
-        if ($Source -notin @("Auto", "Scheduled", "Tray", "Cli")) {
+        if ($Source -notin @("Auto", "Scheduled", "Tray", "Cli", "Rdp")) {
             Show-MessageBox -Message $target.Message -Title "Profile Validation Failed" -Icon Error
         }
         return $false
@@ -9557,7 +9605,7 @@ function Invoke-ApplyProfileObject {
 
     Update-Status "Applying profile '$($ProfileData.Name)'..."
 
-    $quietApply = ($Source -in @("Auto", "Scheduled", "Tray", "Cli"))
+    $quietApply = ($Source -in @("Auto", "Scheduled", "Tray", "Cli", "Rdp"))
     $success = Invoke-NetworkMutation -Adapter $Adapter -ActionName "Apply profile '$($ProfileData.Name)'" -Quiet:$quietApply -ScriptBlock {
         Invoke-AdapterIPTarget -Adapter $Adapter -Target $target
         Invoke-AdapterDNSTarget -Adapter $Adapter -Target $target
@@ -10003,6 +10051,224 @@ function Invoke-CliApplyProfile {
         Write-OperationLog -Action "CLI apply profile" -Result "Failed" -Detail $message
         Write-Error $message
         exit 1
+    }
+}
+
+function Get-RdpLaunchPlan {
+    param([string]$Target)
+
+    $text = ([string]$Target).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return [pscustomobject]@{
+            IsValid = $false
+            Message = "Enter a Remote Desktop host or .rdp file path."
+            FilePath = "mstsc.exe"
+            ArgumentList = ""
+            DisplayTarget = ""
+        }
+    }
+
+    $expanded = [Environment]::ExpandEnvironmentVariables($text)
+    if ($expanded.EndsWith(".rdp", [System.StringComparison]::OrdinalIgnoreCase)) {
+        if (-not (Test-Path -LiteralPath $expanded -PathType Leaf)) {
+            return [pscustomobject]@{
+                IsValid = $false
+                Message = "RDP file was not found: $expanded"
+                FilePath = "mstsc.exe"
+                ArgumentList = ""
+                DisplayTarget = $expanded
+            }
+        }
+
+        $fullPath = [System.IO.Path]::GetFullPath($expanded)
+        return [pscustomobject]@{
+            IsValid = $true
+            Message = ""
+            FilePath = "mstsc.exe"
+            ArgumentList = '"' + ($fullPath -replace '"', '\"') + '"'
+            DisplayTarget = $fullPath
+        }
+    }
+
+    if ($text -notmatch '^[A-Za-z0-9._:\-\[\]]+$') {
+        return [pscustomobject]@{
+            IsValid = $false
+            Message = "RDP host may contain only letters, numbers, dots, dashes, underscores, colons, and brackets. Use a saved .rdp file for advanced options."
+            FilePath = "mstsc.exe"
+            ArgumentList = ""
+            DisplayTarget = $text
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = $true
+        Message = ""
+        FilePath = "mstsc.exe"
+        ArgumentList = "/v:$text"
+        DisplayTarget = $text
+    }
+}
+
+function Set-RdpLaunchStatus {
+    param(
+        [string]$Message,
+        [string]$Type = "Info"
+    )
+
+    if ($script:txtRdpStatus) {
+        $script:txtRdpStatus.Text = $Message
+        switch ($Type) {
+            "Success" { $script:txtRdpStatus.Foreground = [System.Windows.Media.Brushes]::LightGreen }
+            "Error"   { $script:txtRdpStatus.Foreground = [System.Windows.Media.Brushes]::Salmon }
+            "Warning" { $script:txtRdpStatus.Foreground = [System.Windows.Media.Brushes]::Orange }
+            default   { $script:txtRdpStatus.Foreground = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(139,148,158))) }
+        }
+    }
+
+    Update-Status $Message -Type $Type
+}
+
+function Update-RdpProfileControls {
+    if ($script:btnRevertRdpProfile) {
+        $script:btnRevertRdpProfile.IsEnabled = ($null -ne $script:RdpRestoreSnapshot)
+    }
+}
+
+function Get-RdpProfileNameSelection {
+    if ($script:txtRdpProfileName -and -not [string]::IsNullOrWhiteSpace($script:txtRdpProfileName.Text)) {
+        return $script:txtRdpProfileName.Text.Trim()
+    }
+
+    if ($script:lstProfiles -and $script:lstProfiles.SelectedItem -and $script:lstProfiles.SelectedItem.Tag) {
+        return [string]$script:lstProfiles.SelectedItem.Tag.Name
+    }
+
+    return ""
+}
+
+function Get-RdpAdapterSelection {
+    $selector = if ($script:txtRdpAdapterName) { $script:txtRdpAdapterName.Text.Trim() } else { "" }
+    if (-not [string]::IsNullOrWhiteSpace($selector)) {
+        return Resolve-CliAdapter -AdapterName $selector
+    }
+
+    $selected = Get-SelectedAdapter
+    if ($selected) { return $selected }
+
+    return Resolve-CliAdapter
+}
+
+function Stop-RdpMonitor {
+    if ($script:RdpMonitorTimer) {
+        $script:RdpMonitorTimer.Stop()
+    }
+}
+
+function Invoke-RdpProfileRevert {
+    param([string]$Reason = "Manual")
+
+    if ($null -eq $script:RdpRestoreSnapshot) {
+        Set-RdpLaunchStatus -Message "No RDP profile snapshot is available to revert." -Type Warning
+        return $false
+    }
+
+    $snapshot = $script:RdpRestoreSnapshot
+    $target = $script:RdpLaunchTarget
+    $script:RdpRestoreSnapshot = $null
+    $script:RdpProcess = $null
+    $script:RdpLaunchTarget = ""
+    Stop-RdpMonitor
+    Update-RdpProfileControls
+
+    $result = Restore-NetworkSnapshot -Snapshot $snapshot
+    if ($result.Restored) {
+        Write-OperationLog -Action "RDP profile revert" -Result "Succeeded" -Detail "Reason=$Reason; Target=$target; $($result.Message)"
+        Set-RdpLaunchStatus -Message "RDP profile reverted after $Reason. $($result.Message)" -Type Success
+        return $true
+    }
+
+    Write-OperationLog -Action "RDP profile revert" -Result "Failed" -Detail "Reason=$Reason; Target=$target; $($result.Message)"
+    Set-RdpLaunchStatus -Message "RDP profile revert failed: $($result.Message)" -Type Error
+    return $false
+}
+
+function Watch-RdpProcess {
+    if ($null -eq $script:RdpProcess) {
+        Stop-RdpMonitor
+        return
+    }
+
+    try {
+        if ($script:RdpProcess.HasExited) {
+            [void](Invoke-RdpProfileRevert -Reason "disconnect")
+        }
+    } catch {
+        Write-OperationLog -Action "RDP process monitor" -Result "Failed" -Detail $_.Exception.Message
+        [void](Invoke-RdpProfileRevert -Reason "monitor failure")
+    }
+}
+
+function Start-RdpMonitor {
+    if ($null -eq $script:RdpMonitorTimer) {
+        $script:RdpMonitorTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $script:RdpMonitorTimer.Interval = [TimeSpan]::FromSeconds(5)
+        $script:RdpMonitorTimer.Add_Tick({ Watch-RdpProcess })
+    }
+
+    $script:RdpMonitorTimer.Start()
+}
+
+function Invoke-RdpProfileLaunch {
+    if ($script:RdpProcess -and -not $script:RdpProcess.HasExited) {
+        Set-RdpLaunchStatus -Message "An RDP profile launch is already being monitored for $script:RdpLaunchTarget." -Type Warning
+        return
+    }
+
+    $plan = Get-RdpLaunchPlan -Target $script:txtRdpTarget.Text
+    if (-not $plan.IsValid) {
+        Set-RdpLaunchStatus -Message $plan.Message -Type Error
+        return
+    }
+
+    $profileName = Get-RdpProfileNameSelection
+    if ([string]::IsNullOrWhiteSpace($profileName)) {
+        Set-RdpLaunchStatus -Message "Enter a profile name or select a saved profile before launching RDP." -Type Error
+        return
+    }
+
+    try {
+        $profile = Resolve-CliProfile -ProfileName $profileName
+        $adapter = Get-RdpAdapterSelection
+        $applied = Invoke-ApplyProfileObject -ProfileData $profile -Adapter $adapter -Source "Rdp"
+        if (-not $applied) {
+            Set-RdpLaunchStatus -Message "RDP launch stopped because profile '$($profile.Name)' could not be applied." -Type Error
+            return
+        }
+
+        $script:RdpRestoreSnapshot = $script:LastNetworkSnapshot
+        if ($null -eq $script:RdpRestoreSnapshot) {
+            throw "No rollback snapshot was captured for the RDP profile apply."
+        }
+
+        $script:RdpLaunchTarget = $plan.DisplayTarget
+        $script:RdpProcess = Start-Process -FilePath $plan.FilePath -ArgumentList $plan.ArgumentList -PassThru
+        Start-RdpMonitor
+        Update-RdpProfileControls
+        Write-OperationLog -Action "RDP profile launch" -Result "Succeeded" -Detail "Target=$($plan.DisplayTarget); Profile=$($profile.Name); Adapter=$($adapter.Name); ProcessId=$($script:RdpProcess.Id)"
+        Set-RdpLaunchStatus -Message "Launched RDP to $($plan.DisplayTarget) with profile '$($profile.Name)'. Network state will revert when RDP exits." -Type Success
+    } catch {
+        $message = $_.Exception.Message
+        if ($script:RdpRestoreSnapshot) {
+            $restoreResult = Restore-NetworkSnapshot -Snapshot $script:RdpRestoreSnapshot
+            $script:RdpRestoreSnapshot = $null
+            Update-RdpProfileControls
+            $message = "$message Previous network restore: $($restoreResult.Message)"
+        }
+        $script:RdpProcess = $null
+        $script:RdpLaunchTarget = ""
+        Stop-RdpMonitor
+        Write-OperationLog -Action "RDP profile launch" -Result "Failed" -Detail $message
+        Set-RdpLaunchStatus -Message "RDP launch failed: $message" -Type Error
     }
 }
 
@@ -11810,6 +12076,8 @@ $btnReleaseIP.Add_Click({ Invoke-ReleaseIP })
 $btnRenewIP.Add_Click({ Invoke-RenewIP })
 $btnRestoreNetworkState.Add_Click({ Invoke-RestoreLastNetworkState })
 $btnExportDiagnostics.Add_Click({ Export-DiagnosticsBundle })
+$btnLaunchRdpProfile.Add_Click({ Invoke-RdpProfileLaunch })
+$btnRevertRdpProfile.Add_Click({ [void](Invoke-RdpProfileRevert -Reason "manual") })
 $btnResetWinsock.Add_Click({ Invoke-ResetWinsock })
 $btnResetTCP.Add_Click({ Invoke-ResetTCP })
 $btnNetworkReset.Add_Click({ Invoke-NetworkReset })
@@ -11899,6 +12167,10 @@ $window.Add_Closing({
     if ($script:ScheduleProfileTimer) {
         $script:ScheduleProfileTimer.Stop()
     }
+    if ($script:RdpRestoreSnapshot) {
+        [void](Invoke-RdpProfileRevert -Reason "app close")
+    }
+    Stop-RdpMonitor
     Unregister-NetworkChangeAutoApply
     Remove-SystemTray
     $script:ConnStatusTimer.Stop()
@@ -11924,6 +12196,7 @@ Show-RestoreSnapshotButtonState
 Update-ConnectionStatus
 Update-PublicIP
 Show-WifiActionState
+Update-RdpProfileControls
 Invoke-WifiNetworkScan
 Invoke-AutoApplyProfile -Trigger "Startup"
 Invoke-ScheduledProfileSwitch -Trigger "Startup"

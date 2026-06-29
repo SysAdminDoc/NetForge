@@ -23,7 +23,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 - **YogaDNS** — DoH/DoT proxy layer on Windows; study integration approach.
 
 ## Nice-to-Haves
-- RDP launch with auto-profile switch + revert on disconnect
 - Integrated "why can't I reach X" wizard (DNS → gateway → route → firewall → MTU)
 - Discord webhook on profile apply for fleet tracking
 - Per-app routing rules via WFP (force browser through VPN, leave others direct)
