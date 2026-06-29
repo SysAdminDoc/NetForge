@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.42.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.43.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -88,7 +88,7 @@
 - Optional profile actions for Windows Public/Private network category, system proxy, default printer, and mapped network drives
 - Quick-apply profiles to any adapter
 - System tray profile switching against the selected or first active adapter
-- Import/export profiles as JSON, plus import Windows WLAN profile XML from `netsh wlan export profile`
+- Import/export profiles as JSON or PNG QR codes, plus import Windows WLAN profile XML from `netsh wlan export profile`
 - Perfect for switching between work, home, and other networks
 
 ### Network Tools
@@ -200,7 +200,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.42.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.43.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 

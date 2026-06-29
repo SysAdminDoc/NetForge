@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.42.0
+    Version: 1.43.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -45,13 +45,14 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.42.0"
+$script:AppVersion = "1.43.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
 $script:LogsPath = Join-Path $script:ConfigPath "Logs"
 $script:SettingsFile = Join-Path $script:ConfigPath "settings.json"
 $script:ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
+$script:LibraryPath = Join-Path $script:ScriptRoot "lib"
 $script:DnsCatalogPath = Join-Path $script:ScriptRoot "dns-providers.json"
 $script:DnsCatalogHashPath = "$script:DnsCatalogPath.sha256"
 $script:DnsCatalogStatus = "Embedded DNS preset defaults"
@@ -65,6 +66,8 @@ $script:DefaultStringResources = @{}
 $script:LocalizationStatus = "Embedded English UI text"
 $script:LocalizationMissingKeys = @()
 $script:ProfileSchemaVersion = 3
+$script:ProfileQrPayloadPrefix = "NETFORGE-PROFILE-V1:"
+$script:ProfileQrMaxPayloadLength = 2950
 $script:ProfileStoreLoadWarning = ""
 $script:ContinuousPingRunning = $false
 $script:ContinuousPingPS = $null
@@ -163,6 +166,8 @@ $script:AccessibilityNames = @{
     lstProfiles = "Saved profile list"
     btnNewProfile = "Create new profile"
     btnDeleteProfile = "Delete selected profile"
+    btnExportProfileQr = "Export selected profile QR code"
+    btnImportProfileQr = "Import profile QR code"
     btnChooseProfileStore = "Choose profile storage folder"
     btnUseOneDriveProfileStore = "Use OneDrive profile storage"
     btnRevertProfileStore = "Use local profile storage"
@@ -237,7 +242,7 @@ $script:AccessibilityTabOrder = @(
     "txtInterfaceMetric", "chkMetricIPv4", "chkMetricIPv6", "btnApplyMetric", "btnAutoMetric", "btnIPv4FirstMetric", "btnIPv6FirstMetric",
     "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "chkConfigureIPv6Address", "txtIPv6Address", "txtIPv6Prefix", "txtIPv6Gateway", "btnApplyIP",
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
-    "lstProfiles", "btnNewProfile", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
+    "lstProfiles", "btnNewProfile", "btnDeleteProfile", "btnExportProfileQr", "btnImportProfileQr", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
@@ -1319,7 +1324,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.42.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.43.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2039,6 +2044,8 @@ function Apply-Localization {
                                     <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12">
                                         <StackPanel>
                                             <Button x:Name="btnNewProfile" Content="Create New Profile" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8"/>
+                                            <Button x:Name="btnExportProfileQr" Content="Export QR" Style="{StaticResource ModernButton}" Margin="0,0,0,8"/>
+                                            <Button x:Name="btnImportProfileQr" Content="Import QR" Style="{StaticResource ModernButton}" Margin="0,0,0,8"/>
                                             <Button x:Name="btnDeleteProfile" Content="Delete Profile" Style="{StaticResource DangerButton}"/>
                                         </StackPanel>
                                     </Border>
@@ -2619,7 +2626,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.42.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.43.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -8474,6 +8481,141 @@ function Write-ProfileFileAtomic {
     }
 }
 
+function Import-NetForgeQrAssembly {
+    param(
+        [switch]$Encoder,
+        [switch]$Decoder
+    )
+
+    if ($Encoder -and -not [type]::GetType("QRCoder.QRCodeGenerator, QRCoder", $false)) {
+        $encoderPath = Join-Path $script:LibraryPath "QRCoder.dll"
+        if (-not (Test-Path -LiteralPath $encoderPath)) {
+            throw "QRCoder.dll was not found in $script:LibraryPath."
+        }
+        Add-Type -Path $encoderPath
+    }
+
+    if ($Decoder -and -not [type]::GetType("ZXing.BarcodeReader, zxing", $false)) {
+        $decoderPath = Join-Path $script:LibraryPath "zxing.dll"
+        if (-not (Test-Path -LiteralPath $decoderPath)) {
+            throw "zxing.dll was not found in $script:LibraryPath."
+        }
+        Add-Type -Path $decoderPath
+    }
+}
+
+function ConvertTo-Base64Url {
+    param([byte[]]$Bytes)
+
+    if ($null -eq $Bytes) { return "" }
+    return ([Convert]::ToBase64String($Bytes).TrimEnd("=") -replace "\+", "-" -replace "/", "_")
+}
+
+function ConvertFrom-Base64Url {
+    param([string]$Text)
+
+    $normalized = ([string]$Text).Trim() -replace "-", "+" -replace "_", "/"
+    switch ($normalized.Length % 4) {
+        2 { $normalized += "==" }
+        3 { $normalized += "=" }
+        1 { throw "Invalid Base64URL payload length." }
+    }
+
+    return [Convert]::FromBase64String($normalized)
+}
+
+function ConvertTo-GzipBase64Url {
+    param([string]$Text)
+
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes([string]$Text)
+    $stream = New-Object System.IO.MemoryStream
+    $gzip = $null
+    try {
+        $gzip = New-Object System.IO.Compression.GzipStream -ArgumentList $stream, ([System.IO.Compression.CompressionMode]::Compress)
+        $gzip.Write($bytes, 0, $bytes.Length)
+        $gzip.Dispose()
+        $gzip = $null
+        return ConvertTo-Base64Url -Bytes $stream.ToArray()
+    } finally {
+        if ($gzip) { $gzip.Dispose() }
+        if ($stream) { $stream.Dispose() }
+    }
+}
+
+function ConvertFrom-GzipBase64Url {
+    param([string]$Text)
+
+    $bytes = ConvertFrom-Base64Url -Text $Text
+    $inputStream = New-Object System.IO.MemoryStream -ArgumentList @(,$bytes)
+    $gzip = $null
+    $outputStream = New-Object System.IO.MemoryStream
+    try {
+        $gzip = New-Object System.IO.Compression.GzipStream -ArgumentList $inputStream, ([System.IO.Compression.CompressionMode]::Decompress)
+        $buffer = New-Object byte[] 4096
+        while (($read = $gzip.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $outputStream.Write($buffer, 0, $read)
+        }
+        return [System.Text.Encoding]::UTF8.GetString($outputStream.ToArray())
+    } finally {
+        if ($gzip) { $gzip.Dispose() }
+        if ($inputStream) { $inputStream.Dispose() }
+        if ($outputStream) { $outputStream.Dispose() }
+    }
+}
+
+function ConvertTo-ProfileQrPayload {
+    param([pscustomobject]$ProfileData)
+
+    $validation = Get-ProfileValidationResult -ProfileData $ProfileData
+    if (-not $validation.IsValid) {
+        throw $validation.Message
+    }
+
+    $envelope = [ordered]@{
+        Kind = "NetForgeProfile"
+        PayloadVersion = 1
+        AppVersion = $script:AppVersion
+        ExportedAt = (Get-Date).ToString("o")
+        Profile = $validation.Profile
+    }
+
+    $json = ([pscustomobject]$envelope | ConvertTo-Json -Depth 12 -Compress)
+    $payload = "$script:ProfileQrPayloadPrefix$(ConvertTo-GzipBase64Url -Text $json)"
+    if ($payload.Length -gt $script:ProfileQrMaxPayloadLength) {
+        throw "Profile QR payload is $($payload.Length) characters, above the $script:ProfileQrMaxPayloadLength character limit. Use JSON export for this profile."
+    }
+
+    return $payload
+}
+
+function ConvertFrom-ProfileQrPayload {
+    param([string]$Payload)
+
+    $text = ([string]$Payload).Trim()
+    if (-not $text.StartsWith($script:ProfileQrPayloadPrefix, [System.StringComparison]::Ordinal)) {
+        throw "QR payload is not a NetForge profile QR code."
+    }
+
+    $encoded = $text.Substring($script:ProfileQrPayloadPrefix.Length)
+    $json = ConvertFrom-GzipBase64Url -Text $encoded
+    $envelope = $json | ConvertFrom-Json
+    if ($envelope.Kind -ne "NetForgeProfile" -or [int]$envelope.PayloadVersion -ne 1) {
+        throw "Unsupported NetForge profile QR payload."
+    }
+
+    $validation = Get-ProfileValidationResult -ProfileData $envelope.Profile
+    if (-not $validation.IsValid) {
+        throw $validation.Message
+    }
+
+    return [pscustomobject]@{
+        Profile = $validation.Profile
+        SafeFileName = $validation.SafeFileName
+        ExportedAt = $envelope.ExportedAt
+        AppVersion = $envelope.AppVersion
+    }
+}
+
 function Write-ProfileImportLog {
     param([string[]]$Lines)
 
@@ -9179,6 +9321,98 @@ function Delete-Profile {
         }
         Update-Status "Profile '$($profile.Name)' deleted" -Type Success
         Refresh-ProfileList
+    }
+}
+
+function Export-SelectedProfileQrCode {
+    $selected = $script:lstProfiles.SelectedItem
+    if ($null -eq $selected) {
+        Update-Status "Select a profile before exporting a QR code" -Type Warning
+        Show-MessageBox -Message "Please select a profile to export as a QR code." -Title "No Profile Selected" -Icon Warning
+        return
+    }
+
+    $profile = $selected.Tag
+    $safeName = ([System.IO.Path]::GetFileNameWithoutExtension((Get-SafeProfileFileName -Name $profile.Name)))
+
+    $saveDialog = New-Object System.Windows.Forms.SaveFileDialog
+    $saveDialog.Filter = "PNG Images (*.png)|*.png"
+    $saveDialog.FileName = "$safeName-qr.png"
+    $saveDialog.Title = "Export Profile QR"
+
+    if ($saveDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+    try {
+        $payload = ConvertTo-ProfileQrPayload -ProfileData $profile
+        Import-NetForgeQrAssembly -Encoder
+
+        $generator = New-Object QRCoder.QRCodeGenerator
+        $qrData = $null
+        $qrCode = $null
+        try {
+            $qrData = $generator.CreateQrCode($payload, [QRCoder.QRCodeGenerator+ECCLevel]::Q)
+            $qrCode = New-Object QRCoder.PngByteQRCode -ArgumentList $qrData
+            $bytes = $qrCode.GetGraphic(16)
+            [System.IO.File]::WriteAllBytes($saveDialog.FileName, $bytes)
+        } finally {
+            if ($qrCode -and ($qrCode -is [System.IDisposable])) { $qrCode.Dispose() }
+            if ($qrData -and ($qrData -is [System.IDisposable])) { $qrData.Dispose() }
+            if ($generator -and ($generator -is [System.IDisposable])) { $generator.Dispose() }
+        }
+
+        Write-OperationLog -Action "Export profile QR" -Result "Succeeded" -Detail "Profile=$($profile.Name); Path=$($saveDialog.FileName); PayloadLength=$($payload.Length)"
+        Update-Status "Profile QR exported to $($saveDialog.FileName)" -Type Success
+    } catch {
+        Write-OperationLog -Action "Export profile QR" -Result "Failed" -Detail $_.Exception.Message
+        Update-Status "Profile QR export failed: $($_.Exception.Message)" -Type Error
+        Show-MessageBox -Message "Profile QR export failed:`n$($_.Exception.Message)" -Title "QR Export Failed" -Icon Error
+    }
+}
+
+function Import-ProfileQrCode {
+    $openDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $openDialog.Filter = "QR Images (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*.*"
+    $openDialog.Title = "Import Profile QR"
+
+    if ($openDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+    try {
+        Import-NetForgeQrAssembly -Decoder
+
+        $bitmap = $null
+        try {
+            $bitmap = [System.Drawing.Bitmap]::FromFile($openDialog.FileName)
+            $reader = New-Object ZXing.BarcodeReader
+            $result = $reader.Decode($bitmap)
+        } finally {
+            if ($bitmap) { $bitmap.Dispose() }
+        }
+
+        if ($null -eq $result -or [string]::IsNullOrWhiteSpace($result.Text)) {
+            throw "No QR code payload was found in the selected image."
+        }
+
+        $record = ConvertFrom-ProfileQrPayload -Payload $result.Text
+        $filePath = Join-Path $script:ProfilesPath $record.SafeFileName
+        if (Test-Path -LiteralPath $filePath) {
+            throw "Profile '$($record.Profile.Name)' already exists. Delete or rename the existing profile before importing."
+        }
+
+        Write-ProfileFileAtomic -ProfileData $record.Profile -FilePath $filePath
+        Write-ProfileImportLog -Lines @(
+            "QR profile import complete.",
+            "Source: $($openDialog.FileName)",
+            "Profile: $($record.Profile.Name)",
+            "ExportedAt: $($record.ExportedAt)",
+            "AppVersion: $($record.AppVersion)"
+        )
+        Refresh-ProfileList
+        Write-OperationLog -Action "Import profile QR" -Result "Succeeded" -Detail "Profile=$($record.Profile.Name); Source=$($openDialog.FileName)"
+        Update-Status "Imported profile '$($record.Profile.Name)' from QR" -Type Success
+    } catch {
+        Write-OperationLog -Action "Import profile QR" -Result "Failed" -Detail $_.Exception.Message
+        Update-Status "Profile QR import failed: $($_.Exception.Message)" -Type Error
+        Show-MessageBox -Message "Profile QR import failed:`n$($_.Exception.Message)" -Title "QR Import Failed" -Icon Error
     }
 }
 
@@ -11400,6 +11634,8 @@ $btnNewProfile.Add_Click({
     $script:txtProfileMappedDrives.Text = ""
 })
 $btnDeleteProfile.Add_Click({ Delete-Profile })
+$btnExportProfileQr.Add_Click({ Export-SelectedProfileQrCode })
+$btnImportProfileQr.Add_Click({ Import-ProfileQrCode })
 $btnChooseProfileStore.Add_Click({ Invoke-ChooseProfileStore })
 $btnUseOneDriveProfileStore.Add_Click({ Invoke-OneDriveProfileStore })
 $btnRevertProfileStore.Add_Click({ Invoke-RevertProfileStore })

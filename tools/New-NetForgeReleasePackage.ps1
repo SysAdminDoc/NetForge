@@ -114,6 +114,8 @@ $packageItems = @(
     'dns-providers.json',
     'dns-providers.json.sha256',
     'strings',
+    'lib',
+    'licenses',
     'tools',
     'tests'
 )

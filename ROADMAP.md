@@ -23,7 +23,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 - **YogaDNS** — DoH/DoT proxy layer on Windows; study integration approach.
 
 ## Nice-to-Haves
-- QR-code import/export of profiles (scan from phone app)
 - CLI companion (`netforge.ps1 -ApplyProfile Home -Silent`) for scripting
 - RDP launch with auto-profile switch + revert on disconnect
 - Integrated "why can't I reach X" wizard (DNS → gateway → route → firewall → MTU)

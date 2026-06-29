@@ -327,6 +327,66 @@ Describe 'Profile validation' {
     }
 }
 
+Describe 'Profile QR payload helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIP',
+            'Test-ValidIPv4Address',
+            'Test-ValidIPv4PrefixLength',
+            'Test-ValidIPv6Address',
+            'Test-ValidIPv6PrefixLength',
+            'ConvertTo-CleanMacAddress',
+            'Test-ValidMacAddress',
+            'Get-ProfileProperty',
+            'ConvertTo-ProfileBoolean',
+            'Get-ProfileScheduleDayAliases',
+            'Normalize-ProfileScheduleDays',
+            'Normalize-ProfileScheduleTime',
+            'ConvertTo-ProfileScheduleDaysText',
+            'Get-SafeProfileFileName',
+            'ConvertFrom-MappedDriveText',
+            'ConvertTo-MappedDriveText',
+            'Normalize-MappedDriveList',
+            'Get-ProfileValidationResult',
+            'ConvertTo-Base64Url',
+            'ConvertFrom-Base64Url',
+            'ConvertTo-GzipBase64Url',
+            'ConvertFrom-GzipBase64Url',
+            'ConvertTo-ProfileQrPayload',
+            'ConvertFrom-ProfileQrPayload'
+        )
+        $script:ProfileSchemaVersion = 3
+        $script:AppVersion = '9.9.9'
+        $script:ProfileQrPayloadPrefix = 'NETFORGE-PROFILE-V1:'
+        $script:ProfileQrMaxPayloadLength = 2950
+    }
+
+    It 'round-trips a profile through a compact QR payload' {
+        $profile = [pscustomobject]@{
+            Name = 'QR Clinic'
+            Description = 'QR profile'
+            UseDHCP = $true
+            UseDHCPForDNS = $false
+            PrimaryDNS = '1.1.1.1'
+            SecondaryDNS = '1.0.0.1'
+        }
+
+        $payload = ConvertTo-ProfileQrPayload -ProfileData $profile
+        $record = ConvertFrom-ProfileQrPayload -Payload $payload
+
+        $payload | Should -Match '^NETFORGE-PROFILE-V1:'
+        $payload.Length | Should -BeLessOrEqual 2950
+        $record.Profile.Name | Should -Be 'QR Clinic'
+        $record.Profile.PrimaryDNS | Should -Be '1.1.1.1'
+        $record.SafeFileName | Should -Be 'QR_Clinic.json'
+        $record.AppVersion | Should -Be '9.9.9'
+    }
+
+    It 'rejects non-NetForge QR payloads' {
+        { ConvertFrom-ProfileQrPayload -Payload 'https://example.com' } | Should -Throw '*not a NetForge profile*'
+    }
+}
+
 Describe 'Encrypted DNS endpoint helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(
