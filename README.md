@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.37.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.38.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -101,6 +101,9 @@
 - **Static Routes**:
   - Add or remove selected-adapter IPv4/IPv6 manual routes with destination prefix, next hop, and route metric
   - View current manual routes for the selected adapter
+- **Hosts File Groups**:
+  - Stage grouped hosts entries, toggle groups enabled/disabled, and write a NetForge-managed hosts section
+  - Preserve unmanaged hosts lines and create a timestamped backup before applying changes
 - **Detailed Adapter Information**:
   - Interface index and type
   - Link speed and media state
@@ -193,7 +196,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.37.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.38.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 

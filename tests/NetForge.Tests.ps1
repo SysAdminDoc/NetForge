@@ -770,6 +770,77 @@ Describe 'Static route helpers' {
     }
 }
 
+Describe 'Hosts file group helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIP',
+            'Get-ApplyValidationResult',
+            'Get-HostsSectionBeginMarker',
+            'Get-HostsSectionEndMarker',
+            'Test-HostsGroupName',
+            'Test-HostsEntryHostName',
+            'ConvertTo-HostsEntryHostNames',
+            'Get-HostsEntryTarget',
+            'ConvertFrom-HostsManagedSection',
+            'ConvertTo-HostsManagedSection',
+            'Update-HostsManagedSection',
+            'Format-HostsGroupRows'
+        )
+    }
+
+    It 'validates hosts group entries' {
+        $target = Get-HostsEntryTarget -GroupName 'Work' -Address '10.10.0.10' -HostNames 'intranet.local files.local'
+        $badGroup = Get-HostsEntryTarget -GroupName 'Bad#Group' -Address '10.10.0.10' -HostNames 'intranet.local'
+        $badHost = Get-HostsEntryTarget -GroupName 'Work' -Address '10.10.0.10' -HostNames 'bad_host'
+
+        $target.IsValid | Should -BeTrue
+        $target.GroupName | Should -Be 'Work'
+        $target.HostNames | Should -Contain 'intranet.local'
+        $target.HostNames | Should -Contain 'files.local'
+        $badGroup.IsValid | Should -BeFalse
+        $badGroup.Message | Should -Match 'group name'
+        $badHost.IsValid | Should -BeFalse
+        $badHost.Message | Should -Match 'Invalid hostname'
+    }
+
+    It 'renders, parses, and replaces the managed hosts section only' {
+        $groups = @(
+            [pscustomobject]@{
+                Name = 'Work'
+                Enabled = $true
+                Entries = @([pscustomobject]@{ Address = '10.10.0.10'; HostNames = @('intranet.local', 'files.local') })
+            },
+            [pscustomobject]@{
+                Name = 'Lab'
+                Enabled = $false
+                Entries = @([pscustomobject]@{ Address = '192.168.50.5'; HostNames = @('lab.local') })
+            }
+        )
+
+        $section = ConvertTo-HostsManagedSection -Groups $groups
+        $section | Should -Match ([regex]::Escape((Get-HostsSectionBeginMarker)))
+        $section | Should -Match 'NetForge group: Lab \| disabled'
+        $section | Should -Match '# 192.168.50.5 lab.local'
+
+        $parsed = ConvertFrom-HostsManagedSection -Text "127.0.0.1 localhost`r`n$section`r`n# unmanaged"
+        $parsed.Count | Should -Be 2
+        $parsed[0].Name | Should -Be 'Work'
+        $parsed[0].Entries[0].HostNames | Should -Contain 'files.local'
+        $parsed[1].Enabled | Should -BeFalse
+
+        $updated = Update-HostsManagedSection -CurrentText "127.0.0.1 localhost`r`n# unmanaged" -Groups $groups
+        $updated | Should -Match '127.0.0.1 localhost'
+        $updated | Should -Match '# unmanaged'
+        $updated | Should -Match 'NetForge group: Work'
+
+        $replacement = Update-HostsManagedSection -CurrentText $updated -Groups @()
+        $replacement | Should -Match '127.0.0.1 localhost'
+        $replacement | Should -Not -Match 'NetForge group: Work'
+        (Format-HostsGroupRows -Groups $groups) | Should -Match 'Work \(1 entry\)'
+        (Format-HostsGroupRows -Groups @()) | Should -Match 'No NetForge-managed hosts groups'
+    }
+}
+
 Describe 'Port scan helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

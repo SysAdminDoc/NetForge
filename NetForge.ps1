@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.37.0
+    Version: 1.38.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.37.0"
+$script:AppVersion = "1.38.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -210,6 +210,15 @@ $script:AccessibilityNames = @{
     btnRemoveStaticRoute = "Remove selected static route"
     btnRefreshStaticRoutes = "Refresh static routes"
     lstStaticRoutes = "Manual static route list"
+    txtHostsGroupName = "Hosts group name"
+    txtHostsAddress = "Hosts entry address"
+    txtHostsNames = "Hosts entry hostnames"
+    btnHostsAddEntry = "Add hosts entry"
+    btnHostsToggleGroup = "Toggle hosts group"
+    btnHostsRemoveGroup = "Remove hosts group"
+    btnHostsRefresh = "Refresh hosts groups"
+    btnHostsApply = "Apply hosts groups"
+    lstHostsGroups = "Hosts group list"
 }
 $script:AccessibilityTabOrder = @(
     "lstAdapters", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
@@ -222,6 +231,7 @@ $script:AccessibilityTabOrder = @(
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
+    "txtHostsGroupName", "txtHostsAddress", "txtHostsNames", "btnHostsAddEntry", "btnHostsToggleGroup", "btnHostsRemoveGroup", "btnHostsRefresh", "btnHostsApply", "lstHostsGroups",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy",
     "txtDiagPingTarget", "btnDiagPing", "btnContinuousPing", "txtLatencyHistogramSeconds", "btnLatencyHistogram"
 )
@@ -1171,7 +1181,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.37.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.38.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2179,6 +2189,49 @@ function Apply-Localization {
                                     </Grid>
                                 </Border>
 
+                                <!-- Hosts File Groups -->
+                                <TextBlock Text="HOSTS FILE GROUPS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="180"/>
+                                            <ColumnDefinition Width="180"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,12">
+                                            <TextBlock Text="Group Name" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtHostsGroupName" Style="{StaticResource ModernTextBox}" Text="Work"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0,10,12">
+                                            <TextBlock Text="Address" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtHostsAddress" Style="{StaticResource ModernTextBox}" Text="10.10.0.10"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="10,0,0,12">
+                                            <TextBlock Text="Hostnames" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtHostsNames" Style="{StaticResource ModernTextBox}" Text="intranet.local files.local"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,12">
+                                            <Button x:Name="btnHostsAddEntry" Content="Add Entry" Style="{StaticResource PrimaryButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnHostsToggleGroup" Content="Toggle Group" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnHostsRemoveGroup" Content="Remove Group" Style="{StaticResource DangerButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnHostsRefresh" Content="Refresh Hosts" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnHostsApply" Content="Apply Hosts" Style="{StaticResource ModernButton}"/>
+                                        </StackPanel>
+
+                                        <ListBox x:Name="lstHostsGroups" Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource ModernListBox}" Height="150" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="txtHostsStatus" Grid.Row="3" Grid.ColumnSpan="3" Text="NetForge-managed hosts groups are written inside a marked section; unmanaged hosts lines are preserved." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Adapter Information -->
                                 <TextBlock Text="ADAPTER DETAILS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
 
@@ -2421,7 +2474,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.37.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.38.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3373,6 +3426,207 @@ function Format-StaticRouteRows {
         $family = if ([string]$route.DestinationPrefix -match ':') { "IPv6" } else { "IPv4" }
         $metric = if ($null -ne $route.RouteMetric) { [string]$route.RouteMetric } else { "--" }
         $sb.AppendLine(("{0,-34}  {1,-31}  {2,6}  {3}" -f $route.DestinationPrefix, $route.NextHop, $metric, $family)) | Out-Null
+    }
+    return $sb.ToString()
+}
+
+function Get-HostsSectionBeginMarker {
+    return "# NETFORGE HOSTS BEGIN"
+}
+
+function Get-HostsSectionEndMarker {
+    return "# NETFORGE HOSTS END"
+}
+
+function Get-HostsFilePath {
+    return (Join-Path $env:WinDir "System32\drivers\etc\hosts")
+}
+
+function Test-HostsGroupName {
+    param([string]$Name)
+
+    $value = ([string]$Name).Trim()
+    return (-not [string]::IsNullOrWhiteSpace($value) -and $value.Length -le 64 -and $value -notmatch '[|#]')
+}
+
+function Test-HostsEntryHostName {
+    param([string]$HostName)
+
+    $value = ([string]$HostName).Trim()
+    if ([string]::IsNullOrWhiteSpace($value) -or $value.Length -gt 253) { return $false }
+    foreach ($label in @($value -split '\.')) {
+        if ([string]::IsNullOrWhiteSpace($label) -or $label.Length -gt 63) { return $false }
+        if ($label -notmatch '^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$') { return $false }
+    }
+    return $true
+}
+
+function ConvertTo-HostsEntryHostNames {
+    param([string]$HostNames)
+
+    return @(([string]$HostNames -split '[,\s]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique))
+}
+
+function Get-HostsEntryTarget {
+    param(
+        [string]$GroupName,
+        [string]$Address,
+        [string]$HostNames
+    )
+
+    $group = ([string]$GroupName).Trim()
+    $addressValue = ([string]$Address).Trim()
+    $hostList = @(ConvertTo-HostsEntryHostNames -HostNames $HostNames)
+
+    if (-not (Test-HostsGroupName -Name $group)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Hosts group name is required and cannot contain # or |."
+    }
+    if (-not (Test-ValidIP -IP $addressValue)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Hosts entry address must be a valid IPv4 or IPv6 address."
+    }
+    if ($hostList.Count -eq 0) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Enter at least one hostname."
+    }
+    foreach ($hostName in $hostList) {
+        if (-not (Test-HostsEntryHostName -HostName $hostName)) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Invalid hostname '$hostName'."
+        }
+    }
+
+    return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+        GroupName = $group
+        Address = $addressValue
+        HostNames = $hostList
+    }
+}
+
+function ConvertFrom-HostsManagedSection {
+    param([string]$Text)
+
+    $begin = Get-HostsSectionBeginMarker
+    $end = Get-HostsSectionEndMarker
+    $groups = @()
+    $current = $null
+    $inside = $false
+
+    foreach ($rawLine in @(([string]$Text) -split "`r?`n")) {
+        $line = [string]$rawLine
+        if ($line.Trim() -eq $begin) {
+            $inside = $true
+            continue
+        }
+        if ($line.Trim() -eq $end) {
+            break
+        }
+        if (-not $inside) { continue }
+
+        if ($line -match '^\s*#\s*NetForge group:\s*(.+?)\s*\|\s*(enabled|disabled)\s*$') {
+            if ($current) { $groups += [pscustomobject]$current }
+            $current = [ordered]@{
+                Name = $Matches[1].Trim()
+                Enabled = ($Matches[2].ToLowerInvariant() -eq "enabled")
+                Entries = @()
+            }
+            continue
+        }
+
+        if ($null -eq $current) { continue }
+        $entryLine = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($entryLine)) { continue }
+        if ($entryLine.StartsWith("#")) { $entryLine = $entryLine.Substring(1).Trim() }
+        if ([string]::IsNullOrWhiteSpace($entryLine) -or $entryLine.StartsWith("#")) { continue }
+        if ($entryLine -match '^(\S+)\s+(.+)$') {
+            $address = $Matches[1].Trim()
+            $hostText = ($Matches[2] -split '\s+#', 2)[0].Trim()
+            $hostList = @(ConvertTo-HostsEntryHostNames -HostNames $hostText)
+            if ((Test-ValidIP -IP $address) -and $hostList.Count -gt 0) {
+                $current.Entries += [pscustomobject]@{
+                    Address = $address
+                    HostNames = $hostList
+                }
+            }
+        }
+    }
+
+    if ($current) { $groups += [pscustomobject]$current }
+    return ,@($groups)
+}
+
+function ConvertTo-HostsManagedSection {
+    param([object[]]$Groups)
+
+    $lines = @((Get-HostsSectionBeginMarker))
+    foreach ($group in @($Groups)) {
+        $name = ([string]$group.Name).Trim()
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        $state = if ([bool]$group.Enabled) { "enabled" } else { "disabled" }
+        $lines += "# NetForge group: $name | $state"
+        foreach ($entry in @($group.Entries)) {
+            $address = ([string]$entry.Address).Trim()
+            $hostText = (@($entry.HostNames) | Where-Object { $_ } | Select-Object -Unique) -join " "
+            if ([string]::IsNullOrWhiteSpace($address) -or [string]::IsNullOrWhiteSpace($hostText)) { continue }
+            $entryLine = "$address $hostText"
+            if (-not [bool]$group.Enabled) { $entryLine = "# $entryLine" }
+            $lines += $entryLine
+        }
+        $lines += ""
+    }
+    $lines += (Get-HostsSectionEndMarker)
+    return ($lines -join "`r`n")
+}
+
+function Update-HostsManagedSection {
+    param(
+        [string]$CurrentText,
+        [object[]]$Groups
+    )
+
+    $begin = Get-HostsSectionBeginMarker
+    $end = Get-HostsSectionEndMarker
+    $sectionLines = @((ConvertTo-HostsManagedSection -Groups $Groups) -split "`r?`n")
+    $lines = @(([string]$CurrentText) -split "`r?`n")
+    $beginIndex = -1
+    $endIndex = -1
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i].Trim() -eq $begin) { $beginIndex = $i }
+        if ($beginIndex -ge 0 -and $lines[$i].Trim() -eq $end) {
+            $endIndex = $i
+            break
+        }
+    }
+
+    $newLines = @()
+    if ($beginIndex -ge 0 -and $endIndex -ge $beginIndex) {
+        if ($beginIndex -gt 0) { $newLines += $lines[0..($beginIndex - 1)] }
+        $newLines += $sectionLines
+        if ($endIndex -lt ($lines.Count - 1)) { $newLines += $lines[($endIndex + 1)..($lines.Count - 1)] }
+    } else {
+        $newLines += $lines
+        if ($newLines.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($newLines[-1])) { $newLines += "" }
+        $newLines += $sectionLines
+    }
+
+    return (($newLines -join "`r`n").TrimEnd() + "`r`n")
+}
+
+function Format-HostsGroupRows {
+    param([object[]]$Groups)
+
+    $rows = @($Groups)
+    if ($rows.Count -eq 0) {
+        return "No NetForge-managed hosts groups found."
+    }
+
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($group in $rows) {
+        $state = if ([bool]$group.Enabled) { "enabled" } else { "disabled" }
+        $entries = @($group.Entries)
+        $entryWord = if ($entries.Count -eq 1) { "entry" } else { "entries" }
+        $sb.AppendLine("[$state] $($group.Name) ($($entries.Count) $entryWord)") | Out-Null
+        foreach ($entry in $entries) {
+            $sb.AppendLine(("  {0,-39} {1}" -f $entry.Address, ((@($entry.HostNames) -join " ")))) | Out-Null
+        }
     }
     return $sb.ToString()
 }
@@ -9638,6 +9892,130 @@ function Remove-SelectedStaticRoute {
     }
 }
 
+function Update-HostsGroupList {
+    if (-not $script:HostsGroups) { $script:HostsGroups = @() }
+    if ($script:lstHostsGroups) { $script:lstHostsGroups.Items.Clear() }
+
+    foreach ($group in @($script:HostsGroups)) {
+        $entries = @($group.Entries)
+        $state = if ([bool]$group.Enabled) { "enabled" } else { "disabled" }
+        $item = New-Object System.Windows.Controls.ListBoxItem
+        $item.Content = "[$state] $($group.Name) - $($entries.Count) entr$(if ($entries.Count -eq 1) { 'y' } else { 'ies' })"
+        $item.Tag = $group
+        [void]$script:lstHostsGroups.Items.Add($item)
+    }
+
+    if ($script:txtHostsStatus) {
+        $script:txtHostsStatus.Text = "NetForge-managed hosts groups loaded: $(@($script:HostsGroups).Count). Apply Hosts writes the marked section only."
+    }
+    if ($script:txtDiagOutput) {
+        $script:txtDiagOutput.Text = Format-HostsGroupRows -Groups @($script:HostsGroups)
+    }
+}
+
+function Refresh-HostsGroups {
+    try {
+        $path = Get-HostsFilePath
+        $text = ""
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $text = Get-Content -Raw -LiteralPath $path
+        }
+        $script:HostsGroups = @(ConvertFrom-HostsManagedSection -Text $text)
+        Update-HostsGroupList
+        Update-Status "Hosts groups refreshed" -Type Success
+        Write-OperationLog -Action "Refresh hosts groups" -Result "Succeeded" -Detail "Groups=$(@($script:HostsGroups).Count)"
+    } catch {
+        Update-Status "Hosts refresh failed: $($_.Exception.Message)" -Type Error
+        if ($script:txtHostsStatus) { $script:txtHostsStatus.Text = "Hosts refresh failed: $($_.Exception.Message)" }
+        Write-OperationLog -Action "Refresh hosts groups" -Result "Failed" -Detail $_.Exception.Message
+    }
+}
+
+function Add-HostsEntry {
+    if (-not $script:HostsGroups) { $script:HostsGroups = @() }
+
+    $target = Get-HostsEntryTarget -GroupName $script:txtHostsGroupName.Text -Address $script:txtHostsAddress.Text -HostNames $script:txtHostsNames.Text
+    if (-not $target.IsValid) {
+        Show-MessageBox -Message $target.Message -Title "Hosts Entry" -Icon Warning
+        Update-Status $target.Message -Type Error
+        return
+    }
+
+    $group = @($script:HostsGroups | Where-Object { ([string]$_.Name).Equals($target.GroupName, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    if ($group.Count -eq 0) {
+        $newGroup = [pscustomobject]@{
+            Name = $target.GroupName
+            Enabled = $true
+            Entries = @()
+        }
+        $script:HostsGroups = @($script:HostsGroups) + $newGroup
+        $groupObject = $newGroup
+    } else {
+        $groupObject = $group[0]
+    }
+
+    $groupObject.Entries = @($groupObject.Entries) + [pscustomobject]@{
+        Address = $target.Address
+        HostNames = @($target.HostNames)
+    }
+    Update-HostsGroupList
+    Update-Status "Hosts entry staged for group $($target.GroupName)" -Type Success
+}
+
+function Toggle-SelectedHostsGroup {
+    if ($null -eq $script:lstHostsGroups.SelectedItem) {
+        Show-MessageBox -Message "Select a hosts group to toggle." -Title "Hosts Group" -Icon Warning
+        return
+    }
+
+    $group = $script:lstHostsGroups.SelectedItem.Tag
+    $group.Enabled = -not [bool]$group.Enabled
+    Update-HostsGroupList
+    Update-Status "Hosts group '$($group.Name)' toggled" -Type Success
+}
+
+function Remove-SelectedHostsGroup {
+    if ($null -eq $script:lstHostsGroups.SelectedItem) {
+        Show-MessageBox -Message "Select a hosts group to remove." -Title "Hosts Group" -Icon Warning
+        return
+    }
+
+    $group = $script:lstHostsGroups.SelectedItem.Tag
+    $script:HostsGroups = @($script:HostsGroups | Where-Object { -not ([string]$_.Name).Equals([string]$group.Name, [System.StringComparison]::OrdinalIgnoreCase) })
+    Update-HostsGroupList
+    Update-Status "Hosts group '$($group.Name)' removed from staged changes" -Type Success
+}
+
+function Save-HostsGroups {
+    try {
+        $path = Get-HostsFilePath
+        $currentText = ""
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $currentText = Get-Content -Raw -LiteralPath $path
+        }
+
+        $backupDir = Join-Path $script:ConfigPath "HostsBackups"
+        if (-not (Test-Path -LiteralPath $backupDir)) {
+            New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
+        }
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $backupPath = Join-Path $backupDir ("hosts-{0}.bak" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+            Copy-Item -LiteralPath $path -Destination $backupPath -Force
+        }
+
+        $newText = Update-HostsManagedSection -CurrentText $currentText -Groups @($script:HostsGroups)
+        Set-Content -LiteralPath $path -Value $newText -Encoding ASCII
+        ipconfig /flushdns | Out-Null
+        Refresh-HostsGroups
+        Update-Status "Hosts groups applied" -Type Success
+        Write-OperationLog -Action "Apply hosts groups" -Result "Succeeded" -Detail "Groups=$(@($script:HostsGroups).Count); Path=$path"
+    } catch {
+        Update-Status "Hosts apply failed: $($_.Exception.Message)" -Type Error
+        if ($script:txtHostsStatus) { $script:txtHostsStatus.Text = "Hosts apply failed: $($_.Exception.Message)" }
+        Write-OperationLog -Action "Apply hosts groups" -Result "Failed" -Detail $_.Exception.Message
+    }
+}
+
 function Get-PacketCaptureDirectory {
     return (Join-Path $script:ConfigPath "Captures")
 }
@@ -10298,6 +10676,11 @@ $btnNslookup.Add_Click({ Invoke-Nslookup })
 $btnAddStaticRoute.Add_Click({ Add-StaticRoute })
 $btnRemoveStaticRoute.Add_Click({ Remove-SelectedStaticRoute })
 $btnRefreshStaticRoutes.Add_Click({ Refresh-StaticRouteList })
+$btnHostsAddEntry.Add_Click({ Add-HostsEntry })
+$btnHostsToggleGroup.Add_Click({ Toggle-SelectedHostsGroup })
+$btnHostsRemoveGroup.Add_Click({ Remove-SelectedHostsGroup })
+$btnHostsRefresh.Add_Click({ Refresh-HostsGroups })
+$btnHostsApply.Add_Click({ Save-HostsGroups })
 
 # Diagnostics button handlers
 $btnDiagPing.Add_Click({ Invoke-DiagPingTest })
