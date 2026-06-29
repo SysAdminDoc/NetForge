@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.45.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.46.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -121,6 +121,9 @@
   - MTR-style route tracing with per-hop sent/received/loss and latency history
 - **Port Scanning**:
   - Host or bounded IPv4 CIDR scan for common LAN service ports with open-service output
+- **Reachability Wizard**:
+  - Diagnose "why can't I reach X?" targets across DNS, gateway, route/ping, TCP firewall/port, and MTU probes
+  - Accept hosts, IP addresses, URLs, or `host:port` targets and emit a concise root-cause summary
 - **Packet Capture**:
   - Start/stop Windows `pktmon` captures, convert to Wireshark-readable `.pcapng`, and launch Wireshark when installed
 - **Cable / Transceiver Diagnostics**:
@@ -214,7 +217,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.45.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.46.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
@@ -248,11 +251,15 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Enter a host or `.rdp` file and saved profile name
    - Click "Launch RDP with Profile"
    - NetForge reverts the captured pre-RDP network state when the RDP client exits
-6. **Manage WiFi**:
+6. **Diagnose reachability**:
+   - Go to Network Tools
+   - Enter a host, URL, IP address, or `host:port`
+   - Click "Why Can't I Reach X?" to check DNS, gateway, route, TCP/firewall, and MTU signals
+7. **Manage WiFi**:
    - Go to the WiFi tab
    - Click "Scan Networks"
    - Select a network and click "Connect" or "Disconnect"
-7. **Control external diagnostics**:
+8. **Control external diagnostics**:
    - Go to Diagnostics
    - Disable public-IP lookup or external speed-test downloads when working offline or privately
    - Select the HTTPS speed-test endpoint and click "Save Policy"

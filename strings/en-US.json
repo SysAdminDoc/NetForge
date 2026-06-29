@@ -48,6 +48,8 @@
     "button.portScan.idle": "Port Scan",
     "button.portScan.running": "Scanning...",
     "button.previewDiff": "Preview Diff",
+    "button.reachabilityWizard.idle": "Why Can't I Reach X?",
+    "button.reachabilityWizard.running": "Checking...",
     "button.refreshAdapters": "Refresh Adapters",
     "button.refreshHosts": "Refresh Hosts",
     "button.registerDoh": "Register DoH",

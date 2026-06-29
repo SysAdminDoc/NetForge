@@ -1160,6 +1160,62 @@ Describe 'Port scan helpers' {
     }
 }
 
+Describe 'Reachability wizard helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIP',
+            'Resolve-ReachabilityTarget',
+            'Format-ReachabilityProbeReport'
+        )
+    }
+
+    It 'parses URLs and derives default HTTPS ports' {
+        $target = Resolve-ReachabilityTarget -Target 'https://example.com/path'
+
+        $target.IsValid | Should -BeTrue
+        $target.Host | Should -Be 'example.com'
+        $target.Port | Should -Be 443
+        $target.Scheme | Should -Be 'https'
+    }
+
+    It 'parses host port targets and rejects path-like hosts' {
+        $target = Resolve-ReachabilityTarget -Target 'server.local:3389'
+        $target.IsValid | Should -BeTrue
+        $target.Host | Should -Be 'server.local'
+        $target.Port | Should -Be 3389
+
+        $invalid = Resolve-ReachabilityTarget -Target 'server.local/share'
+        $invalid.IsValid | Should -BeFalse
+        $invalid.Message | Should -Match 'host cannot contain'
+    }
+
+    It 'formats DNS gateway route firewall and MTU sections' {
+        $report = Format-ReachabilityProbeReport -Result ([pscustomobject]@{
+            DisplayTarget = 'server.local:3389'
+            CheckedAt = '2026-06-29T12:00:00.0000000-04:00'
+            DnsStatus = 'OK'
+            DnsMessage = 'server.local resolved to 1 address.'
+            Addresses = @('10.10.10.20')
+            GatewayStatus = 'OK'
+            GatewayMessage = 'Default gateway 10.10.10.1 answered.'
+            RouteStatus = 'WARN'
+            RouteMessage = 'Target did not answer ICMP.'
+            PortStatus = 'OK'
+            PortMessage = 'TCP 3389 connected in 15 ms.'
+            MtuStatus = 'WARN'
+            MtuMessage = '1472-byte DF probe failed.'
+            Summary = @('MTU result is inconclusive.')
+        })
+
+        $report | Should -Match '1\. DNS'
+        $report | Should -Match '2\. Gateway'
+        $report | Should -Match '3\. Route'
+        $report | Should -Match '4\. Firewall / Port'
+        $report | Should -Match '5\. MTU'
+        $report | Should -Match 'TCP 3389 connected'
+    }
+}
+
 Describe 'Packet capture helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

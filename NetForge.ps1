@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.45.0
+    Version: 1.46.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -90,7 +90,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.45.0"
+$script:AppVersion = "1.46.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -125,6 +125,8 @@ $script:MtrTarget = ""
 $script:MtrCycle = 0
 $script:PortScanRunning = $false
 $script:PortScanPowerShell = $null
+$script:ReachabilityWizardRunning = $false
+$script:ReachabilityWizardPowerShell = $null
 $script:PacketCaptureRunning = $false
 $script:PacketCaptureEtlPath = ""
 $script:PacketCapturePcapPath = ""
@@ -272,6 +274,7 @@ $script:AccessibilityNames = @{
     btnTraceroute = "Run traceroute"
     btnMtrTrace = "Start MTR trace"
     btnPortScan = "Run port scan"
+    btnReachabilityWizard = "Run reachability wizard"
     btnPacketCapture = "Start packet capture"
     btnCableDiagnostics = "Run cable diagnostics"
     btnNslookup = "Run NSLookup"
@@ -302,7 +305,7 @@ $script:AccessibilityTabOrder = @(
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
-    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
+    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
     "txtHostsGroupName", "txtHostsAddress", "txtHostsNames", "btnHostsAddEntry", "btnHostsToggleGroup", "btnHostsRemoveGroup", "btnHostsRefresh", "btnHostsApply", "lstHostsGroups",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy",
@@ -1379,7 +1382,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.45.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.46.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2374,16 +2377,17 @@ function Apply-Localization {
                                             <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
 
-                                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                                        <WrapPanel Grid.Row="0" Margin="0,0,0,16">
                                             <TextBox x:Name="txtPingTarget" Style="{StaticResource ModernTextBox}" Width="300" Text="8.8.8.8" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPing" Content="Ping" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnTraceroute" Content="Traceroute" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnMtrTrace" Content="Start MTR" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPortScan" Content="Port Scan" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnReachabilityWizard" Content="Why Can't I Reach X?" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPacketCapture" Content="Start Capture" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnCableDiagnostics" Content="Cable Diag" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnNslookup" Content="NSLookup" Style="{StaticResource ModernButton}"/>
-                                        </StackPanel>
+                                        </WrapPanel>
 
                                         <Border Grid.Row="1" Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="250">
                                             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -2719,7 +2723,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.45.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.46.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -11059,6 +11063,335 @@ function Format-PortScanRows {
     return $sb.ToString()
 }
 
+function Resolve-ReachabilityTarget {
+    param([string]$Target)
+
+    $text = ([string]$Target).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return [pscustomobject]@{ IsValid = $false; Message = "Enter a host, IP address, URL, or host:port target."; Original = ""; Host = ""; Port = 0; Scheme = ""; DisplayTarget = "" }
+    }
+
+    $targetHost = ""
+    $port = 0
+    $scheme = ""
+
+    if ($text -match '^[a-zA-Z][a-zA-Z0-9+\-.]*://') {
+        $uri = $null
+        if (-not [System.Uri]::TryCreate($text, [System.UriKind]::Absolute, [ref]$uri) -or [string]::IsNullOrWhiteSpace($uri.Host)) {
+            return [pscustomobject]@{ IsValid = $false; Message = "Target URL is not valid."; Original = $text; Host = ""; Port = 0; Scheme = ""; DisplayTarget = $text }
+        }
+
+        $targetHost = $uri.Host
+        $scheme = $uri.Scheme
+        if (-not $uri.IsDefaultPort) {
+            $port = [int]$uri.Port
+        } elseif ($scheme -eq "https") {
+            $port = 443
+        } elseif ($scheme -eq "http") {
+            $port = 80
+        } elseif ($scheme -eq "rdp") {
+            $port = 3389
+        }
+    } elseif ($text -match '^\[(.+)\]:(\d{1,5})$') {
+        $targetHost = $Matches[1]
+        $port = [int]$Matches[2]
+    } elseif (($text -split ':').Count -eq 2 -and $text -match '^(.+):(\d{1,5})$') {
+        $targetHost = $Matches[1]
+        $port = [int]$Matches[2]
+    } else {
+        $targetHost = $text
+    }
+
+    $targetHost = ([string]$targetHost).Trim()
+    if ([string]::IsNullOrWhiteSpace($targetHost)) {
+        return [pscustomobject]@{ IsValid = $false; Message = "Target host is empty."; Original = $text; Host = ""; Port = 0; Scheme = $scheme; DisplayTarget = $text }
+    }
+
+    if ($targetHost -match '[\\/\s]') {
+        return [pscustomobject]@{ IsValid = $false; Message = "Target host cannot contain spaces, slashes, or backslashes. Use only a host, IP address, URL, or host:port."; Original = $text; Host = $targetHost; Port = $port; Scheme = $scheme; DisplayTarget = $text }
+    }
+
+    if ($port -lt 0 -or $port -gt 65535) {
+        return [pscustomobject]@{ IsValid = $false; Message = "Target port must be from 1 to 65535."; Original = $text; Host = $host; Port = $port; Scheme = $scheme; DisplayTarget = $text }
+    }
+
+    $display = if ($port -gt 0 -and $text -notmatch '^[a-zA-Z][a-zA-Z0-9+\-.]*://') { "$targetHost`:$port" } else { $text }
+    return [pscustomobject]@{
+        IsValid = $true
+        Message = ""
+        Original = $text
+        Host = $targetHost
+        Port = $port
+        Scheme = $scheme
+        DisplayTarget = $display
+        IsIpAddress = (Test-ValidIP -IP $targetHost)
+    }
+}
+
+function Format-ReachabilityProbeReport {
+    param([pscustomobject]$Result)
+
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("Reachability wizard for $($Result.DisplayTarget)") | Out-Null
+    $sb.AppendLine("Checked: $($Result.CheckedAt)") | Out-Null
+    $sb.AppendLine("") | Out-Null
+    $sb.AppendLine("1. DNS") | Out-Null
+    $sb.AppendLine("   $($Result.DnsStatus): $($Result.DnsMessage)") | Out-Null
+    if ($Result.Addresses -and @($Result.Addresses).Count -gt 0) {
+        $sb.AppendLine("   Addresses: $((@($Result.Addresses) | Select-Object -First 8) -join ', ')") | Out-Null
+    }
+    $sb.AppendLine("") | Out-Null
+    $sb.AppendLine("2. Gateway") | Out-Null
+    $sb.AppendLine("   $($Result.GatewayStatus): $($Result.GatewayMessage)") | Out-Null
+    $sb.AppendLine("") | Out-Null
+    $sb.AppendLine("3. Route") | Out-Null
+    $sb.AppendLine("   $($Result.RouteStatus): $($Result.RouteMessage)") | Out-Null
+    $sb.AppendLine("") | Out-Null
+    $sb.AppendLine("4. Firewall / Port") | Out-Null
+    $sb.AppendLine("   $($Result.PortStatus): $($Result.PortMessage)") | Out-Null
+    $sb.AppendLine("") | Out-Null
+    $sb.AppendLine("5. MTU") | Out-Null
+    $sb.AppendLine("   $($Result.MtuStatus): $($Result.MtuMessage)") | Out-Null
+    $sb.AppendLine("") | Out-Null
+    $sb.AppendLine("Summary") | Out-Null
+    foreach ($line in @($Result.Summary)) {
+        $sb.AppendLine(" - $line") | Out-Null
+    }
+
+    return $sb.ToString()
+}
+
+function Invoke-ReachabilityWizard {
+    if ($script:ReachabilityWizardRunning) { return }
+
+    $targetText = $script:txtPingTarget.Text.Trim()
+    $targetInfo = Resolve-ReachabilityTarget -Target $targetText
+    if (-not $targetInfo.IsValid) {
+        Update-Status "Reachability wizard rejected target: $($targetInfo.Message)" -Type Error
+        Show-MessageBox -Message $targetInfo.Message -Title "Reachability Wizard" -Icon Warning
+        return
+    }
+
+    $script:ReachabilityWizardRunning = $true
+    $script:btnReachabilityWizard.IsEnabled = $false
+    $script:btnReachabilityWizard.Content = Get-UiString -Key "button.reachabilityWizard.running" -DefaultValue "Checking..."
+    $script:txtDiagOutput.Text = "Checking reachability for $($targetInfo.DisplayTarget)..."
+    Update-Status "Running reachability wizard..."
+    Write-OperationLog -Action "Reachability wizard" -Result "Started" -Detail "Target=$($targetInfo.DisplayTarget); Host=$($targetInfo.Host); Port=$($targetInfo.Port)"
+
+    $ps = [PowerShell]::Create()
+    $script:ReachabilityWizardPowerShell = $ps
+    $ps.AddScript({
+        param($target)
+
+        function Test-IpText {
+            param([string]$Value)
+            $address = $null
+            return [System.Net.IPAddress]::TryParse(([string]$Value), [ref]$address)
+        }
+
+        function Invoke-PingProbe {
+            param(
+                [string]$HostName,
+                [int]$TimeoutMs = 1200,
+                [int]$PayloadBytes = 32,
+                [bool]$DontFragment = $false
+            )
+
+            $ping = New-Object System.Net.NetworkInformation.Ping
+            try {
+                $buffer = New-Object byte[] $PayloadBytes
+                $options = New-Object System.Net.NetworkInformation.PingOptions
+                $options.DontFragment = $DontFragment
+                $reply = $ping.Send($HostName, $TimeoutMs, $buffer, $options)
+                return [pscustomobject]@{
+                    Status = $reply.Status.ToString()
+                    Success = ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success)
+                    Address = if ($reply.Address) { $reply.Address.ToString() } else { "" }
+                    LatencyMs = [int]$reply.RoundtripTime
+                }
+            } catch {
+                return [pscustomobject]@{
+                    Status = "Error"
+                    Success = $false
+                    Address = ""
+                    LatencyMs = -1
+                    Error = $_.Exception.Message
+                }
+            } finally {
+                $ping.Dispose()
+            }
+        }
+
+        function Test-TcpPortProbe {
+            param(
+                [string]$HostName,
+                [int]$Port,
+                [int]$TimeoutMs = 1800
+            )
+
+            $client = New-Object System.Net.Sockets.TcpClient
+            $watch = [System.Diagnostics.Stopwatch]::StartNew()
+            try {
+                $async = $client.BeginConnect($HostName, $Port, $null, $null)
+                if (-not $async.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) {
+                    return [pscustomobject]@{ Success = $false; LatencyMs = [int]$watch.ElapsedMilliseconds; Message = "TCP $Port timed out after $TimeoutMs ms." }
+                }
+                $client.EndConnect($async)
+                return [pscustomobject]@{ Success = $true; LatencyMs = [int]$watch.ElapsedMilliseconds; Message = "TCP $Port connected in $([int]$watch.ElapsedMilliseconds) ms." }
+            } catch {
+                return [pscustomobject]@{ Success = $false; LatencyMs = [int]$watch.ElapsedMilliseconds; Message = "TCP $Port failed: $($_.Exception.Message)" }
+            } finally {
+                $client.Close()
+                $watch.Stop()
+            }
+        }
+
+        $addresses = @()
+        $dnsStatus = "OK"
+        $dnsMessage = ""
+        if ([bool]$target.IsIpAddress -or (Test-IpText -Value $target.Host)) {
+            $addresses = @([string]$target.Host)
+            $dnsStatus = "SKIP"
+            $dnsMessage = "Target is already an IP address."
+        } else {
+            try {
+                $addresses = @([System.Net.Dns]::GetHostAddresses([string]$target.Host) | ForEach-Object { $_.ToString() } | Select-Object -Unique)
+                if ($addresses.Count -gt 0) {
+                    $dnsMessage = "$($target.Host) resolved to $($addresses.Count) address(es)."
+                } else {
+                    $dnsStatus = "FAIL"
+                    $dnsMessage = "DNS returned no addresses for $($target.Host)."
+                }
+            } catch {
+                $dnsStatus = "FAIL"
+                $dnsMessage = $_.Exception.Message
+            }
+        }
+
+        $gatewayStatus = "WARN"
+        $gatewayMessage = "No IPv4 default gateway was found."
+        try {
+            $route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+                Where-Object { $_.NextHop -and $_.NextHop -ne "0.0.0.0" } |
+                Sort-Object RouteMetric, InterfaceMetric |
+                Select-Object -First 1
+            if ($route) {
+                $gateway = [string]$route.NextHop
+                $gatewayPing = Invoke-PingProbe -HostName $gateway -TimeoutMs 900
+                if ($gatewayPing.Success) {
+                    $gatewayStatus = "OK"
+                    $gatewayMessage = "Default gateway $gateway answered in $($gatewayPing.LatencyMs) ms on interface $($route.InterfaceAlias)."
+                } else {
+                    $gatewayStatus = "WARN"
+                    $gatewayMessage = "Default gateway $gateway on interface $($route.InterfaceAlias) did not answer ICMP ($($gatewayPing.Status))."
+                }
+            }
+        } catch {
+            $gatewayStatus = "WARN"
+            $gatewayMessage = "Gateway check failed: $($_.Exception.Message)"
+        }
+
+        $routeStatus = "WARN"
+        $routeMessage = "Route check was skipped because DNS failed."
+        if ($addresses.Count -gt 0) {
+            $routePing = Invoke-PingProbe -HostName ([string]$target.Host) -TimeoutMs 1400
+            if ($routePing.Success) {
+                $routeStatus = "OK"
+                $routeMessage = "Target answered ICMP from $($routePing.Address) in $($routePing.LatencyMs) ms."
+            } else {
+                $routeStatus = "WARN"
+                $routeMessage = "Target did not answer ICMP ($($routePing.Status)). This may be normal if ICMP is filtered."
+            }
+        }
+
+        $portStatus = "SKIP"
+        $portMessage = "No TCP port was provided. Use host:port or an http/https URL to test firewall/port reachability."
+        if ([int]$target.Port -gt 0) {
+            $tcp = Test-TcpPortProbe -HostName ([string]$target.Host) -Port ([int]$target.Port)
+            if ($tcp.Success) {
+                $portStatus = "OK"
+            } else {
+                $portStatus = "FAIL"
+            }
+            $portMessage = $tcp.Message
+        }
+
+        $mtuStatus = "WARN"
+        $mtuMessage = "MTU probe was skipped because DNS failed."
+        if ($addresses.Count -gt 0) {
+            $mtu = Invoke-PingProbe -HostName ([string]$target.Host) -TimeoutMs 1400 -PayloadBytes 1472 -DontFragment $true
+            if ($mtu.Success) {
+                $mtuStatus = "OK"
+                $mtuMessage = "1472-byte ICMP payload with Don't Fragment succeeded."
+            } else {
+                $small = Invoke-PingProbe -HostName ([string]$target.Host) -TimeoutMs 1400 -PayloadBytes 1200 -DontFragment $true
+                if ($small.Success) {
+                    $mtuStatus = "WARN"
+                    $mtuMessage = "1472-byte DF probe failed ($($mtu.Status)), but 1200-byte DF probe succeeded. Path MTU may be below 1500."
+                } else {
+                    $mtuStatus = "WARN"
+                    $mtuMessage = "DF MTU probes failed or ICMP is filtered (1472=$($mtu.Status), 1200=$($small.Status))."
+                }
+            }
+        }
+
+        $summary = @()
+        if ($dnsStatus -eq "FAIL") { $summary += "Fix DNS resolution before testing route or firewall behavior." }
+        if ($gatewayStatus -ne "OK") { $summary += "Gateway did not confirm local egress; verify adapter, DHCP/static gateway, VLAN, or WiFi association." }
+        if ($routeStatus -ne "OK" -and $portStatus -ne "OK") { $summary += "No positive route or TCP signal was observed; check upstream routing and firewall policy." }
+        if ($portStatus -eq "FAIL") { $summary += "The target resolved, but TCP port $($target.Port) did not open; check host firewall, service binding, or intermediate filtering." }
+        if ($mtuStatus -eq "WARN") { $summary += "MTU result is inconclusive or degraded; compare VPN, tunnel, and interface MTU settings if large transfers fail." }
+        if ($summary.Count -eq 0) { $summary += "Core checks passed for this target." }
+
+        return [pscustomobject]@{
+            DisplayTarget = [string]$target.DisplayTarget
+            Host = [string]$target.Host
+            Port = [int]$target.Port
+            CheckedAt = (Get-Date).ToString("o")
+            DnsStatus = $dnsStatus
+            DnsMessage = $dnsMessage
+            Addresses = @($addresses)
+            GatewayStatus = $gatewayStatus
+            GatewayMessage = $gatewayMessage
+            RouteStatus = $routeStatus
+            RouteMessage = $routeMessage
+            PortStatus = $portStatus
+            PortMessage = $portMessage
+            MtuStatus = $mtuStatus
+            MtuMessage = $mtuMessage
+            Summary = @($summary)
+        }
+    }).AddArgument($targetInfo) | Out-Null
+
+    $handle = $ps.BeginInvoke()
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $data = @($ps.EndInvoke($handle))
+                $result = $data[0]
+                $script:txtDiagOutput.Text = Format-ReachabilityProbeReport -Result $result
+                Update-Status "Reachability wizard complete" -Type Success
+                Write-OperationLog -Action "Reachability wizard" -Result "Succeeded" -Detail "Target=$($result.DisplayTarget); DNS=$($result.DnsStatus); Gateway=$($result.GatewayStatus); Route=$($result.RouteStatus); Port=$($result.PortStatus); MTU=$($result.MtuStatus)"
+            } catch {
+                Update-Status "Reachability wizard failed: $($_.Exception.Message)" -Type Error
+                $script:txtDiagOutput.Text = "Reachability wizard failed: $($_.Exception.Message)"
+                Write-OperationLog -Action "Reachability wizard" -Result "Failed" -Detail $_.Exception.Message
+            } finally {
+                $script:ReachabilityWizardRunning = $false
+                $script:btnReachabilityWizard.IsEnabled = $true
+                $script:btnReachabilityWizard.Content = Get-UiString -Key "button.reachabilityWizard.idle" -DefaultValue "Why Can't I Reach X?"
+                if ($script:ReachabilityWizardPowerShell -eq $ps) { $script:ReachabilityWizardPowerShell = $null }
+                $ps.Dispose()
+                $timer.Stop()
+            }
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
 function Invoke-PortScan {
     if ($script:PortScanRunning) { return }
 
@@ -12085,6 +12418,7 @@ $btnPing.Add_Click({ Invoke-Ping })
 $btnTraceroute.Add_Click({ Invoke-Traceroute })
 $btnMtrTrace.Add_Click({ Toggle-MtrTrace })
 $btnPortScan.Add_Click({ Invoke-PortScan })
+$btnReachabilityWizard.Add_Click({ Invoke-ReachabilityWizard })
 $btnPacketCapture.Add_Click({ Toggle-PacketCapture })
 $btnCableDiagnostics.Add_Click({ Invoke-CableDiagnostics })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
@@ -12146,6 +12480,13 @@ $window.Add_Closing({
             $script:PortScanPowerShell.Stop()
         } catch {
             Write-OperationLog -Action "Port scan stop" -Result "Warning" -Detail $_.Exception.Message
+        }
+    }
+    if ($script:ReachabilityWizardPowerShell) {
+        try {
+            $script:ReachabilityWizardPowerShell.Stop()
+        } catch {
+            Write-OperationLog -Action "Reachability wizard stop" -Result "Warning" -Detail $_.Exception.Message
         }
     }
     if ($script:PacketCaptureRunning) {
