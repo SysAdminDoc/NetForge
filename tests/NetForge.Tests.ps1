@@ -700,6 +700,60 @@ Describe 'Packet capture helpers' {
     }
 }
 
+Describe 'Cable diagnostic helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-CableDiagnosticPropertyName',
+            'Format-CableDiagnosticReport'
+        )
+    }
+
+    It 'recognizes cable and transceiver driver telemetry names' {
+        Test-CableDiagnosticPropertyName -Name 'SFP Module Temperature' | Should -BeTrue
+        Test-CableDiagnosticPropertyName -Name 'Cable Length' | Should -BeTrue
+        Test-CableDiagnosticPropertyName -Name 'Rx Power' | Should -BeTrue
+        Test-CableDiagnosticPropertyName -Name 'Interrupt Moderation' | Should -BeFalse
+    }
+
+    It 'formats driver-exposed cable telemetry and no-telemetry fallbacks' {
+        $data = [pscustomobject]@{
+            AdapterName = 'Ethernet 1'
+            InterfaceDescription = 'Server NIC'
+            Status = 'Up'
+            LinkSpeed = '10 Gbps'
+            MacAddress = '00-11-22-33-44-55'
+            HardwareInfo = $null
+            Statistics = [pscustomobject]@{
+                ReceivedBytes = 1000
+                SentBytes = 500
+                ReceivedPacketErrors = 0
+                OutboundPacketErrors = 1
+            }
+            DriverProperties = @(
+                [pscustomobject]@{ Name = 'SFP Module Temperature'; Value = '42 C'; Keyword = '*SfpTemperature' }
+            )
+        }
+
+        $report = Format-CableDiagnosticReport -Data $data
+
+        $report | Should -Match 'Cable / transceiver diagnostics'
+        $report | Should -Match 'SFP Module Temperature: 42 C'
+        $report | Should -Match 'OutboundPacketErrors: 1'
+
+        $empty = [pscustomobject]@{
+            AdapterName = 'Ethernet 1'
+            InterfaceDescription = 'Server NIC'
+            Status = 'Up'
+            LinkSpeed = '10 Gbps'
+            MacAddress = '00-11-22-33-44-55'
+            HardwareInfo = $null
+            Statistics = $null
+            DriverProperties = @()
+        }
+        (Format-CableDiagnosticReport -Data $empty) | Should -Match 'No cable, SFP, DDM, DOM, or optical telemetry'
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

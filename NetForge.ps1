@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.32.0
+    Version: 1.33.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.32.0"
+$script:AppVersion = "1.33.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -190,6 +190,7 @@ $script:AccessibilityNames = @{
     btnMtrTrace = "Start MTR trace"
     btnPortScan = "Run port scan"
     btnPacketCapture = "Start packet capture"
+    btnCableDiagnostics = "Run cable diagnostics"
     btnNslookup = "Run NSLookup"
 }
 $script:AccessibilityTabOrder = @(
@@ -201,7 +202,7 @@ $script:AccessibilityTabOrder = @(
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
-    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnPacketCapture", "btnNslookup",
+    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy"
 )
 
@@ -1148,7 +1149,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.32.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.33.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2062,6 +2063,7 @@ function Apply-Localization {
                                             <Button x:Name="btnMtrTrace" Content="Start MTR" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPortScan" Content="Port Scan" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPacketCapture" Content="Start Capture" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnCableDiagnostics" Content="Cable Diag" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnNslookup" Content="NSLookup" Style="{StaticResource ModernButton}"/>
                                         </StackPanel>
 
@@ -2303,7 +2305,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.32.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.33.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -8838,6 +8840,138 @@ function Toggle-PacketCapture {
     }
 }
 
+function Test-CableDiagnosticPropertyName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+    return ($Name -match '(?i)(cable|sfp|ddm|dom|optic|optical|transceiver|module|temperature|laser|rx\s*power|tx\s*power|fec|duplex|media\s*type|link\s*speed)')
+}
+
+function Get-CableDiagnosticData {
+    param($Adapter)
+
+    if ($null -eq $Adapter) {
+        throw "Select an adapter before running cable diagnostics."
+    }
+
+    $driverProperties = @()
+    try {
+        $driverProperties = @(Get-NetAdapterAdvancedProperty -Name $Adapter.Name -ErrorAction Stop | Where-Object {
+            (Test-CableDiagnosticPropertyName -Name $_.DisplayName) -or (Test-CableDiagnosticPropertyName -Name $_.RegistryKeyword)
+        } | ForEach-Object {
+            [pscustomobject]@{
+                Name = [string]$_.DisplayName
+                Value = [string]$_.DisplayValue
+                Keyword = [string]$_.RegistryKeyword
+            }
+        })
+    } catch {
+        $driverProperties = @([pscustomobject]@{ Name = "Advanced properties"; Value = "Unavailable: $($_.Exception.Message)"; Keyword = "" })
+    }
+
+    $hardwareInfo = $null
+    try {
+        $hardwareInfo = Get-NetAdapterHardwareInfo -Name $Adapter.Name -ErrorAction Stop
+    } catch {
+        $hardwareInfo = $null
+    }
+
+    $statistics = $null
+    try {
+        $statistics = Get-NetAdapterStatistics -Name $Adapter.Name -ErrorAction Stop
+    } catch {
+        $statistics = $null
+    }
+
+    return [pscustomobject]@{
+        AdapterName = [string]$Adapter.Name
+        InterfaceDescription = [string]$Adapter.InterfaceDescription
+        Status = [string]$Adapter.Status
+        LinkSpeed = [string]$Adapter.LinkSpeed
+        MacAddress = [string]$Adapter.MacAddress
+        DriverProperties = @($driverProperties)
+        HardwareInfo = $hardwareInfo
+        Statistics = $statistics
+    }
+}
+
+function Format-CableDiagnosticReport {
+    param([pscustomobject]$Data)
+
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("Cable / transceiver diagnostics") | Out-Null
+    $sb.AppendLine("=" * 32) | Out-Null
+    $sb.AppendLine("Adapter: $($Data.AdapterName)") | Out-Null
+    $sb.AppendLine("Description: $($Data.InterfaceDescription)") | Out-Null
+    $sb.AppendLine("Status: $($Data.Status)") | Out-Null
+    $sb.AppendLine("Link Speed: $($Data.LinkSpeed)") | Out-Null
+    $sb.AppendLine("MAC: $($Data.MacAddress)") | Out-Null
+    $sb.AppendLine("") | Out-Null
+
+    if ($Data.HardwareInfo) {
+        $sb.AppendLine("Hardware") | Out-Null
+        $sb.AppendLine("--------") | Out-Null
+        foreach ($propertyName in @("InterfaceDescription", "BusType", "DeviceType", "NumaNode", "PcieLinkSpeed", "PcieLinkWidth", "Version")) {
+            $property = $Data.HardwareInfo.PSObject.Properties[$propertyName]
+            if ($property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+                $sb.AppendLine(("{0}: {1}" -f $propertyName, $property.Value)) | Out-Null
+            }
+        }
+        $sb.AppendLine("") | Out-Null
+    }
+
+    if ($Data.Statistics) {
+        $sb.AppendLine("Counters") | Out-Null
+        $sb.AppendLine("--------") | Out-Null
+        foreach ($propertyName in @("ReceivedBytes", "SentBytes", "ReceivedUnicastPackets", "SentUnicastPackets", "ReceivedDiscardedPackets", "OutboundDiscardedPackets", "ReceivedPacketErrors", "OutboundPacketErrors")) {
+            $property = $Data.Statistics.PSObject.Properties[$propertyName]
+            if ($property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+                $sb.AppendLine(("{0}: {1}" -f $propertyName, $property.Value)) | Out-Null
+            }
+        }
+        $sb.AppendLine("") | Out-Null
+    }
+
+    $visibleProperties = @($Data.DriverProperties | Where-Object { -not ([string]$_.Name).StartsWith("Advanced properties") })
+    $sb.AppendLine("Cable / SFP / DDM driver properties") | Out-Null
+    $sb.AppendLine("-----------------------------------") | Out-Null
+    if ($visibleProperties.Count -eq 0) {
+        $sb.AppendLine("No cable, SFP, DDM, DOM, or optical telemetry properties are exposed by this adapter driver.") | Out-Null
+    } else {
+        foreach ($property in $visibleProperties) {
+            $name = if ([string]::IsNullOrWhiteSpace($property.Name)) { $property.Keyword } else { $property.Name }
+            $sb.AppendLine(("{0}: {1}" -f $name, $property.Value)) | Out-Null
+        }
+    }
+
+    $unavailable = @($Data.DriverProperties | Where-Object { ([string]$_.Name).StartsWith("Advanced properties") })
+    if ($unavailable.Count -gt 0) {
+        $sb.AppendLine("") | Out-Null
+        foreach ($item in $unavailable) { $sb.AppendLine($item.Value) | Out-Null }
+    }
+
+    return $sb.ToString()
+}
+
+function Invoke-CableDiagnostics {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    try {
+        $data = Get-CableDiagnosticData -Adapter $adapter
+        $script:txtDiagOutput.Text = Format-CableDiagnosticReport -Data $data
+        Update-Status "Cable diagnostics complete"
+        Write-OperationLog -Action "Cable diagnostics" -Result "Succeeded" -Detail "Adapter=$($adapter.Name); Properties=$(@($data.DriverProperties).Count)"
+    } catch {
+        $script:txtDiagOutput.Text = "Cable diagnostics failed: $($_.Exception.Message)"
+        Update-Status "Cable diagnostics failed" -Type Error
+        Write-OperationLog -Action "Cable diagnostics" -Result "Failed" -Detail $_.Exception.Message
+    }
+}
+
 function Invoke-Nslookup {
     $target = $script:txtPingTarget.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($target)) {
@@ -9223,6 +9357,7 @@ $btnTraceroute.Add_Click({ Invoke-Traceroute })
 $btnMtrTrace.Add_Click({ Toggle-MtrTrace })
 $btnPortScan.Add_Click({ Invoke-PortScan })
 $btnPacketCapture.Add_Click({ Toggle-PacketCapture })
+$btnCableDiagnostics.Add_Click({ Invoke-CableDiagnostics })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
 
 # Diagnostics button handlers
