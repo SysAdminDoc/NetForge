@@ -11,7 +11,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### Profiles
 
 ### Diagnostics
-- Wi-Fi spectrum view (channel utilization) with BSSID list
 - Latency histogram to any endpoint over N seconds
 
 ### IPv6 & Advanced

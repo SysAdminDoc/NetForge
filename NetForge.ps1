@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.33.0
+    Version: 1.34.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.33.0"
+$script:AppVersion = "1.34.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -141,6 +141,7 @@ $script:AccessibilityNames = @{
     btnApplyDoqLocalDns = "Apply local DoQ DNS"
     btnWifiRefresh = "Scan WiFi networks"
     lstWifiNetworks = "WiFi network list"
+    txtWifiSpectrumOutput = "WiFi spectrum channel utilization"
     btnWifiConnect = "Connect WiFi network"
     btnWifiDisconnect = "Disconnect WiFi"
     lstProfiles = "Saved profile list"
@@ -1149,7 +1150,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.33.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.34.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1743,6 +1744,14 @@ function Apply-Localization {
                                     </Grid>
                                 </Border>
 
+                                <TextBlock Text="WIFI SPECTRUM" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
+                                        <TextBlock x:Name="txtWifiSpectrumOutput" Text="Scan WiFi networks to build channel utilization." FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                    </ScrollViewer>
+                                </Border>
+
                                 <TextBlock Text="SELECTED NETWORK" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
 
                                 <Border x:Name="pnlWifiDetails" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" Visibility="Collapsed">
@@ -2305,7 +2314,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.33.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.34.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3673,6 +3682,92 @@ function Get-WifiSignalColor {
     return "#f85149"
 }
 
+function Get-WifiChannelBand {
+    param([string]$Channel)
+
+    $channelNumber = 0
+    if (-not [int]::TryParse(([string]$Channel).Trim(), [ref]$channelNumber)) { return "--" }
+    if ($channelNumber -le 14) { return "2.4 GHz" }
+    if ($channelNumber -lt 180) { return "5 GHz" }
+    return "6 GHz"
+}
+
+function Get-WifiChannelUtilization {
+    param([object[]]$Networks)
+
+    $channels = @{}
+    foreach ($network in @($Networks)) {
+        $details = @($network.BssidDetails)
+        if ($details.Count -eq 0 -and $network.Channels) {
+            foreach ($channel in @($network.Channels)) {
+                $details += [pscustomobject]@{
+                    BSSID = ""
+                    Channel = [string]$channel
+                    Signal = $network.Signal
+                    Band = Get-WifiChannelBand -Channel $channel
+                    SSID = $network.SSID
+                }
+            }
+        }
+
+        foreach ($detail in $details) {
+            $channel = ([string]$detail.Channel).Trim()
+            if ([string]::IsNullOrWhiteSpace($channel)) { continue }
+            $band = if ([string]::IsNullOrWhiteSpace([string]$detail.Band)) { Get-WifiChannelBand -Channel $channel } else { [string]$detail.Band }
+            $key = "$band|$channel"
+            if (-not $channels.ContainsKey($key)) {
+                $channels[$key] = [pscustomobject]@{
+                    Channel = $channel
+                    Band = $band
+                    BssidCount = 0
+                    StrongestSignal = 0
+                    SSIDs = New-Object System.Collections.Generic.List[string]
+                    BSSIDs = New-Object System.Collections.Generic.List[string]
+                }
+            }
+
+            $row = $channels[$key]
+            $row.BssidCount = [int]$row.BssidCount + 1
+            $ssid = if ([string]::IsNullOrWhiteSpace([string]$detail.SSID)) { [string]$network.SSID } else { [string]$detail.SSID }
+            if (-not [string]::IsNullOrWhiteSpace($ssid) -and -not $row.SSIDs.Contains($ssid)) { [void]$row.SSIDs.Add($ssid) }
+            $bssid = [string]$detail.BSSID
+            if (-not [string]::IsNullOrWhiteSpace($bssid) -and -not $row.BSSIDs.Contains($bssid)) { [void]$row.BSSIDs.Add($bssid) }
+            $signalValue = 0
+            if ([string]$detail.Signal -match '(\d+)') { $signalValue = [int]$Matches[1] }
+            if ($signalValue -gt $row.StrongestSignal) { $row.StrongestSignal = $signalValue }
+        }
+    }
+
+    $rows = @($channels.Values | Sort-Object Band, { [int]$_.Channel })
+    return ,$rows
+}
+
+function Format-WifiSpectrumReport {
+    param([object[]]$ChannelRows)
+
+    $rows = @($ChannelRows)
+    if ($rows.Count -eq 0) {
+        return "No WiFi channel data available. Run Scan Networks to build channel utilization."
+    }
+
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("Channel utilization from visible BSSIDs") | Out-Null
+    $sb.AppendLine("Channel  Band     BSSIDs  Strongest  SSIDs") | Out-Null
+    $sb.AppendLine("-------  -------  ------  ---------  -----") | Out-Null
+    foreach ($row in $rows) {
+        $ssidText = (@($row.SSIDs) -join ", ")
+        if ($ssidText.Length -gt 42) { $ssidText = $ssidText.Substring(0, 39) + "..." }
+        $signal = if ($row.StrongestSignal -gt 0) { "$($row.StrongestSignal)%" } else { "--" }
+        $sb.AppendLine(("{0,7}  {1,-7}  {2,6}  {3,9}  {4}" -f $row.Channel, $row.Band, $row.BssidCount, $signal, $ssidText)) | Out-Null
+        if (@($row.BSSIDs).Count -gt 0) {
+            $bssidText = (@($row.BSSIDs) -join ", ")
+            $sb.AppendLine(("         BSSID: {0}" -f $bssidText)) | Out-Null
+        }
+    }
+
+    return $sb.ToString()
+}
+
 function Get-WifiBadgeElement {
     param(
         [string]$Text,
@@ -3794,6 +3889,10 @@ function Show-WifiNetworkList {
         $script:lstWifiNetworks.Items.Add((Get-WifiNetworkListItem -Network $network)) | Out-Null
     }
 
+    if ($script:txtWifiSpectrumOutput) {
+        $script:txtWifiSpectrumOutput.Text = Format-WifiSpectrumReport -ChannelRows (Get-WifiChannelUtilization -Networks $script:WifiNetworks)
+    }
+
     $interfaceLabel = if ($script:WifiInterfaceName) { $script:WifiInterfaceName } else { "default WiFi interface" }
     if ($script:WifiNetworks.Count -gt 0) {
         $script:txtWifiScanSummary.Text = "Found $($script:WifiNetworks.Count) network(s) on $interfaceLabel."
@@ -3839,6 +3938,16 @@ function Invoke-WifiNetworkScan {
             $bands = @($Data.Bands | Where-Object { $_ } | Sort-Object -Unique)
             $radioTypes = @($Data.RadioTypes | Where-Object { $_ } | Sort-Object -Unique)
             $bssids = @($Data.Bssids | Where-Object { $_ } | Sort-Object -Unique)
+            $bssidDetails = @($Data.BssidDetails | Where-Object { $_ } | ForEach-Object {
+                [pscustomobject]@{
+                    SSID = $Data.SSID
+                    BSSID = [string]$_.BSSID
+                    Signal = [string]$_.Signal
+                    Channel = [string]$_.Channel
+                    Band = [string]$_.Band
+                    RadioType = [string]$_.RadioType
+                }
+            })
             $profileMatches = @($Profiles | Where-Object { $_ -eq $Data.SSID })
 
             [pscustomobject]@{
@@ -3850,6 +3959,7 @@ function Invoke-WifiNetworkScan {
                 Bands = $bands
                 RadioTypes = $radioTypes
                 Bssids = $bssids
+                BssidDetails = $bssidDetails
                 BssidCount = $bssids.Count
                 HasProfile = $profileMatches.Count -gt 0
                 ProfileName = if ($profileMatches.Count -gt 0) { $profileMatches[0] } else { $null }
@@ -3870,6 +3980,7 @@ function Invoke-WifiNetworkScan {
             $interfaceName = $null
             $networks = @()
             $current = $null
+            $currentBssid = $null
 
             foreach ($rawLine in ($netOutput -split "`n")) {
                 $line = $rawLine.Trim()
@@ -3894,7 +4005,9 @@ function Invoke-WifiNetworkScan {
                         Bands = @()
                         RadioTypes = @()
                         Bssids = @()
+                        BssidDetails = @()
                     }
+                    $currentBssid = $null
                     continue
                 }
 
@@ -3905,15 +4018,33 @@ function Invoke-WifiNetworkScan {
                 } elseif ($line -match '^Encryption\s*:\s*(.+)$') {
                     $current.Encryption = $Matches[1].Trim()
                 } elseif ($line -match '^BSSID\s+\d+\s*:\s*(.+)$') {
-                    $current.Bssids += $Matches[1].Trim()
+                    $bssid = $Matches[1].Trim()
+                    $current.Bssids += $bssid
+                    $currentBssid = @{
+                        SSID = $current.SSID
+                        BSSID = $bssid
+                        Signal = ""
+                        Channel = ""
+                        Band = ""
+                        RadioType = ""
+                    }
+                    $current.BssidDetails += $currentBssid
                 } elseif ($line -match '^Signal\s*:\s*(.+)$') {
-                    $current.Signals += $Matches[1].Trim()
+                    $signalValue = $Matches[1].Trim()
+                    $current.Signals += $signalValue
+                    if ($currentBssid) { $currentBssid.Signal = $signalValue }
                 } elseif ($line -match '^Channel\s*:\s*(.+)$') {
-                    $current.Channels += $Matches[1].Trim()
+                    $channelValue = $Matches[1].Trim()
+                    $current.Channels += $channelValue
+                    if ($currentBssid) { $currentBssid.Channel = $channelValue }
                 } elseif ($line -match '^Band\s*:\s*(.+)$') {
-                    $current.Bands += $Matches[1].Trim()
+                    $bandValue = $Matches[1].Trim()
+                    $current.Bands += $bandValue
+                    if ($currentBssid) { $currentBssid.Band = $bandValue }
                 } elseif ($line -match '^Radio type\s*:\s*(.+)$') {
-                    $current.RadioTypes += $Matches[1].Trim()
+                    $radioValue = $Matches[1].Trim()
+                    $current.RadioTypes += $radioValue
+                    if ($currentBssid) { $currentBssid.RadioType = $radioValue }
                 }
             }
 

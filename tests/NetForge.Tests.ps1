@@ -754,6 +754,63 @@ Describe 'Cable diagnostic helpers' {
     }
 }
 
+Describe 'WiFi spectrum helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-WifiChannelBand',
+            'Get-WifiChannelUtilization',
+            'Format-WifiSpectrumReport'
+        )
+    }
+
+    It 'aggregates BSSID counts and strongest signal per channel' {
+        $networks = @(
+            [pscustomobject]@{
+                SSID = 'Clinic'
+                Signal = '80%'
+                Channels = @('6')
+                BssidDetails = @(
+                    [pscustomobject]@{ SSID = 'Clinic'; BSSID = '00:11:22:33:44:55'; Channel = '6'; Signal = '80%'; Band = '2.4 GHz' },
+                    [pscustomobject]@{ SSID = 'Clinic'; BSSID = '00:11:22:33:44:66'; Channel = '6'; Signal = '62%'; Band = '2.4 GHz' }
+                )
+            },
+            [pscustomobject]@{
+                SSID = 'Lab'
+                Signal = '55%'
+                Channels = @('149')
+                BssidDetails = @(
+                    [pscustomobject]@{ SSID = 'Lab'; BSSID = 'AA:BB:CC:DD:EE:FF'; Channel = '149'; Signal = '55%'; Band = '5 GHz' }
+                )
+            }
+        )
+
+        $rows = Get-WifiChannelUtilization -Networks $networks
+
+        $rows.Count | Should -Be 2
+        $rows[0].Channel | Should -Be '6'
+        $rows[0].BssidCount | Should -Be 2
+        $rows[0].StrongestSignal | Should -Be 80
+        $rows[0].SSIDs | Should -Contain 'Clinic'
+        $rows[1].Band | Should -Be '5 GHz'
+
+        $report = Format-WifiSpectrumReport -ChannelRows $rows
+        $report | Should -Match 'Channel utilization'
+        $report | Should -Match '00:11:22:33:44:55'
+        $report | Should -Match 'Clinic'
+    }
+
+    It 'falls back to channel lists when per-BSSID details are unavailable' {
+        $rows = Get-WifiChannelUtilization -Networks @(
+            [pscustomobject]@{ SSID = 'Fallback'; Signal = '44%'; Channels = @('11'); BssidDetails = @() }
+        )
+
+        $rows.Count | Should -Be 1
+        $rows[0].Band | Should -Be '2.4 GHz'
+        $rows[0].StrongestSignal | Should -Be 44
+        (Format-WifiSpectrumReport -ChannelRows @()) | Should -Match 'No WiFi channel data'
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(
