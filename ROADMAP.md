@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P2
-- [ ] P2 - Ship signed/checksummed release artifacts
-  Why: A high-privilege PowerShell network tool should make authenticity and install path clear.
-  Evidence: PowerShell signing docs, execution policy docs, current release zip artifact.
-  Touches: release script, dist artifact, README install section, GitHub release asset process.
-  Acceptance: Release build produces a clean zip, SHA256 file, optional Authenticode signature when a certificate exists, and README instructions for verifying the artifact.
-  Complexity: M
-
 - [ ] P2 - Move DNS providers into a validated catalog
   Why: DNS providers change endpoints and features; editing a 5,313-line script for preset maintenance increases risk.
   Evidence: `NetForge.ps1:82-719`, AdGuard dnsproxy, NextDNS Windows docs, Control D `ctrld`, DNSCrypt Proxy.

@@ -31,6 +31,21 @@ function Assert-ContainsPattern {
     }
 }
 
+function Get-Sha256 {
+    param([string]$Path)
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $hashBytes = $sha.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($hashBytes) -replace '-', '').ToLowerInvariant()
+    } finally {
+        if ($stream) { $stream.Dispose() }
+        if ($sha) { $sha.Dispose() }
+    }
+}
+
 $scriptText = Get-Content -Raw -LiteralPath $scriptPath
 $escapedVersion = [regex]::Escape($version)
 Assert-ContainsPattern -Name 'NetForge.ps1 header' -Text $scriptText -Pattern "Version:\s+$escapedVersion"
@@ -68,6 +83,24 @@ if (Test-Path -LiteralPath $distPath) {
         $unexpectedZip = @($zipFiles | Where-Object { $_.Name -ne $expectedZip })
         if ($unexpectedZip.Count -gt 0) {
             throw "dist contains stale release package(s): $($unexpectedZip.Name -join ', ')"
+        }
+
+        $expectedZipPath = Join-Path $distPath $expectedZip
+        $expectedShaPath = "$expectedZipPath.sha256"
+        if (-not (Test-Path -LiteralPath $expectedShaPath -PathType Leaf)) {
+            throw "dist does not contain expected checksum file $([System.IO.Path]::GetFileName($expectedShaPath))."
+        }
+
+        $actualHash = Get-Sha256 -Path $expectedZipPath
+        $shaContent = Get-Content -Raw -LiteralPath $expectedShaPath
+        $expectedShaPattern = "$actualHash\s+$([regex]::Escape($expectedZip))"
+        if ($shaContent -notmatch $expectedShaPattern) {
+            throw "dist checksum file does not match $expectedZip."
+        }
+
+        $unexpectedSha = @(Get-ChildItem -Path $distPath -Filter 'NetForge-v*.zip.sha256' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -ne $expectedShaPath })
+        if ($unexpectedSha.Count -gt 0) {
+            throw "dist contains stale checksum file(s): $($unexpectedSha.Name -join ', ')"
         }
     }
 }

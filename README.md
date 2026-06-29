@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.22.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.23.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -137,8 +137,13 @@
 ## Installation
 
 ### Option 1: Direct Download
-1. Download `NetForge.ps1` from the [Releases](../../releases) page
-2. Right-click and select "Run with PowerShell" (will auto-elevate to admin)
+1. Download `NetForge-vX.Y.Z.zip` and `NetForge-vX.Y.Z.zip.sha256` from the [Releases](../../releases) page
+2. Verify the archive before extracting:
+   ```powershell
+   certutil -hashfile .\NetForge-vX.Y.Z.zip SHA256
+   Get-Content .\NetForge-vX.Y.Z.zip.sha256
+   ```
+3. Extract the zip, then right-click `NetForge.ps1` and select "Run with PowerShell" (will auto-elevate to admin)
 
 ### Option 2: Clone Repository
 ```powershell
@@ -169,7 +174,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.22.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.23.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 

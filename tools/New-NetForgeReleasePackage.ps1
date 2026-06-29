@@ -1,5 +1,8 @@
 param(
-    [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'dist')
+    [string]$OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'dist'),
+    [string]$CertificateThumbprint = "",
+    [string]$TimestampServer = "http://timestamp.digicert.com",
+    [switch]$SkipSigning
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,6 +36,52 @@ function Get-Sha256 {
     }
 }
 
+function Set-Utf8Text {
+    param(
+        [string]$Path,
+        [string]$Text
+    )
+
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Text, $encoding)
+}
+
+function Test-CodeSigningCertificate {
+    param($Certificate)
+
+    if ($null -eq $Certificate) { return $false }
+    if (-not $Certificate.HasPrivateKey) { return $false }
+    if ($Certificate.NotAfter -lt (Get-Date)) { return $false }
+
+    foreach ($usage in @($Certificate.EnhancedKeyUsageList)) {
+        if ($usage.ObjectId -eq '1.3.6.1.5.5.7.3.3' -or $usage.FriendlyName -eq 'Code Signing') {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Get-CodeSigningCertificate {
+    param([string]$Thumbprint)
+
+    $stores = @('Cert:\CurrentUser\My', 'Cert:\LocalMachine\My')
+    $normalizedThumbprint = if ([string]::IsNullOrWhiteSpace($Thumbprint)) { "" } else { ($Thumbprint -replace '\s', '').ToUpperInvariant() }
+
+    foreach ($store in $stores) {
+        if (-not (Test-Path -LiteralPath $store)) { continue }
+
+        $certificates = @(Get-ChildItem -Path $store -ErrorAction SilentlyContinue)
+        foreach ($certificate in $certificates) {
+            if (-not (Test-CodeSigningCertificate -Certificate $certificate)) { continue }
+            if (-not [string]::IsNullOrWhiteSpace($normalizedThumbprint) -and (($certificate.Thumbprint -replace '\s', '').ToUpperInvariant() -ne $normalizedThumbprint)) { continue }
+            return $certificate
+        }
+    }
+
+    return $null
+}
+
 $resolvedRepo = (Resolve-Path -LiteralPath $repoRoot).Path
 $resolvedOutputParent = [System.IO.Path]::GetFullPath((Split-Path -Parent $OutputDirectory))
 if (-not $resolvedOutputParent.StartsWith($resolvedRepo, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -49,6 +98,10 @@ if (Test-Path -LiteralPath $OutputDirectory) {
 New-Item -Path $OutputDirectory -ItemType Directory -Force | Out-Null
 
 $zipPath = Join-Path $OutputDirectory "$packageName-v$version.zip"
+$sha256Path = "$zipPath.sha256"
+$stagingRoot = Join-Path $env:TEMP "$packageName-release-$version-$([guid]::NewGuid().ToString('N'))"
+$signatureStatus = "Skipped"
+$signerThumbprint = ""
 $packageItems = @(
     'NetForge.ps1',
     'README.md',
@@ -60,14 +113,58 @@ $packageItems = @(
     'version.json',
     'tools',
     'tests'
-) | ForEach-Object { Join-Path $repoRoot $_ }
+)
 
-Compress-Archive -Path $packageItems -DestinationPath $zipPath -Force
-$sha256 = Get-Sha256 -Path $zipPath
+try {
+    New-Item -Path $stagingRoot -ItemType Directory -Force | Out-Null
+    foreach ($item in $packageItems) {
+        $sourcePath = Join-Path $repoRoot $item
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            throw "Package item was not found: $item"
+        }
+        Copy-Item -LiteralPath $sourcePath -Destination $stagingRoot -Recurse -Force
+    }
+
+    $stagedScriptPath = Join-Path $stagingRoot 'NetForge.ps1'
+    if ($SkipSigning) {
+        $signatureStatus = "Skipped"
+    } else {
+        $certificate = Get-CodeSigningCertificate -Thumbprint $CertificateThumbprint
+        if ($null -eq $certificate) {
+            $signatureStatus = "NoCertificate"
+        } else {
+            $signArgs = @{
+                FilePath = $stagedScriptPath
+                Certificate = $certificate
+            }
+            if (-not [string]::IsNullOrWhiteSpace($TimestampServer)) {
+                $signArgs['TimestampServer'] = $TimestampServer
+            }
+
+            $signature = Set-AuthenticodeSignature @signArgs
+            $signatureStatus = [string]$signature.Status
+            $signerThumbprint = [string]$certificate.Thumbprint
+            if ($signature.Status -ne 'Valid') {
+                throw "Authenticode signing failed with status $($signature.Status): $($signature.StatusMessage)"
+            }
+        }
+    }
+
+    Compress-Archive -Path (Join-Path $stagingRoot '*') -DestinationPath $zipPath -Force
+    $sha256 = Get-Sha256 -Path $zipPath
+    Set-Utf8Text -Path $sha256Path -Text "$sha256  $([System.IO.Path]::GetFileName($zipPath))`r`n"
+} finally {
+    if ((Test-Path -LiteralPath $stagingRoot) -and $stagingRoot.StartsWith($env:TEMP, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 [pscustomobject]@{
     Version = $version
     ZipPath = $zipPath
+    Sha256Path = $sha256Path
     Sha256 = $sha256
     Length = (Get-Item -LiteralPath $zipPath).Length
+    SignatureStatus = $signatureStatus
+    SignerThumbprint = $signerThumbprint
 }
