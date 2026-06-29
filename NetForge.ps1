@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.41.0
+    Version: 1.42.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -45,7 +45,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.41.0"
+$script:AppVersion = "1.42.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -59,6 +59,7 @@ $script:StringsPath = Join-Path $script:ScriptRoot "strings"
 $script:DefaultLocale = "en-US"
 $script:UiLocale = $script:DefaultLocale
 $script:UiTheme = "GitHub Dark"
+$script:CompactModeEnabled = $false
 $script:StringResources = @{}
 $script:DefaultStringResources = @{}
 $script:LocalizationStatus = "Embedded English UI text"
@@ -105,9 +106,12 @@ $script:NetworkChangeSubscribed = $false
 $script:TrayIcon = $null
 $script:TrayContextMenu = $null
 $script:ThemeSelectorInitializing = $false
+$script:CompactModeInitializing = $false
+$script:CompactOriginalMetrics = @{}
 $script:AccessibilityNames = @{
     lstAdapters = "Network adapter list"
     cmbUiTheme = "Theme selector"
+    chkCompactMode = "Compact mode"
     btnRefresh = "Refresh adapters"
     chkAdvancedAdapters = "Show advanced adapters"
     btnEnableAdapter = "Enable selected adapter"
@@ -229,7 +233,7 @@ $script:AccessibilityNames = @{
     lstHostsGroups = "Hosts group list"
 }
 $script:AccessibilityTabOrder = @(
-    "lstAdapters", "cmbUiTheme", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
+    "lstAdapters", "cmbUiTheme", "chkCompactMode", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
     "txtInterfaceMetric", "chkMetricIPv4", "chkMetricIPv6", "btnApplyMetric", "btnAutoMetric", "btnIPv4FirstMetric", "btnIPv6FirstMetric",
     "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "chkConfigureIPv6Address", "txtIPv6Address", "txtIPv6Prefix", "txtIPv6Gateway", "btnApplyIP",
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
@@ -365,6 +369,9 @@ if (Test-Path -LiteralPath $script:SettingsFile) {
         }
         if ($settings.UiTheme) {
             $script:UiTheme = Resolve-UiThemeName -Name ([string]$settings.UiTheme)
+        }
+        if ($null -ne $settings.CompactMode) {
+            $script:CompactModeEnabled = ([string]$settings.CompactMode).Trim() -match '^(1|true|yes|on|enabled)$'
         }
         if ($null -ne $settings.PublicIpLookupEnabled) {
             $script:PublicIpLookupEnabled = -not (([string]$settings.PublicIpLookupEnabled).Trim() -match '^(0|false|no|off|disabled)$')
@@ -1312,7 +1319,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.41.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.42.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1321,6 +1328,7 @@ function Apply-Localization {
                         <TextBlock Text="Theme" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox x:Name="cmbUiTheme" Width="160" Style="{StaticResource ModernComboBox}"/>
                     </StackPanel>
+                    <CheckBox x:Name="chkCompactMode" Content="Compact" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <Button x:Name="btnRefresh" Content="Refresh Adapters" Style="{StaticResource ModernButton}" Margin="0,0,8,0"/>
                     <Button x:Name="btnExport" Content="Export All" Style="{StaticResource ModernButton}" Margin="0,0,8,0"/>
                     <Button x:Name="btnImport" Content="Import" Style="{StaticResource ModernButton}"/>
@@ -2611,7 +2619,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.41.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.42.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -2838,6 +2846,154 @@ function Save-UiThemeSelection {
     Apply-UiTheme -ThemeName $themeName
     Save-AppSetting -Name "UiTheme" -Value $themeName
     Update-Status "Theme set to $themeName" -Type Success
+}
+
+function Resolve-CompactModeSetting {
+    param($Value)
+
+    return (ConvertTo-SettingsBoolean -Value $Value -DefaultValue $false)
+}
+
+function ConvertTo-ScaledThickness {
+    param(
+        [System.Windows.Thickness]$Thickness,
+        [double]$Scale,
+        [double]$Minimum = 0
+    )
+
+    return New-Object System.Windows.Thickness -ArgumentList @(
+        [Math]::Max($Minimum, [Math]::Round($Thickness.Left * $Scale, 1)),
+        [Math]::Max($Minimum, [Math]::Round($Thickness.Top * $Scale, 1)),
+        [Math]::Max($Minimum, [Math]::Round($Thickness.Right * $Scale, 1)),
+        [Math]::Max($Minimum, [Math]::Round($Thickness.Bottom * $Scale, 1))
+    )
+}
+
+function ConvertTo-CompactFontSize {
+    param(
+        [double]$FontSize,
+        [double]$Scale,
+        [double]$Minimum = 9
+    )
+
+    if ($FontSize -le 0) { return $FontSize }
+    return [Math]::Max($Minimum, [Math]::Round($FontSize * $Scale, 1))
+}
+
+function Get-VisualDescendants {
+    param($Root)
+
+    $items = @()
+    if ($null -eq $Root) { return $items }
+
+    $items += $Root
+    try {
+        $count = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($Root)
+        for ($index = 0; $index -lt $count; $index++) {
+            $child = [System.Windows.Media.VisualTreeHelper]::GetChild($Root, $index)
+            $items += Get-VisualDescendants -Root $child
+        }
+    } catch {
+        return $items
+    }
+
+    return $items
+}
+
+function Get-CompactMetricKey {
+    param($Element)
+
+    return [System.Runtime.CompilerServices.RuntimeHelpers]::GetHashCode($Element).ToString()
+}
+
+function Get-ClrPropertyValue {
+    param(
+        $Object,
+        [string]$PropertyName
+    )
+
+    if ($null -eq $Object) { return $null }
+    $property = $Object.GetType().GetProperty($PropertyName)
+    if ($null -eq $property -or -not $property.CanRead) { return $null }
+    return $property.GetValue($Object, $null)
+}
+
+function Set-ClrPropertyValue {
+    param(
+        $Object,
+        [string]$PropertyName,
+        $Value
+    )
+
+    if ($null -eq $Object) { return }
+    $property = $Object.GetType().GetProperty($PropertyName)
+    if ($null -eq $property -or -not $property.CanWrite) { return }
+    $property.SetValue($Object, $Value, $null)
+}
+
+function Register-CompactOriginalMetrics {
+    param($Element)
+
+    $key = Get-CompactMetricKey -Element $Element
+    if ($script:CompactOriginalMetrics.ContainsKey($key)) { return }
+
+    $script:CompactOriginalMetrics[$key] = [pscustomobject]@{
+        Margin = Get-ClrPropertyValue -Object $Element -PropertyName "Margin"
+        Padding = Get-ClrPropertyValue -Object $Element -PropertyName "Padding"
+        FontSize = Get-ClrPropertyValue -Object $Element -PropertyName "FontSize"
+    }
+}
+
+function Apply-CompactMode {
+    param([bool]$Enabled)
+
+    $script:CompactModeEnabled = $Enabled
+    $window.MinWidth = if ($Enabled) { 900 } else { 1000 }
+    $window.MinHeight = if ($Enabled) { 620 } else { 700 }
+
+    $scale = if ($Enabled) { 0.82 } else { 1.0 }
+    foreach ($element in Get-VisualDescendants -Root $window) {
+        Register-CompactOriginalMetrics -Element $element
+        $key = Get-CompactMetricKey -Element $element
+        $original = $script:CompactOriginalMetrics[$key]
+        if ($null -eq $original) { continue }
+
+        if ($original.Margin -is [System.Windows.Thickness]) {
+            Set-ClrPropertyValue -Object $element -PropertyName "Margin" -Value (ConvertTo-ScaledThickness -Thickness $original.Margin -Scale $scale)
+        }
+        if ($original.Padding -is [System.Windows.Thickness]) {
+            Set-ClrPropertyValue -Object $element -PropertyName "Padding" -Value (ConvertTo-ScaledThickness -Thickness $original.Padding -Scale $scale)
+        }
+        if ($original.FontSize -is [double]) {
+            Set-ClrPropertyValue -Object $element -PropertyName "FontSize" -Value (ConvertTo-CompactFontSize -FontSize $original.FontSize -Scale $scale)
+        }
+    }
+}
+
+function Initialize-CompactModeControl {
+    if ($null -eq $script:chkCompactMode) {
+        Apply-CompactMode -Enabled $script:CompactModeEnabled
+        return
+    }
+
+    $script:CompactModeInitializing = $true
+    try {
+        $script:chkCompactMode.IsChecked = $script:CompactModeEnabled
+    } finally {
+        $script:CompactModeInitializing = $false
+    }
+
+    Apply-CompactMode -Enabled $script:CompactModeEnabled
+}
+
+function Save-CompactModeSelection {
+    if ($script:CompactModeInitializing) { return }
+
+    $enabled = [bool]$script:chkCompactMode.IsChecked
+    Apply-CompactMode -Enabled $enabled
+    Save-AppSetting -Name "CompactMode" -Value $enabled
+    $status = if ($enabled) { "enabled" } else { "disabled" }
+    Update-Status "Compact mode $status" -Type Success
 }
 
 function Initialize-AccessibilityMetadata {
@@ -4382,6 +4538,9 @@ function Refresh-AdapterList {
     }
 
     Update-Status "Found $($adapters.Count) network adapter(s)"
+    if ($script:CompactModeEnabled) {
+        Apply-CompactMode -Enabled $true
+    }
 }
 
 function Get-SelectedAdapter {
@@ -6347,6 +6506,9 @@ function Refresh-DnsPresets {
 
     if ($script:TrayIcon) {
         Update-TrayMenu
+    }
+    if ($script:CompactModeEnabled) {
+        Apply-CompactMode -Enabled $true
     }
 }
 
@@ -8880,6 +9042,9 @@ function Refresh-ProfileList {
     if ($script:TrayIcon) {
         Update-TrayMenu
     }
+    if ($script:CompactModeEnabled) {
+        Apply-CompactMode -Enabled $true
+    }
 }
 
 function Load-ProfileToEditor {
@@ -11096,6 +11261,14 @@ $cmbUiTheme.Add_SelectionChanged({
     Save-UiThemeSelection
 })
 
+$chkCompactMode.Add_Checked({
+    Save-CompactModeSelection
+})
+
+$chkCompactMode.Add_Unchecked({
+    Save-CompactModeSelection
+})
+
 $lstAdapters.Add_SelectionChanged({
     Update-AdapterDisplay
     Refresh-StaticRouteList
@@ -11350,6 +11523,7 @@ Update-ProfileStoreDisplay
 Initialize-AccessibilityMetadata
 Apply-Localization
 Initialize-ThemeSelector
+Initialize-CompactModeControl
 Initialize-SystemTray
 Initialize-EndpointPolicyControls
 Show-RestoreSnapshotButtonState

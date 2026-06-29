@@ -15,7 +15,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### IPv6 & Advanced
 
 ### UX
-- Compact mode for laptops
 
 ## Competitive Research
 - **NetSetMan** — the reference for profile switching; borrow its per-SSID auto-apply pattern.

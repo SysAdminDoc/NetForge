@@ -107,6 +107,7 @@
     "label.bootstrapDns": "Bootstrap DNS",
     "label.channel": "Ch: ",
     "label.channelsBssids": "CHANNELS / BSSIDS",
+    "label.compact": "Compact",
     "label.currentIp": "Current IP",
     "label.currentMac": "Current MAC",
     "label.defaultGateway": "Default Gateway",

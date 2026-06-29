@@ -563,6 +563,37 @@ Describe 'Theme catalog helpers' {
     }
 }
 
+Describe 'Compact mode helpers' {
+    BeforeAll {
+        Add-Type -AssemblyName PresentationFramework
+        Add-Type -AssemblyName WindowsBase
+        Import-NetForgeFunction -Name @(
+            'ConvertTo-SettingsBoolean',
+            'Resolve-CompactModeSetting',
+            'ConvertTo-ScaledThickness',
+            'ConvertTo-CompactFontSize'
+        )
+    }
+
+    It 'normalizes persisted compact mode settings' {
+        Resolve-CompactModeSetting -Value 'enabled' | Should -BeTrue
+        Resolve-CompactModeSetting -Value 'false' | Should -BeFalse
+        Resolve-CompactModeSetting -Value $null | Should -BeFalse
+    }
+
+    It 'scales spacing and font sizes with lower bounds' {
+        $thickness = New-Object System.Windows.Thickness -ArgumentList 10, 20, 0, 5
+        $scaled = ConvertTo-ScaledThickness -Thickness $thickness -Scale 0.82
+
+        $scaled.Left | Should -Be 8.2
+        $scaled.Top | Should -Be 16.4
+        $scaled.Right | Should -Be 0
+        $scaled.Bottom | Should -Be 4.1
+        ConvertTo-CompactFontSize -FontSize 28 -Scale 0.82 | Should -Be 23
+        ConvertTo-CompactFontSize -FontSize 10 -Scale 0.5 | Should -Be 9
+    }
+}
+
 Describe 'Localization resources' {
     BeforeAll {
         Import-NetForgeFunction -Name @(
