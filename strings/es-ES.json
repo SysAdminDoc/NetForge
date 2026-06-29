@@ -28,6 +28,8 @@
     "button.fullNetworkReset": "Restablecer red",
     "button.generate": "Generar",
     "button.import": "Importar",
+    "button.mtr.start": "Iniciar MTR",
+    "button.mtr.stop": "Detener MTR",
     "button.nslookup": "NSLookup",
     "button.ping": "Ping",
     "button.pingTest": "Prueba de ping (10x)",

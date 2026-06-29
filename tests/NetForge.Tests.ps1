@@ -596,6 +596,43 @@ Describe 'Endpoint privacy policy' {
     }
 }
 
+Describe 'MTR history helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'New-MtrHopRecord',
+            'Update-MtrHopHistory',
+            'Format-MtrLatency',
+            'Format-MtrHistoryRows'
+        )
+    }
+
+    It 'aggregates per-hop latency, loss, and destination state' {
+        $history = @{}
+        $history = Update-MtrHopHistory -History $history -ProbeResults @(
+            [pscustomobject]@{ Hop = 1; Address = '192.168.1.1'; LatencyMs = 3; Status = 'TtlExpired'; IsDestination = $false },
+            [pscustomobject]@{ Hop = 2; Address = '8.8.8.8'; LatencyMs = 20; Status = 'Success'; IsDestination = $true }
+        )
+        $history = Update-MtrHopHistory -History $history -ProbeResults @(
+            [pscustomobject]@{ Hop = 1; Address = '192.168.1.1'; LatencyMs = -1; Status = 'TimedOut'; IsDestination = $false },
+            [pscustomobject]@{ Hop = 2; Address = '8.8.8.8'; LatencyMs = 30; Status = 'Success'; IsDestination = $true }
+        )
+
+        $history[1].Sent | Should -Be 2
+        $history[1].Received | Should -Be 1
+        $history[1].LossPercent | Should -Be 50
+        $history[2].BestMs | Should -Be 20
+        $history[2].AvgMs | Should -Be 25
+        $history[2].WorstMs | Should -Be 30
+        $history[2].IsDestination | Should -BeTrue
+
+        $rows = Format-MtrHistoryRows -History $history -Target '8.8.8.8' -Cycle 2
+        $rows | Should -Match 'MTR-style trace to 8.8.8.8'
+        $rows | Should -Match '50%'
+        $rows | Should -Match '8.8.8.8'
+        $rows | Should -Match 'dest'
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

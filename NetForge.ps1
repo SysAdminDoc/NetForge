@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.29.0
+    Version: 1.30.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.29.0"
+$script:AppVersion = "1.30.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -65,6 +65,13 @@ $script:ProfileSchemaVersion = 3
 $script:ProfileStoreLoadWarning = ""
 $script:ContinuousPingRunning = $false
 $script:ContinuousPingPS = $null
+$script:MtrRunning = $false
+$script:MtrProbeRunning = $false
+$script:MtrTimer = $null
+$script:MtrPowerShell = $null
+$script:MtrHistory = @{}
+$script:MtrTarget = ""
+$script:MtrCycle = 0
 $script:CachedPublicIP = $null
 $script:PublicIpLookupEnabled = $true
 $script:ExternalSpeedTestEnabled = $true
@@ -175,6 +182,7 @@ $script:AccessibilityNames = @{
     txtPingTarget = "Network diagnostic target"
     btnPing = "Run ping"
     btnTraceroute = "Run traceroute"
+    btnMtrTrace = "Start MTR trace"
     btnNslookup = "Run NSLookup"
 }
 $script:AccessibilityTabOrder = @(
@@ -186,6 +194,7 @@ $script:AccessibilityTabOrder = @(
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
+    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnNslookup",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy"
 )
 
@@ -590,6 +599,8 @@ function Get-DynamicLocalizationKeyList {
     return @(
         "button.continuousPing.start",
         "button.continuousPing.stop",
+        "button.mtr.start",
+        "button.mtr.stop",
         "button.speedTest.idle",
         "button.speedTest.running",
         "footer.adminStatusFormat"
@@ -1126,7 +1137,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.29.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.30.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2037,6 +2048,7 @@ function Apply-Localization {
                                             <TextBox x:Name="txtPingTarget" Style="{StaticResource ModernTextBox}" Width="300" Text="8.8.8.8" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPing" Content="Ping" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnTraceroute" Content="Traceroute" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnMtrTrace" Content="Start MTR" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnNslookup" Content="NSLookup" Style="{StaticResource ModernButton}"/>
                                         </StackPanel>
 
@@ -2278,7 +2290,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.29.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.30.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -8194,6 +8206,248 @@ function Invoke-Traceroute {
     $timer.Start()
 }
 
+function New-MtrHopRecord {
+    param([int]$Hop)
+
+    return [pscustomobject]@{
+        Hop = $Hop
+        Address = ""
+        Sent = 0
+        Received = 0
+        LossPercent = 100
+        LastMs = -1
+        BestMs = -1
+        AvgMs = -1
+        WorstMs = -1
+        TotalMs = 0
+        LastStatus = ""
+        IsDestination = $false
+    }
+}
+
+function Update-MtrHopHistory {
+    param(
+        [hashtable]$History,
+        [object[]]$ProbeResults
+    )
+
+    if ($null -eq $History) { $History = @{} }
+
+    foreach ($probe in @($ProbeResults)) {
+        if ($null -eq $probe) { continue }
+        $hop = [int]$probe.Hop
+        if ($hop -le 0) { continue }
+
+        if (-not $History.ContainsKey($hop)) {
+            $History[$hop] = New-MtrHopRecord -Hop $hop
+        }
+
+        $record = $History[$hop]
+        $record.Sent = [int]$record.Sent + 1
+        $record.LastStatus = [string]$probe.Status
+        $record.IsDestination = [bool]$probe.IsDestination
+        if (-not [string]::IsNullOrWhiteSpace([string]$probe.Address)) {
+            $record.Address = [string]$probe.Address
+        }
+
+        $latency = [int]$probe.LatencyMs
+        if ($latency -ge 0) {
+            $record.Received = [int]$record.Received + 1
+            $record.LastMs = $latency
+            $record.TotalMs = [int]$record.TotalMs + $latency
+            if ($record.BestMs -lt 0 -or $latency -lt $record.BestMs) { $record.BestMs = $latency }
+            if ($record.WorstMs -lt 0 -or $latency -gt $record.WorstMs) { $record.WorstMs = $latency }
+            $record.AvgMs = [math]::Round(([double]$record.TotalMs / [double]$record.Received), 1)
+        } else {
+            $record.LastMs = -1
+        }
+
+        if ($record.Sent -gt 0) {
+            $record.LossPercent = [math]::Round((([double]($record.Sent - $record.Received) / [double]$record.Sent) * 100), 0)
+        }
+    }
+
+    return $History
+}
+
+function Format-MtrLatency {
+    param($Value)
+
+    if ($null -eq $Value -or [double]$Value -lt 0) { return "*" }
+    return ([string]$Value)
+}
+
+function Format-MtrHistoryRows {
+    param(
+        [hashtable]$History,
+        [string]$Target,
+        [int]$Cycle = 0
+    )
+
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("MTR-style trace to $Target") | Out-Null
+    $sb.AppendLine("Cycle: $Cycle    Updated: $((Get-Date).ToString('HH:mm:ss'))") | Out-Null
+    $sb.AppendLine("") | Out-Null
+    $sb.AppendLine("Hop  Address             Sent Recv Loss  Last  Best  Avg   Worst Status") | Out-Null
+    $sb.AppendLine("---  ------------------  ---- ---- ----- ----- ----- ----- ----- ------") | Out-Null
+
+    foreach ($hop in @($History.Keys | Sort-Object {[int]$_})) {
+        $record = $History[$hop]
+        $address = if ([string]::IsNullOrWhiteSpace($record.Address)) { "*" } else { $record.Address }
+        if ($address.Length -gt 18) { $address = $address.Substring(0, 18) }
+        $status = if ($record.IsDestination) { "dest" } elseif ([string]::IsNullOrWhiteSpace($record.LastStatus)) { "--" } else { $record.LastStatus }
+        if ($status.Length -gt 6) { $status = $status.Substring(0, 6) }
+
+        $line = "{0,3}  {1,-18}  {2,4} {3,4} {4,4}% {5,5} {6,5} {7,5} {8,5} {9}" -f `
+            $record.Hop,
+            $address,
+            $record.Sent,
+            $record.Received,
+            $record.LossPercent,
+            (Format-MtrLatency -Value $record.LastMs),
+            (Format-MtrLatency -Value $record.BestMs),
+            (Format-MtrLatency -Value $record.AvgMs),
+            (Format-MtrLatency -Value $record.WorstMs),
+            $status
+        $sb.AppendLine($line) | Out-Null
+    }
+
+    return $sb.ToString()
+}
+
+function Invoke-MtrProbeCycle {
+    if (-not $script:MtrRunning -or $script:MtrProbeRunning) { return }
+
+    $target = $script:MtrTarget
+    if ([string]::IsNullOrWhiteSpace($target)) { return }
+
+    $script:MtrProbeRunning = $true
+    $script:MtrCycle++
+    $cycle = $script:MtrCycle
+
+    $ps = [PowerShell]::Create()
+    $script:MtrPowerShell = $ps
+    $ps.AddScript({
+        param($targetHost, $maxHops, $timeoutMs)
+
+        $results = @()
+        $buffer = New-Object byte[] 32
+
+        for ($ttl = 1; $ttl -le $maxHops; $ttl++) {
+            $ping = New-Object System.Net.NetworkInformation.Ping
+            $options = New-Object System.Net.NetworkInformation.PingOptions
+            $options.Ttl = $ttl
+            $options.DontFragment = $true
+
+            try {
+                $reply = $ping.Send($targetHost, $timeoutMs, $buffer, $options)
+                $status = $reply.Status.ToString()
+                $address = if ($reply.Address) { $reply.Address.ToString() } else { "" }
+                $latency = if ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success -or $reply.Status -eq [System.Net.NetworkInformation.IPStatus]::TtlExpired) {
+                    [int]$reply.RoundtripTime
+                } else {
+                    -1
+                }
+                $isDestination = ($reply.Status -eq [System.Net.NetworkInformation.IPStatus]::Success)
+                $results += [pscustomobject]@{
+                    Hop = $ttl
+                    Address = $address
+                    LatencyMs = $latency
+                    Status = $status
+                    IsDestination = $isDestination
+                }
+                if ($isDestination) { break }
+            } catch {
+                $results += [pscustomobject]@{
+                    Hop = $ttl
+                    Address = ""
+                    LatencyMs = -1
+                    Status = "Error"
+                    IsDestination = $false
+                }
+            } finally {
+                $ping.Dispose()
+            }
+        }
+
+        return $results
+    }).AddArgument($target).AddArgument(15).AddArgument(1000) | Out-Null
+
+    $handle = $ps.BeginInvoke()
+    $resultTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $resultTimer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $resultTimer.Add_Tick({
+        if ($handle.IsCompleted) {
+            try {
+                $results = @($ps.EndInvoke($handle))
+                $script:MtrHistory = Update-MtrHopHistory -History $script:MtrHistory -ProbeResults $results
+                $script:txtDiagOutput.Text = Format-MtrHistoryRows -History $script:MtrHistory -Target $target -Cycle $cycle
+            } catch {
+                Write-OperationLog -Action "MTR trace" -Result "Warning" -Detail $_.Exception.Message
+                $script:txtDiagOutput.Text = "MTR trace failed: $($_.Exception.Message)"
+            } finally {
+                $script:MtrProbeRunning = $false
+                if ($script:MtrPowerShell -eq $ps) { $script:MtrPowerShell = $null }
+                $ps.Dispose()
+                $resultTimer.Stop()
+            }
+        }
+    }.GetNewClosure())
+    $resultTimer.Start()
+}
+
+function Stop-MtrTrace {
+    if (-not $script:MtrRunning) { return }
+
+    $script:MtrRunning = $false
+    $script:MtrProbeRunning = $false
+    if ($script:MtrTimer) {
+        $script:MtrTimer.Stop()
+        $script:MtrTimer = $null
+    }
+    if ($script:MtrPowerShell) {
+        try {
+            $script:MtrPowerShell.Stop()
+        } catch {
+            Write-OperationLog -Action "MTR trace stop" -Result "Warning" -Detail $_.Exception.Message
+        }
+    }
+
+    $script:btnMtrTrace.Content = Get-UiString -Key "button.mtr.start" -DefaultValue "Start MTR"
+    Update-Status "MTR trace stopped"
+}
+
+function Toggle-MtrTrace {
+    if ($script:MtrRunning) {
+        Stop-MtrTrace
+        return
+    }
+
+    $target = $script:txtPingTarget.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
+        return
+    }
+
+    $script:MtrTarget = $target
+    $script:MtrHistory = @{}
+    $script:MtrCycle = 0
+    $script:MtrRunning = $true
+    $script:MtrProbeRunning = $false
+    $script:btnMtrTrace.Content = Get-UiString -Key "button.mtr.stop" -DefaultValue "Stop MTR"
+    $script:txtDiagOutput.Text = "Starting MTR-style trace to $target..."
+    Update-Status "MTR trace running to $target..."
+    Write-OperationLog -Action "MTR trace" -Result "Started" -Detail "Target=$target"
+
+    $script:MtrTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $script:MtrTimer.Interval = [TimeSpan]::FromSeconds(5)
+    $script:MtrTimer.Add_Tick({
+        Invoke-MtrProbeCycle
+    })
+    $script:MtrTimer.Start()
+    Invoke-MtrProbeCycle
+}
+
 function Invoke-Nslookup {
     $target = $script:txtPingTarget.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($target)) {
@@ -8576,6 +8830,7 @@ $btnResetTCP.Add_Click({ Invoke-ResetTCP })
 $btnNetworkReset.Add_Click({ Invoke-NetworkReset })
 $btnPing.Add_Click({ Invoke-Ping })
 $btnTraceroute.Add_Click({ Invoke-Traceroute })
+$btnMtrTrace.Add_Click({ Toggle-MtrTrace })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
 
 # Diagnostics button handlers
@@ -8617,6 +8872,9 @@ $window.Add_Closing({
     $script:ContinuousPingRunning = $false
     if ($script:ContinuousPingTimer) {
         $script:ContinuousPingTimer.Stop()
+    }
+    if ($script:MtrRunning) {
+        Stop-MtrTrace
     }
     if ($script:EncryptedDnsHealthTimer) {
         $script:EncryptedDnsHealthTimer.Stop()
