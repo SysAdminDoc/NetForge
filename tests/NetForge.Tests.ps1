@@ -355,6 +355,54 @@ Describe 'Localization resources' {
     }
 }
 
+Describe 'Endpoint privacy policy' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'ConvertTo-SettingsBoolean',
+            'Test-HttpsEndpointUri',
+            'Get-PublicIpEndpointList',
+            'Get-SpeedTestEndpointCatalog',
+            'Resolve-SpeedTestEndpoint'
+        )
+    }
+
+    It 'normalizes persisted endpoint policy booleans' {
+        ConvertTo-SettingsBoolean -Value $true -DefaultValue $false | Should -BeTrue
+        ConvertTo-SettingsBoolean -Value 'disabled' -DefaultValue $true | Should -BeFalse
+        ConvertTo-SettingsBoolean -Value 'yes' -DefaultValue $false | Should -BeTrue
+        ConvertTo-SettingsBoolean -Value '' -DefaultValue $true | Should -BeTrue
+    }
+
+    It 'keeps public IP and speed-test endpoint catalogs HTTPS-only' {
+        foreach ($endpoint in Get-PublicIpEndpointList) {
+            Test-HttpsEndpointUri -Uri $endpoint | Should -BeTrue
+        }
+
+        foreach ($endpoint in Get-SpeedTestEndpointCatalog) {
+            Test-HttpsEndpointUri -Uri $endpoint.Url | Should -BeTrue
+        }
+    }
+
+    It 'falls back when a speed-test endpoint is blank, unknown, or non-HTTPS' {
+        $fallback = Resolve-SpeedTestEndpoint -Endpoint ''
+        $fallback.Url | Should -Be 'https://speed.cloudflare.com/__down?bytes=1048576'
+
+        (Resolve-SpeedTestEndpoint -Endpoint 'http://speedtest.example/1MB.bin').Url | Should -Be $fallback.Url
+        (Resolve-SpeedTestEndpoint -Endpoint 'unknown').Url | Should -Be $fallback.Url
+        (Resolve-SpeedTestEndpoint -Endpoint 'OVH 1 MB (HTTPS)').Url | Should -Be 'https://proof.ovh.net/files/1Mb.dat'
+    }
+
+    It 'removes legacy HTTP speed-test fallbacks and gates external calls' {
+        $source = Get-Content -Raw $script:NetForgePath
+
+        $source | Should -Not -Match 'http://speedtest\.tele2\.net'
+        $source | Should -Not -Match 'http://proof\.ovh\.net'
+        $source | Should -Match 'PublicIpLookupEnabled'
+        $source | Should -Match 'ExternalSpeedTestEnabled'
+        $source | Should -Match 'SpeedTestEndpoint'
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

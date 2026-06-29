@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.25.0
+    Version: 1.26.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.25.0"
+$script:AppVersion = "1.26.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -66,6 +66,9 @@ $script:ProfileStoreLoadWarning = ""
 $script:ContinuousPingRunning = $false
 $script:ContinuousPingPS = $null
 $script:CachedPublicIP = $null
+$script:PublicIpLookupEnabled = $true
+$script:ExternalSpeedTestEnabled = $true
+$script:SpeedTestEndpoint = "https://speed.cloudflare.com/__down?bytes=1048576"
 $script:SpeedTestRunning = $false
 $script:WifiScanRunning = $false
 $script:WifiNetworks = @()
@@ -147,6 +150,10 @@ $script:AccessibilityNames = @{
     btnRenewIP = "Renew IP address"
     btnRestoreNetworkState = "Restore last network state"
     btnExportDiagnostics = "Export diagnostics"
+    chkPublicIpLookup = "Enable public IP lookup"
+    chkExternalSpeedTest = "Allow external speed test downloads"
+    cmbSpeedTestEndpoint = "Speed test endpoint"
+    btnSaveEndpointPolicy = "Save endpoint policy"
     btnResetWinsock = "Reset Winsock"
     btnResetTCP = "Reset TCP IP stack"
     btnNetworkReset = "Full network reset"
@@ -161,7 +168,8 @@ $script:AccessibilityTabOrder = @(
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
     "lstProfiles", "btnNewProfile", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
     "txtProfileName", "chkProfileAutoApply", "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
-    "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics"
+    "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
+    "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy"
 )
 
 if (Test-Path -LiteralPath $script:SettingsFile) {
@@ -182,6 +190,15 @@ if (Test-Path -LiteralPath $script:SettingsFile) {
             } else {
                 $script:LocalizationStatus = "Invalid UiLocale in settings.json; using en-US."
             }
+        }
+        if ($null -ne $settings.PublicIpLookupEnabled) {
+            $script:PublicIpLookupEnabled = -not (([string]$settings.PublicIpLookupEnabled).Trim() -match '^(0|false|no|off|disabled)$')
+        }
+        if ($null -ne $settings.ExternalSpeedTestEnabled) {
+            $script:ExternalSpeedTestEnabled = -not (([string]$settings.ExternalSpeedTestEnabled).Trim() -match '^(0|false|no|off|disabled)$')
+        }
+        if ($settings.SpeedTestEndpoint) {
+            $script:SpeedTestEndpoint = [string]$settings.SpeedTestEndpoint
         }
     } catch {
         $script:ProfileStoreLoadWarning = "Could not read settings.json; using local profile storage. $($_.Exception.Message)"
@@ -560,6 +577,66 @@ function Get-DynamicLocalizationKeyList {
         "button.speedTest.running",
         "footer.adminStatusFormat"
     )
+}
+
+function ConvertTo-SettingsBoolean {
+    param(
+        $Value,
+        [bool]$DefaultValue = $false
+    )
+
+    if ($null -eq $Value) { return $DefaultValue }
+    if ($Value -is [bool]) { return [bool]$Value }
+
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return $DefaultValue }
+    if ($text -match '^(1|true|yes|on|enabled)$') { return $true }
+    if ($text -match '^(0|false|no|off|disabled)$') { return $false }
+
+    return $DefaultValue
+}
+
+function Test-HttpsEndpointUri {
+    param([string]$Uri)
+
+    if ([string]::IsNullOrWhiteSpace($Uri)) { return $false }
+
+    $parsedUri = $null
+    if (-not [System.Uri]::TryCreate($Uri.Trim(), [System.UriKind]::Absolute, [ref]$parsedUri)) {
+        return $false
+    }
+
+    return ($parsedUri.Scheme -eq [System.Uri]::UriSchemeHttps)
+}
+
+function Get-PublicIpEndpointList {
+    return @(
+        "https://api.ipify.org",
+        "https://icanhazip.com"
+    )
+}
+
+function Get-SpeedTestEndpointCatalog {
+    return @(
+        [pscustomobject]@{ Name = "Cloudflare 1 MB (HTTPS)"; Url = "https://speed.cloudflare.com/__down?bytes=1048576" },
+        [pscustomobject]@{ Name = "OVH 1 MB (HTTPS)"; Url = "https://proof.ovh.net/files/1Mb.dat" }
+    )
+}
+
+function Resolve-SpeedTestEndpoint {
+    param([string]$Endpoint)
+
+    $catalog = @(Get-SpeedTestEndpointCatalog)
+    $fallback = $catalog[0]
+    if ([string]::IsNullOrWhiteSpace($Endpoint)) { return $fallback }
+
+    foreach ($entry in $catalog) {
+        if ($entry.Url -eq $Endpoint -or $entry.Name -eq $Endpoint) {
+            if (Test-HttpsEndpointUri -Uri $entry.Url) { return $entry }
+        }
+    }
+
+    return $fallback
 }
 
 function Initialize-StringResources {
@@ -1032,7 +1109,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.25.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.26.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1958,6 +2035,37 @@ function Apply-Localization {
                     <TabItem Header="Diagnostics">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel Margin="24">
+                                <!-- Privacy / Endpoint Policy -->
+                                <TextBlock Text="PRIVACY / ENDPOINT POLICY" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,14">
+                                            <CheckBox x:Name="chkPublicIpLookup" Content="Public IP lookup" Style="{StaticResource ModernCheckBox}" IsChecked="True" Margin="0,0,24,0"/>
+                                            <CheckBox x:Name="chkExternalSpeedTest" Content="Allow external speed test downloads" Style="{StaticResource ModernCheckBox}" IsChecked="True"/>
+                                        </StackPanel>
+
+                                        <Grid Grid.Row="1" Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Speed test endpoint" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <ComboBox x:Name="cmbSpeedTestEndpoint" Grid.Column="1" Style="{StaticResource ModernComboBox}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnSaveEndpointPolicy" Grid.Column="2" Content="Save Policy" Style="{StaticResource PrimaryButton}" Padding="16,8"/>
+                                        </Grid>
+
+                                        <TextBlock x:Name="txtEndpointPolicyStatus" Grid.Row="2" Text="Endpoint policy settings load from settings.json." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Ping Test -->
                                 <TextBlock Text="PING / LATENCY MONITOR" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
 
@@ -2080,7 +2188,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.25.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.26.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3912,26 +4020,53 @@ function Invoke-WifiDisconnect {
 }
 
 function Update-PublicIP {
+    if (-not $script:PublicIpLookupEnabled) {
+        $script:CachedPublicIP = $null
+        if ($script:txtConnPublicIP) {
+            $script:txtConnPublicIP.Text = "Disabled"
+        }
+        Set-EndpointPolicyStatus -Message "Public IP lookup is disabled. No public-IP endpoint contacted."
+        Write-OperationLog -Action "PublicIPLookup" -Result "Skipped" -Detail "Public IP lookup disabled by endpoint policy."
+        return
+    }
+
+    $endpointList = @(Get-PublicIpEndpointList | Where-Object { Test-HttpsEndpointUri -Uri $_ })
     $ps = [PowerShell]::Create()
     $ps.AddScript({
-        try {
-            $wc = New-Object System.Net.WebClient
-            $wc.Headers.Add("User-Agent", "NetForge/$script:AppVersion")
-            $ip = $wc.DownloadString("https://api.ipify.org").Trim()
-            $wc.Dispose()
-            return $ip
-        } catch {
+        param(
+            [string[]]$EndpointList,
+            [string]$AppVersion
+        )
+
+        $lastEndpoint = ""
+        $lastError = ""
+        foreach ($endpoint in $EndpointList) {
+            $lastEndpoint = $endpoint
+            $wc = $null
             try {
-                $wc2 = New-Object System.Net.WebClient
-                $wc2.Headers.Add("User-Agent", "NetForge/$script:AppVersion")
-                $ip = $wc2.DownloadString("https://icanhazip.com").Trim()
-                $wc2.Dispose()
-                return $ip
+                $wc = New-Object System.Net.WebClient
+                $wc.Headers.Add("User-Agent", "NetForge/$AppVersion")
+                $ip = $wc.DownloadString($endpoint).Trim()
+                return [pscustomobject]@{
+                    Success = $true
+                    IP = $ip
+                    Endpoint = $endpoint
+                    Error = ""
+                }
             } catch {
-                return "Error"
+                $lastError = $_.Exception.Message
+            } finally {
+                if ($wc) { $wc.Dispose() }
             }
         }
-    })
+
+        return [pscustomobject]@{
+            Success = $false
+            IP = "Error"
+            Endpoint = $lastEndpoint
+            Error = $lastError
+        }
+    }).AddArgument($endpointList).AddArgument($script:AppVersion)
 
     $handle = $ps.BeginInvoke()
 
@@ -3942,11 +4077,21 @@ function Update-PublicIP {
             try {
                 $result = $ps.EndInvoke($handle)
                 if ($result -and $result.Count -gt 0) {
-                    $script:CachedPublicIP = $result[0]
-                    $script:txtConnPublicIP.Text = $result[0]
+                    $info = $result[0]
+                    if ($info.Success) {
+                        $script:CachedPublicIP = $info.IP
+                        $script:txtConnPublicIP.Text = $info.IP
+                        Write-OperationLog -Action "PublicIPLookup" -Result "Success" -Detail "Endpoint=$($info.Endpoint)"
+                        Set-EndpointPolicyStatus -Message "Last public-IP endpoint: $($info.Endpoint)."
+                    } else {
+                        $script:txtConnPublicIP.Text = "Error"
+                        Write-OperationLog -Action "PublicIPLookup" -Result "Error" -Detail "Endpoint=$($info.Endpoint); $($info.Error)"
+                        Set-EndpointPolicyStatus -Message "Public-IP lookup failed. Last endpoint: $($info.Endpoint)."
+                    }
                 }
             } catch {
                 $script:txtConnPublicIP.Text = "Error"
+                Write-OperationLog -Action "PublicIPLookup" -Result "Error" -Detail $_.Exception.Message
             }
             $ps.Dispose()
             $timer.Stop()
@@ -4173,10 +4318,30 @@ function Toggle-ContinuousPing {
 # ============================================================================
 function Invoke-SpeedTest {
     if ($script:SpeedTestRunning) { return }
+    if (-not $script:ExternalSpeedTestEnabled) {
+        $script:txtSpeedDown.Text = "--"
+        $script:txtSpeedSize.Text = "--"
+        $script:txtSpeedTime.Text = "--"
+        Set-EndpointPolicyStatus -Message "External speed test downloads are disabled. No speed-test endpoint contacted."
+        Write-OperationLog -Action "SpeedTest" -Result "Skipped" -Detail "External speed test downloads disabled by endpoint policy."
+        Update-Status "External speed test downloads disabled" -Type Warning
+        return
+    }
+
+    $endpoint = Resolve-SpeedTestEndpoint -Endpoint $script:SpeedTestEndpoint
+    if (-not (Test-HttpsEndpointUri -Uri $endpoint.Url)) {
+        Update-Status "Speed test endpoint must use HTTPS" -Type Error
+        Set-EndpointPolicyStatus -Message "Speed test endpoint rejected because it is not HTTPS."
+        Write-OperationLog -Action "SpeedTest" -Result "Rejected" -Detail "Endpoint=$($endpoint.Url)"
+        return
+    }
+
     $script:SpeedTestRunning = $true
     $script:btnSpeedTest.IsEnabled = $false
     $script:btnSpeedTest.Content = Get-UiString -Key "button.speedTest.running" -DefaultValue "Testing..."
     Update-Status "Running speed test..."
+    Set-EndpointPolicyStatus -Message "Last speed-test endpoint: $($endpoint.Url)."
+    Write-OperationLog -Action "SpeedTestEndpoint" -Result "Contact" -Detail "Endpoint=$($endpoint.Url)"
 
     $script:txtSpeedDown.Text = "..."
     $script:txtSpeedSize.Text = "..."
@@ -4184,56 +4349,43 @@ function Invoke-SpeedTest {
 
     $ps = [PowerShell]::Create()
     $ps.AddScript({
+        param(
+            [string]$Url,
+            [string]$AppVersion
+        )
+
+        $wc = $null
         try {
-            # Use a ~10MB test file from a reliable CDN
-            $url = "http://speedtest.tele2.net/10MB.zip"
             $wc = New-Object System.Net.WebClient
-            $wc.Headers.Add("User-Agent", "NetForge/$script:AppVersion")
+            $wc.Headers.Add("User-Agent", "NetForge/$AppVersion")
 
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            $data = $wc.DownloadData($url)
+            $data = $wc.DownloadData($Url)
             $sw.Stop()
-            $wc.Dispose()
 
             $sizeBytes = $data.Length
             $sizeMB = [math]::Round($sizeBytes / 1MB, 2)
             $elapsed = $sw.Elapsed.TotalSeconds
             $speedMbps = [math]::Round(($sizeBytes * 8) / ($elapsed * 1000000), 2)
 
-            return @{
+            return [pscustomobject]@{
                 SpeedMbps = $speedMbps
                 SizeMB = $sizeMB
                 Seconds = [math]::Round($elapsed, 2)
                 Success = $true
+                Endpoint = $Url
+                Error = ""
             }
         } catch {
-            # Fallback URL
-            try {
-                $url2 = "http://proof.ovh.net/files/1Mb.dat"
-                $wc2 = New-Object System.Net.WebClient
-                $wc2.Headers.Add("User-Agent", "NetForge/$script:AppVersion")
-
-                $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
-                $data2 = $wc2.DownloadData($url2)
-                $sw2.Stop()
-                $wc2.Dispose()
-
-                $sizeBytes2 = $data2.Length
-                $sizeMB2 = [math]::Round($sizeBytes2 / 1MB, 2)
-                $elapsed2 = $sw2.Elapsed.TotalSeconds
-                $speedMbps2 = [math]::Round(($sizeBytes2 * 8) / ($elapsed2 * 1000000), 2)
-
-                return @{
-                    SpeedMbps = $speedMbps2
-                    SizeMB = $sizeMB2
-                    Seconds = [math]::Round($elapsed2, 2)
-                    Success = $true
-                }
-            } catch {
-                return @{ Success = $false; Error = $_.Exception.Message }
+            return [pscustomobject]@{
+                Success = $false
+                Error = $_.Exception.Message
+                Endpoint = $Url
             }
+        } finally {
+            if ($wc) { $wc.Dispose() }
         }
-    })
+    }).AddArgument($endpoint.Url).AddArgument($script:AppVersion)
 
     $handle = $ps.BeginInvoke()
 
@@ -4249,16 +4401,19 @@ function Invoke-SpeedTest {
                         $script:txtSpeedDown.Text = $info.SpeedMbps.ToString()
                         $script:txtSpeedSize.Text = $info.SizeMB.ToString()
                         $script:txtSpeedTime.Text = $info.Seconds.ToString()
+                        Write-OperationLog -Action "SpeedTest" -Result "Success" -Detail "Endpoint=$($info.Endpoint); Mbps=$($info.SpeedMbps); SizeMB=$($info.SizeMB); Seconds=$($info.Seconds)"
                         Update-Status ("Speed test complete: " + $info.SpeedMbps.ToString() + " Mbps") -Type Success
                     } else {
                         $script:txtSpeedDown.Text = "ERR"
                         $script:txtSpeedSize.Text = "--"
                         $script:txtSpeedTime.Text = "--"
+                        Write-OperationLog -Action "SpeedTest" -Result "Error" -Detail "Endpoint=$($info.Endpoint); $($info.Error)"
                         Update-Status "Speed test failed" -Type Error
                     }
                 }
             } catch {
                 $script:txtSpeedDown.Text = "ERR"
+                Write-OperationLog -Action "SpeedTest" -Result "Error" -Detail $_.Exception.Message
                 Update-Status "Speed test error" -Type Error
             }
             $ps.Dispose()
@@ -6103,6 +6258,84 @@ function Save-AppSetting {
     }
 }
 
+function Set-EndpointPolicyStatus {
+    param([string]$Message)
+
+    if ($script:txtEndpointPolicyStatus) {
+        $script:txtEndpointPolicyStatus.Text = $Message
+    }
+}
+
+function Initialize-EndpointPolicyControls {
+    if ($script:chkPublicIpLookup) {
+        $script:chkPublicIpLookup.IsChecked = [bool]$script:PublicIpLookupEnabled
+    }
+    if ($script:chkExternalSpeedTest) {
+        $script:chkExternalSpeedTest.IsChecked = [bool]$script:ExternalSpeedTestEnabled
+    }
+    if ($script:cmbSpeedTestEndpoint) {
+        $script:cmbSpeedTestEndpoint.Items.Clear()
+        $selectedEndpoint = Resolve-SpeedTestEndpoint -Endpoint $script:SpeedTestEndpoint
+
+        foreach ($endpoint in Get-SpeedTestEndpointCatalog) {
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = $endpoint.Name
+            $item.Tag = $endpoint.Url
+            [void]$script:cmbSpeedTestEndpoint.Items.Add($item)
+            if ($endpoint.Url -eq $selectedEndpoint.Url) {
+                $script:cmbSpeedTestEndpoint.SelectedItem = $item
+            }
+        }
+
+        $script:SpeedTestEndpoint = $selectedEndpoint.Url
+    }
+
+    if ($script:btnSpeedTest) {
+        $script:btnSpeedTest.IsEnabled = [bool]$script:ExternalSpeedTestEnabled
+    }
+
+    $speedLabel = if ($script:ExternalSpeedTestEnabled) { (Resolve-SpeedTestEndpoint -Endpoint $script:SpeedTestEndpoint).Name } else { "disabled" }
+    $publicLabel = if ($script:PublicIpLookupEnabled) { "enabled" } else { "disabled" }
+    Set-EndpointPolicyStatus -Message "Public IP lookup: $publicLabel. Speed test endpoint: $speedLabel."
+}
+
+function Save-EndpointPolicySettings {
+    $publicEnabled = ($script:chkPublicIpLookup -and $script:chkPublicIpLookup.IsChecked -eq $true)
+    $speedEnabled = ($script:chkExternalSpeedTest -and $script:chkExternalSpeedTest.IsChecked -eq $true)
+    $endpointUrl = $script:SpeedTestEndpoint
+
+    if ($script:cmbSpeedTestEndpoint -and $script:cmbSpeedTestEndpoint.SelectedItem) {
+        $endpointUrl = [string]$script:cmbSpeedTestEndpoint.SelectedItem.Tag
+    }
+
+    $endpoint = Resolve-SpeedTestEndpoint -Endpoint $endpointUrl
+    if (-not (Test-HttpsEndpointUri -Uri $endpoint.Url)) {
+        $endpoint = Resolve-SpeedTestEndpoint -Endpoint ""
+    }
+
+    $script:PublicIpLookupEnabled = $publicEnabled
+    $script:ExternalSpeedTestEnabled = $speedEnabled
+    $script:SpeedTestEndpoint = $endpoint.Url
+
+    Save-AppSetting -Name "PublicIpLookupEnabled" -Value $publicEnabled
+    Save-AppSetting -Name "ExternalSpeedTestEnabled" -Value $speedEnabled
+    Save-AppSetting -Name "SpeedTestEndpoint" -Value $endpoint.Url
+
+    if ($script:btnSpeedTest) {
+        $script:btnSpeedTest.IsEnabled = $speedEnabled
+    }
+    if (-not $publicEnabled -and $script:txtConnPublicIP) {
+        $script:CachedPublicIP = $null
+        $script:txtConnPublicIP.Text = "Disabled"
+    } elseif ($publicEnabled -and $script:txtConnPublicIP -and $script:txtConnPublicIP.Text -eq "Disabled") {
+        Update-PublicIP
+    }
+
+    Write-OperationLog -Action "EndpointPolicy" -Result "Saved" -Detail "PublicIpLookupEnabled=$publicEnabled; ExternalSpeedTestEnabled=$speedEnabled; SpeedTestEndpoint=$($endpoint.Url)"
+    Set-EndpointPolicyStatus -Message "Policy saved. Public IP lookup: $publicEnabled. Speed test endpoint: $($endpoint.Name)."
+    Update-Status "Endpoint policy saved" -Type Success
+}
+
 function Test-ProfileStorePath {
     param(
         [string]$Path,
@@ -7489,6 +7722,7 @@ $btnDiagPing.Add_Click({ Invoke-DiagPingTest })
 $btnContinuousPing.Add_Click({ Toggle-ContinuousPing })
 $btnSpeedTest.Add_Click({ Invoke-SpeedTest })
 $btnDnsLookup.Add_Click({ Invoke-DnsLookup })
+$btnSaveEndpointPolicy.Add_Click({ Save-EndpointPolicySettings })
 
 # ============================================================================
 # CONNECTION STATUS TIMER (auto-refresh every 30 seconds)
@@ -7545,6 +7779,7 @@ Refresh-ProfileList
 Update-ProfileStoreDisplay
 Initialize-AccessibilityMetadata
 Apply-Localization
+Initialize-EndpointPolicyControls
 Show-RestoreSnapshotButtonState
 Update-ConnectionStatus
 Update-PublicIP

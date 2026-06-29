@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.25.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.26.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -26,7 +26,7 @@
 
 ### Connection Status Bar
 - Real-time connected/disconnected indicator with colored dot
-- Local IP, public IP (cached via api.ipify.org), gateway display
+- Local IP, optional public IP lookup, gateway display
 - Connection type detection (Ethernet/WiFi/VPN/Bluetooth PAN/Cellular)
 - WiFi details: SSID, signal strength %, channel, band, auth type, link speed
 - Auto-refresh every 30 seconds
@@ -105,7 +105,8 @@
 ### Diagnostics Tab
 - **Ping Test**: 10-ping burst with min/avg/max/loss statistics
 - **Continuous Ping**: Toggle on/off, pings every 2 seconds with color-coded results (green <50ms, yellow 50-100ms, red >100ms)
-- **Speed Test**: Downloads ~10MB test file, calculates download speed in Mbps
+- **Endpoint Policy**: Disable public-IP lookup, disable external speed-test downloads, and choose the HTTPS-only speed-test endpoint
+- **Speed Test**: Downloads from the selected HTTPS endpoint and logs the contacted endpoint
 - **DNS Lookup**: Resolve any domain to IP addresses, shows responding DNS server
 
 ### Modern Interface
@@ -176,7 +177,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.25.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.26.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
@@ -205,6 +206,10 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Go to the WiFi tab
    - Click "Scan Networks"
    - Select a network and click "Connect" or "Disconnect"
+6. **Control external diagnostics**:
+   - Go to Diagnostics
+   - Disable public-IP lookup or external speed-test downloads when working offline or privately
+   - Select the HTTPS speed-test endpoint and click "Save Policy"
 
 ### DNS Presets Quick Reference
 
@@ -229,6 +234,7 @@ NetForge stores its configuration in:
 ```
 
 Set `UiLocale` in `settings.json` to a shipped locale such as `en-US` or `es-ES` to change the UI language on the next launch.
+Set `PublicIpLookupEnabled`, `ExternalSpeedTestEnabled`, and `SpeedTestEndpoint` in `settings.json` or use the Diagnostics endpoint-policy panel to control external diagnostic calls.
 
 ## Troubleshooting
 

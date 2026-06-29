@@ -80,14 +80,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 
 ## Research-Driven Additions
 
-### P2
-- [ ] P2 - Add configurable offline/privacy endpoints
-  Why: Public-IP and speed-test features contact third-party endpoints automatically or on demand without user-visible endpoint policy.
-  Evidence: `NetForge.ps1:3037-3068`, `NetForge.ps1:3293-3394`.
-  Touches: settings file, status bar public IP, speed test, diagnostics settings UI.
-  Acceptance: Users can disable public-IP lookup, select HTTPS-only speed-test endpoints, see last-contacted endpoint in logs, and run diagnostics without external calls.
-  Complexity: M
-
 ### P3
 - [ ] P3 - Add optional standard-user helper service
   Why: Running the entire GUI elevated increases blast radius; a small broker can constrain privileged network mutations.
