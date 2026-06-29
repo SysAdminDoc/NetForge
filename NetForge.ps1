@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.40.0
+    Version: 1.41.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -45,7 +45,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.40.0"
+$script:AppVersion = "1.41.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -58,6 +58,7 @@ $script:DnsCatalogStatus = "Embedded DNS preset defaults"
 $script:StringsPath = Join-Path $script:ScriptRoot "strings"
 $script:DefaultLocale = "en-US"
 $script:UiLocale = $script:DefaultLocale
+$script:UiTheme = "GitHub Dark"
 $script:StringResources = @{}
 $script:DefaultStringResources = @{}
 $script:LocalizationStatus = "Embedded English UI text"
@@ -103,8 +104,10 @@ $script:NetworkChangeHandlers = @{}
 $script:NetworkChangeSubscribed = $false
 $script:TrayIcon = $null
 $script:TrayContextMenu = $null
+$script:ThemeSelectorInitializing = $false
 $script:AccessibilityNames = @{
     lstAdapters = "Network adapter list"
+    cmbUiTheme = "Theme selector"
     btnRefresh = "Refresh adapters"
     chkAdvancedAdapters = "Show advanced adapters"
     btnEnableAdapter = "Enable selected adapter"
@@ -226,7 +229,7 @@ $script:AccessibilityNames = @{
     lstHostsGroups = "Hosts group list"
 }
 $script:AccessibilityTabOrder = @(
-    "lstAdapters", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
+    "lstAdapters", "cmbUiTheme", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
     "txtInterfaceMetric", "chkMetricIPv4", "chkMetricIPv6", "btnApplyMetric", "btnAutoMetric", "btnIPv4FirstMetric", "btnIPv6FirstMetric",
     "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "chkConfigureIPv6Address", "txtIPv6Address", "txtIPv6Prefix", "txtIPv6Gateway", "btnApplyIP",
     "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
@@ -241,6 +244,105 @@ $script:AccessibilityTabOrder = @(
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy",
     "txtDiagPingTarget", "btnDiagPing", "btnContinuousPing", "txtLatencyHistogramSeconds", "btnLatencyHistogram"
 )
+
+function Get-UiThemeCatalog {
+    return [ordered]@{
+        "GitHub Dark" = [ordered]@{
+            BgPrimary = "#0d1117"
+            BgSecondary = "#161b22"
+            BgTertiary = "#21262d"
+            BgStatus = "#0f1318"
+            BorderColor = "#30363d"
+            AccentBlue = "#58a6ff"
+            AccentGreen = "#3fb950"
+            AccentOrange = "#d29922"
+            AccentRed = "#f85149"
+            AccentPurple = "#a371f7"
+            TextPrimary = "#f0f6fc"
+            TextSecondary = "#8b949e"
+            TextMuted = "#6e7681"
+            ButtonHover = "#30363d"
+            ButtonPressed = "#282e36"
+            SuccessButton = "#238636"
+            SuccessButtonHover = "#2ea043"
+            DangerButtonBg = "#21262d"
+            DangerButtonHover = "#26f85149"
+            DangerButtonPressed = "#40f85149"
+            ListItemHover = "#1f2428"
+            ListItemSelected = "#261f6feb"
+        }
+        "Catppuccin Mocha" = [ordered]@{
+            BgPrimary = "#1e1e2e"
+            BgSecondary = "#181825"
+            BgTertiary = "#313244"
+            BgStatus = "#11111b"
+            BorderColor = "#45475a"
+            AccentBlue = "#89b4fa"
+            AccentGreen = "#a6e3a1"
+            AccentOrange = "#fab387"
+            AccentRed = "#f38ba8"
+            AccentPurple = "#cba6f7"
+            TextPrimary = "#cdd6f4"
+            TextSecondary = "#bac2de"
+            TextMuted = "#6c7086"
+            ButtonHover = "#45475a"
+            ButtonPressed = "#313244"
+            SuccessButton = "#3d7a50"
+            SuccessButtonHover = "#4f8f63"
+            DangerButtonBg = "#313244"
+            DangerButtonHover = "#26f38ba8"
+            DangerButtonPressed = "#40f38ba8"
+            ListItemHover = "#313244"
+            ListItemSelected = "#2689b4fa"
+        }
+        "Nord" = [ordered]@{
+            BgPrimary = "#2e3440"
+            BgSecondary = "#3b4252"
+            BgTertiary = "#434c5e"
+            BgStatus = "#242933"
+            BorderColor = "#4c566a"
+            AccentBlue = "#88c0d0"
+            AccentGreen = "#a3be8c"
+            AccentOrange = "#ebcb8b"
+            AccentRed = "#bf616a"
+            AccentPurple = "#b48ead"
+            TextPrimary = "#eceff4"
+            TextSecondary = "#d8dee9"
+            TextMuted = "#aeb6c4"
+            ButtonHover = "#4c566a"
+            ButtonPressed = "#3b4252"
+            SuccessButton = "#5e8a65"
+            SuccessButtonHover = "#6f9a75"
+            DangerButtonBg = "#3b4252"
+            DangerButtonHover = "#26bf616a"
+            DangerButtonPressed = "#40bf616a"
+            ListItemHover = "#3b4252"
+            ListItemSelected = "#2688c0d0"
+        }
+    }
+}
+
+function Get-UiThemeNames {
+    return @((Get-UiThemeCatalog).Keys)
+}
+
+function Resolve-UiThemeName {
+    param([string]$Name)
+
+    $themes = Get-UiThemeCatalog
+    $candidate = ([string]$Name).Trim()
+    if ([string]::IsNullOrWhiteSpace($candidate)) {
+        return "GitHub Dark"
+    }
+
+    foreach ($themeName in $themes.Keys) {
+        if ($themeName -ieq $candidate) {
+            return $themeName
+        }
+    }
+
+    return "GitHub Dark"
+}
 
 if (Test-Path -LiteralPath $script:SettingsFile) {
     try {
@@ -260,6 +362,9 @@ if (Test-Path -LiteralPath $script:SettingsFile) {
             } else {
                 $script:LocalizationStatus = "Invalid UiLocale in settings.json; using en-US."
             }
+        }
+        if ($settings.UiTheme) {
+            $script:UiTheme = Resolve-UiThemeName -Name ([string]$settings.UiTheme)
         }
         if ($null -ne $settings.PublicIpLookupEnabled) {
             $script:PublicIpLookupEnabled = -not (([string]$settings.PublicIpLookupEnabled).Trim() -match '^(0|false|no|off|disabled)$')
@@ -841,6 +946,7 @@ function Apply-Localization {
         <Color x:Key="BgPrimary">#0d1117</Color>
         <Color x:Key="BgSecondary">#161b22</Color>
         <Color x:Key="BgTertiary">#21262d</Color>
+        <Color x:Key="BgStatus">#0f1318</Color>
         <Color x:Key="BorderColor">#30363d</Color>
         <Color x:Key="AccentBlue">#58a6ff</Color>
         <Color x:Key="AccentGreen">#3fb950</Color>
@@ -850,10 +956,20 @@ function Apply-Localization {
         <Color x:Key="TextPrimary">#f0f6fc</Color>
         <Color x:Key="TextSecondary">#8b949e</Color>
         <Color x:Key="TextMuted">#6e7681</Color>
+        <Color x:Key="ButtonHover">#30363d</Color>
+        <Color x:Key="ButtonPressed">#282e36</Color>
+        <Color x:Key="SuccessButton">#238636</Color>
+        <Color x:Key="SuccessButtonHover">#2ea043</Color>
+        <Color x:Key="DangerButtonBg">#21262d</Color>
+        <Color x:Key="DangerButtonHover">#26f85149</Color>
+        <Color x:Key="DangerButtonPressed">#40f85149</Color>
+        <Color x:Key="ListItemHover">#1f2428</Color>
+        <Color x:Key="ListItemSelected">#261f6feb</Color>
 
         <SolidColorBrush x:Key="BgPrimaryBrush" Color="{StaticResource BgPrimary}"/>
         <SolidColorBrush x:Key="BgSecondaryBrush" Color="{StaticResource BgSecondary}"/>
         <SolidColorBrush x:Key="BgTertiaryBrush" Color="{StaticResource BgTertiary}"/>
+        <SolidColorBrush x:Key="BgStatusBrush" Color="{StaticResource BgStatus}"/>
         <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}"/>
         <SolidColorBrush x:Key="AccentBlueBrush" Color="{StaticResource AccentBlue}"/>
         <SolidColorBrush x:Key="AccentGreenBrush" Color="{StaticResource AccentGreen}"/>
@@ -863,6 +979,15 @@ function Apply-Localization {
         <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimary}"/>
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondary}"/>
         <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}"/>
+        <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHover}"/>
+        <SolidColorBrush x:Key="ButtonPressedBrush" Color="{StaticResource ButtonPressed}"/>
+        <SolidColorBrush x:Key="SuccessButtonBrush" Color="{StaticResource SuccessButton}"/>
+        <SolidColorBrush x:Key="SuccessButtonHoverBrush" Color="{StaticResource SuccessButtonHover}"/>
+        <SolidColorBrush x:Key="DangerButtonBgBrush" Color="{StaticResource DangerButtonBg}"/>
+        <SolidColorBrush x:Key="DangerButtonHoverBrush" Color="{StaticResource DangerButtonHover}"/>
+        <SolidColorBrush x:Key="DangerButtonPressedBrush" Color="{StaticResource DangerButtonPressed}"/>
+        <SolidColorBrush x:Key="ListItemHoverBrush" Color="{StaticResource ListItemHover}"/>
+        <SolidColorBrush x:Key="ListItemSelectedBrush" Color="{StaticResource ListItemSelected}"/>
 
         <!-- Button Style -->
         <Style x:Key="ModernButton" TargetType="Button">
@@ -885,11 +1010,11 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#30363d"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource ButtonHoverBrush}"/>
                                 <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#282e36"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource ButtonPressedBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5"/>
@@ -902,8 +1027,8 @@ function Apply-Localization {
 
         <!-- Primary Button Style -->
         <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="#238636"/>
-            <Setter Property="BorderBrush" Value="#2ea043"/>
+            <Setter Property="Background" Value="{StaticResource SuccessButtonBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource SuccessButtonHoverBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -914,10 +1039,10 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#2ea043"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource SuccessButtonHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#238636"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource SuccessButtonBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5"/>
@@ -930,7 +1055,7 @@ function Apply-Localization {
 
         <!-- Danger Button Style -->
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="#21262d"/>
+            <Setter Property="Background" Value="{StaticResource DangerButtonBgBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
             <Setter Property="Template">
@@ -943,10 +1068,10 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#f8514926"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource DangerButtonHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#f8514940"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource DangerButtonPressedBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5"/>
@@ -1047,10 +1172,10 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#1f2428"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource ListItemHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#1f6feb26"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource ListItemSelectedBrush}"/>
                                 <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
                                 <Setter TargetName="border" Property="BorderThickness" Value="2,0,0,1"/>
                             </Trigger>
@@ -1187,11 +1312,15 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.40.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.41.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="Theme" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="cmbUiTheme" Width="160" Style="{StaticResource ModernComboBox}"/>
+                    </StackPanel>
                     <Button x:Name="btnRefresh" Content="Refresh Adapters" Style="{StaticResource ModernButton}" Margin="0,0,8,0"/>
                     <Button x:Name="btnExport" Content="Export All" Style="{StaticResource ModernButton}" Margin="0,0,8,0"/>
                     <Button x:Name="btnImport" Content="Import" Style="{StaticResource ModernButton}"/>
@@ -1200,7 +1329,7 @@ function Apply-Localization {
         </Border>
 
         <!-- Connection Status Bar -->
-        <Border Grid.Row="1" Background="#0f1318" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,10">
+        <Border Grid.Row="1" Background="{StaticResource BgStatusBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -2482,7 +2611,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.40.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.41.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -2611,6 +2740,105 @@ function Show-MessageBox {
 }
 
 Register-CrashHandler
+
+function Set-ThemeBrushColor {
+    param(
+        [string]$BrushKey,
+        [string]$Color
+    )
+
+    if ([string]::IsNullOrWhiteSpace($BrushKey) -or [string]::IsNullOrWhiteSpace($Color)) { return }
+
+    $brush = $window.Resources[$BrushKey]
+    $wpfColor = [System.Windows.Media.ColorConverter]::ConvertFromString($Color)
+    if ($brush -is [System.Windows.Media.SolidColorBrush]) {
+        $brush.Color = $wpfColor
+    } else {
+        $window.Resources[$BrushKey] = New-Object System.Windows.Media.SolidColorBrush $wpfColor
+    }
+}
+
+function Apply-UiTheme {
+    param([string]$ThemeName)
+
+    $resolvedName = Resolve-UiThemeName -Name $ThemeName
+    $theme = (Get-UiThemeCatalog)[$resolvedName]
+    $script:UiTheme = $resolvedName
+
+    $brushMap = [ordered]@{
+        BgPrimaryBrush = "BgPrimary"
+        BgSecondaryBrush = "BgSecondary"
+        BgTertiaryBrush = "BgTertiary"
+        BgStatusBrush = "BgStatus"
+        BorderBrush = "BorderColor"
+        AccentBlueBrush = "AccentBlue"
+        AccentGreenBrush = "AccentGreen"
+        AccentOrangeBrush = "AccentOrange"
+        AccentRedBrush = "AccentRed"
+        AccentPurpleBrush = "AccentPurple"
+        TextPrimaryBrush = "TextPrimary"
+        TextSecondaryBrush = "TextSecondary"
+        TextMutedBrush = "TextMuted"
+        ButtonHoverBrush = "ButtonHover"
+        ButtonPressedBrush = "ButtonPressed"
+        SuccessButtonBrush = "SuccessButton"
+        SuccessButtonHoverBrush = "SuccessButtonHover"
+        DangerButtonBgBrush = "DangerButtonBg"
+        DangerButtonHoverBrush = "DangerButtonHover"
+        DangerButtonPressedBrush = "DangerButtonPressed"
+        ListItemHoverBrush = "ListItemHover"
+        ListItemSelectedBrush = "ListItemSelected"
+    }
+
+    foreach ($brushKey in $brushMap.Keys) {
+        Set-ThemeBrushColor -BrushKey $brushKey -Color $theme[$brushMap[$brushKey]]
+    }
+
+    $window.Background = $window.Resources["BgPrimaryBrush"]
+    Write-OperationLog -Action "UI theme" -Result "Applied" -Detail $resolvedName
+}
+
+function Initialize-ThemeSelector {
+    if ($null -eq $script:cmbUiTheme) {
+        Apply-UiTheme -ThemeName $script:UiTheme
+        return
+    }
+
+    $script:ThemeSelectorInitializing = $true
+    try {
+        $script:cmbUiTheme.Items.Clear()
+        foreach ($themeName in Get-UiThemeNames) {
+            $item = New-Object System.Windows.Controls.ComboBoxItem
+            $item.Content = $themeName
+            $item.Tag = $themeName
+            [void]$script:cmbUiTheme.Items.Add($item)
+            if ($themeName -eq $script:UiTheme) {
+                $script:cmbUiTheme.SelectedItem = $item
+            }
+        }
+
+        if ($null -eq $script:cmbUiTheme.SelectedItem -and $script:cmbUiTheme.Items.Count -gt 0) {
+            $script:cmbUiTheme.SelectedIndex = 0
+            $selected = $script:cmbUiTheme.SelectedItem
+            if ($selected -and $selected.Tag) {
+                $script:UiTheme = [string]$selected.Tag
+            }
+        }
+    } finally {
+        $script:ThemeSelectorInitializing = $false
+    }
+
+    Apply-UiTheme -ThemeName $script:UiTheme
+}
+
+function Save-UiThemeSelection {
+    if ($script:ThemeSelectorInitializing -or $null -eq $script:cmbUiTheme.SelectedItem) { return }
+
+    $themeName = Resolve-UiThemeName -Name ([string]$script:cmbUiTheme.SelectedItem.Tag)
+    Apply-UiTheme -ThemeName $themeName
+    Save-AppSetting -Name "UiTheme" -Value $themeName
+    Update-Status "Theme set to $themeName" -Type Success
+}
 
 function Initialize-AccessibilityMetadata {
     foreach ($controlName in $script:AccessibilityNames.Keys) {
@@ -10864,6 +11092,10 @@ function Import-Configuration {
 # ============================================================================
 # EVENT HANDLERS
 # ============================================================================
+$cmbUiTheme.Add_SelectionChanged({
+    Save-UiThemeSelection
+})
+
 $lstAdapters.Add_SelectionChanged({
     Update-AdapterDisplay
     Refresh-StaticRouteList
@@ -11117,6 +11349,7 @@ Refresh-ProfileList
 Update-ProfileStoreDisplay
 Initialize-AccessibilityMetadata
 Apply-Localization
+Initialize-ThemeSelector
 Initialize-SystemTray
 Initialize-EndpointPolicyControls
 Show-RestoreSnapshotButtonState

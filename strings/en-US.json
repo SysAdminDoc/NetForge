@@ -203,6 +203,7 @@
     "label.status": "STATUS",
     "label.staticRoutes": "STATIC ROUTES",
     "label.subnetMask": "Subnet Mask",
+    "label.theme": "Theme",
     "label.type": "TYPE",
     "label.wifiNetworks": "WIFI NETWORKS",
     "label.wifiSpectrum": "WIFI SPECTRUM",

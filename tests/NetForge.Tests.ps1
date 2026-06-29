@@ -531,6 +531,38 @@ Describe 'DNS preset apply target helpers' {
     }
 }
 
+Describe 'Theme catalog helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-UiThemeCatalog',
+            'Get-UiThemeNames',
+            'Resolve-UiThemeName'
+        )
+    }
+
+    It 'ships the expected dark theme alternatives' {
+        $themes = Get-UiThemeCatalog
+        $names = Get-UiThemeNames
+
+        $names | Should -Contain 'GitHub Dark'
+        $names | Should -Contain 'Catppuccin Mocha'
+        $names | Should -Contain 'Nord'
+
+        foreach ($themeName in $names) {
+            foreach ($requiredKey in @('BgPrimary', 'BgSecondary', 'BgTertiary', 'BgStatus', 'BorderColor', 'AccentBlue', 'AccentGreen', 'AccentOrange', 'AccentRed', 'AccentPurple', 'TextPrimary', 'TextSecondary', 'TextMuted', 'ButtonHover', 'ButtonPressed', 'SuccessButton', 'SuccessButtonHover', 'DangerButtonBg', 'DangerButtonHover', 'DangerButtonPressed', 'ListItemHover', 'ListItemSelected')) {
+                $themes[$themeName].Contains($requiredKey) | Should -BeTrue
+                $themes[$themeName][$requiredKey] | Should -Match '^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$'
+            }
+        }
+    }
+
+    It 'resolves theme names case-insensitively and falls back to GitHub Dark' {
+        Resolve-UiThemeName -Name 'nord' | Should -Be 'Nord'
+        Resolve-UiThemeName -Name 'catppuccin mocha' | Should -Be 'Catppuccin Mocha'
+        Resolve-UiThemeName -Name 'unknown' | Should -Be 'GitHub Dark'
+    }
+}
+
 Describe 'Localization resources' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

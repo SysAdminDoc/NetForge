@@ -203,6 +203,7 @@
     "label.status": "ESTADO",
     "label.staticRoutes": "RUTAS ESTATICAS",
     "label.subnetMask": "Mascara de subred",
+    "label.theme": "Tema",
     "label.type": "TIPO",
     "label.wifiNetworks": "REDES WIFI",
     "label.wifiSpectrum": "ESPECTRO WIFI",
