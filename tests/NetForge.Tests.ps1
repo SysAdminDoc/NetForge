@@ -720,6 +720,56 @@ Describe 'MTR history helpers' {
     }
 }
 
+Describe 'Static route helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIPv4Address',
+            'Test-ValidIPv6Address',
+            'Get-ApplyValidationResult',
+            'Test-ManualRouteRow',
+            'Get-RoutePrefixInfo',
+            'Get-StaticRouteTarget',
+            'Format-StaticRouteRows'
+        )
+    }
+
+    It 'validates IPv4 and IPv6 route targets' {
+        $ipv4 = Get-StaticRouteTarget -DestinationPrefix '10.20.0.0/16' -NextHop '192.168.1.1' -MetricText '25'
+        $ipv6 = Get-StaticRouteTarget -DestinationPrefix '2001:db8:10::/64' -NextHop 'fe80::1' -MetricText ''
+        $mismatch = Get-StaticRouteTarget -DestinationPrefix '10.20.0.0/16' -NextHop 'fe80::1' -MetricText '25'
+        $badPrefix = Get-StaticRouteTarget -DestinationPrefix '10.20.0.0' -NextHop '192.168.1.1' -MetricText '25'
+        $badMetric = Get-StaticRouteTarget -DestinationPrefix '10.20.0.0/16' -NextHop '192.168.1.1' -MetricText '10000'
+
+        $ipv4.IsValid | Should -BeTrue
+        $ipv4.AddressFamily | Should -Be 'IPv4'
+        $ipv4.RouteMetric | Should -Be 25
+        $ipv6.IsValid | Should -BeTrue
+        $ipv6.AddressFamily | Should -Be 'IPv6'
+        $ipv6.RouteMetric | Should -BeNullOrEmpty
+        $mismatch.IsValid | Should -BeFalse
+        $mismatch.Message | Should -Match 'valid IPv4'
+        $badPrefix.IsValid | Should -BeFalse
+        $badPrefix.Message | Should -Match 'CIDR format'
+        $badMetric.IsValid | Should -BeFalse
+        $badMetric.Message | Should -Match '0 to 9999'
+    }
+
+    It 'formats manual static route rows' {
+        Test-ManualRouteRow -Route ([pscustomobject]@{ RouteProtocol = 'NetMgmt' }) | Should -BeTrue
+        Test-ManualRouteRow -Route ([pscustomobject]@{ RouteProtocol = 'Local' }) | Should -BeFalse
+
+        $report = Format-StaticRouteRows -Routes @(
+            [pscustomobject]@{ DestinationPrefix = '10.20.0.0/16'; NextHop = '192.168.1.1'; RouteMetric = 25 },
+            [pscustomobject]@{ DestinationPrefix = '2001:db8:10::/64'; NextHop = 'fe80::1'; RouteMetric = $null }
+        )
+
+        $report | Should -Match 'Destination prefix'
+        $report | Should -Match '10.20.0.0/16'
+        $report | Should -Match '2001:db8:10::/64'
+        (Format-StaticRouteRows -Routes @()) | Should -Match 'No manual static routes'
+    }
+}
+
 Describe 'Port scan helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

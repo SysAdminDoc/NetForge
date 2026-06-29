@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.36.0
+    Version: 1.37.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.36.0"
+$script:AppVersion = "1.37.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -203,6 +203,13 @@ $script:AccessibilityNames = @{
     btnPacketCapture = "Start packet capture"
     btnCableDiagnostics = "Run cable diagnostics"
     btnNslookup = "Run NSLookup"
+    txtRouteDestination = "Static route destination prefix"
+    txtRouteNextHop = "Static route next hop"
+    txtRouteMetric = "Static route metric"
+    btnAddStaticRoute = "Add static route"
+    btnRemoveStaticRoute = "Remove selected static route"
+    btnRefreshStaticRoutes = "Refresh static routes"
+    lstStaticRoutes = "Manual static route list"
 }
 $script:AccessibilityTabOrder = @(
     "lstAdapters", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
@@ -214,6 +221,7 @@ $script:AccessibilityTabOrder = @(
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
     "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
+    "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy",
     "txtDiagPingTarget", "btnDiagPing", "btnContinuousPing", "txtLatencyHistogramSeconds", "btnLatencyHistogram"
 )
@@ -1163,7 +1171,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.36.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.37.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2130,6 +2138,47 @@ function Apply-Localization {
                                     </Grid>
                                 </Border>
 
+                                <!-- Static Routes -->
+                                <TextBlock Text="STATIC ROUTES" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,12">
+                                            <TextBlock Text="Destination Prefix" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtRouteDestination" Style="{StaticResource ModernTextBox}" Text="10.10.0.0/16"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0,10,12">
+                                            <TextBlock Text="Next Hop" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtRouteNextHop" Style="{StaticResource ModernTextBox}" Text="192.168.1.1"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="10,0,0,12">
+                                            <TextBlock Text="Route Metric" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBox x:Name="txtRouteMetric" Style="{StaticResource ModernTextBox}" Text="25"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,12">
+                                            <Button x:Name="btnAddStaticRoute" Content="Add Route" Style="{StaticResource PrimaryButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnRemoveStaticRoute" Content="Remove Selected" Style="{StaticResource DangerButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnRefreshStaticRoutes" Content="Refresh Routes" Style="{StaticResource ModernButton}"/>
+                                        </StackPanel>
+
+                                        <ListBox x:Name="lstStaticRoutes" Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource ModernListBox}" Height="140" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="txtStaticRouteStatus" Grid.Row="3" Grid.ColumnSpan="3" Text="Select an adapter to view manual static routes." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                    </Grid>
+                                </Border>
+
                                 <!-- Adapter Information -->
                                 <TextBlock Text="ADAPTER DETAILS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
 
@@ -2372,7 +2421,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.36.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.37.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3222,6 +3271,110 @@ function Invoke-AdapterDNSTarget {
     }
 
     Set-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -ServerAddresses $servers -ErrorAction Stop
+}
+
+function Test-ManualRouteRow {
+    param([object]$Route)
+
+    if ($null -eq $Route) { return $false }
+    if ($Route.PSObject.Properties["RouteProtocol"]) {
+        return ([string]$Route.RouteProtocol -eq "NetMgmt")
+    }
+    return $true
+}
+
+function Get-RoutePrefixInfo {
+    param([string]$DestinationPrefix)
+
+    $prefixText = ([string]$DestinationPrefix).Trim()
+    if ([string]::IsNullOrWhiteSpace($prefixText) -or $prefixText -notmatch '^(.+)/(\d+)$') {
+        return Get-ApplyValidationResult -IsValid $false -Message "Destination prefix must use CIDR format, for example 10.10.0.0/16 or 2001:db8::/64."
+    }
+
+    $address = $Matches[1].Trim()
+    $prefixLength = [int]$Matches[2]
+    if (Test-ValidIPv4Address -IP $address) {
+        if ($prefixLength -lt 0 -or $prefixLength -gt 32) {
+            return Get-ApplyValidationResult -IsValid $false -Message "IPv4 route prefix length must be from 0 to 32."
+        }
+        return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+            AddressFamily = "IPv4"
+            DestinationPrefix = "$address/$prefixLength"
+            PrefixLength = $prefixLength
+        }
+    }
+
+    if (Test-ValidIPv6Address -IP $address) {
+        if ($prefixLength -lt 0 -or $prefixLength -gt 128) {
+            return Get-ApplyValidationResult -IsValid $false -Message "IPv6 route prefix length must be from 0 to 128."
+        }
+        return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+            AddressFamily = "IPv6"
+            DestinationPrefix = "$address/$prefixLength"
+            PrefixLength = $prefixLength
+        }
+    }
+
+    return Get-ApplyValidationResult -IsValid $false -Message "Destination prefix must start with a valid IPv4 or IPv6 address."
+}
+
+function Get-StaticRouteTarget {
+    param(
+        [string]$DestinationPrefix,
+        [string]$NextHop,
+        [string]$MetricText
+    )
+
+    $prefix = Get-RoutePrefixInfo -DestinationPrefix $DestinationPrefix
+    if (-not $prefix.IsValid) { return $prefix }
+
+    $nextHopText = ([string]$NextHop).Trim()
+    if ([string]::IsNullOrWhiteSpace($nextHopText)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Next hop is required."
+    }
+
+    if ($prefix.AddressFamily -eq "IPv4" -and -not (Test-ValidIPv4Address -IP $nextHopText)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Next hop must be a valid IPv4 address for an IPv4 route."
+    }
+    if ($prefix.AddressFamily -eq "IPv6" -and -not (Test-ValidIPv6Address -IP $nextHopText)) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Next hop must be a valid IPv6 address for an IPv6 route."
+    }
+
+    $metric = $null
+    $metricInput = ([string]$MetricText).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($metricInput)) {
+        $metricValue = 0
+        if (-not [int]::TryParse($metricInput, [ref]$metricValue) -or $metricValue -lt 0 -or $metricValue -gt 9999) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Route metric must be a number from 0 to 9999."
+        }
+        $metric = $metricValue
+    }
+
+    return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+        DestinationPrefix = $prefix.DestinationPrefix
+        AddressFamily = $prefix.AddressFamily
+        NextHop = $nextHopText
+        RouteMetric = $metric
+    }
+}
+
+function Format-StaticRouteRows {
+    param([object[]]$Routes)
+
+    $rows = @($Routes)
+    if ($rows.Count -eq 0) {
+        return "No manual static routes found for the selected adapter."
+    }
+
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("Destination prefix                 Next hop                         Metric  Family") | Out-Null
+    $sb.AppendLine("----------------------------------  -------------------------------  ------  ------") | Out-Null
+    foreach ($route in $rows) {
+        $family = if ([string]$route.DestinationPrefix -match ':') { "IPv6" } else { "IPv4" }
+        $metric = if ($null -ne $route.RouteMetric) { [string]$route.RouteMetric } else { "--" }
+        $sb.AppendLine(("{0,-34}  {1,-31}  {2,6}  {3}" -f $route.DestinationPrefix, $route.NextHop, $metric, $family)) | Out-Null
+    }
+    return $sb.ToString()
 }
 
 function Invoke-ProfileEnvironmentTarget {
@@ -9379,6 +9532,112 @@ function Invoke-PortScan {
     $timer.Start()
 }
 
+function Get-AdapterStaticRouteRows {
+    param($Adapter)
+
+    if ($null -eq $Adapter) { return @() }
+    return @(Get-NetRoute -InterfaceIndex $Adapter.ifIndex -ErrorAction SilentlyContinue |
+        Where-Object { Test-ManualRouteRow -Route $_ } |
+        Sort-Object AddressFamily, DestinationPrefix, NextHop |
+        ForEach-Object {
+            [pscustomobject]@{
+                InterfaceIndex = $_.InterfaceIndex
+                DestinationPrefix = $_.DestinationPrefix
+                NextHop = $_.NextHop
+                RouteMetric = $_.RouteMetric
+                AddressFamily = [string]$_.AddressFamily
+            }
+        })
+}
+
+function Refresh-StaticRouteList {
+    $adapter = Get-SelectedAdapter
+    if ($script:lstStaticRoutes) { $script:lstStaticRoutes.Items.Clear() }
+
+    if ($null -eq $adapter) {
+        if ($script:txtStaticRouteStatus) { $script:txtStaticRouteStatus.Text = "Select an adapter to view manual static routes." }
+        return
+    }
+
+    try {
+        $routes = @(Get-AdapterStaticRouteRows -Adapter $adapter)
+        foreach ($route in $routes) {
+            $metric = if ($null -ne $route.RouteMetric) { [string]$route.RouteMetric } else { "--" }
+            $item = New-Object System.Windows.Controls.ListBoxItem
+            $item.Content = "$($route.DestinationPrefix) -> $($route.NextHop) | metric $metric | $($route.AddressFamily)"
+            $item.Tag = $route
+            [void]$script:lstStaticRoutes.Items.Add($item)
+        }
+
+        if ($script:txtStaticRouteStatus) {
+            $script:txtStaticRouteStatus.Text = "Manual static routes for $($adapter.Name): $($routes.Count)."
+        }
+        if ($script:txtDiagOutput) {
+            $script:txtDiagOutput.Text = Format-StaticRouteRows -Routes $routes
+        }
+    } catch {
+        if ($script:txtStaticRouteStatus) { $script:txtStaticRouteStatus.Text = "Route refresh failed: $($_.Exception.Message)" }
+        Write-OperationLog -Action "Refresh static routes" -Result "Failed" -Detail $_.Exception.Message
+    }
+}
+
+function Add-StaticRoute {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+
+    $target = Get-StaticRouteTarget -DestinationPrefix $script:txtRouteDestination.Text -NextHop $script:txtRouteNextHop.Text -MetricText $script:txtRouteMetric.Text
+    if (-not $target.IsValid) {
+        Show-MessageBox -Message $target.Message -Title "Static Route" -Icon Warning
+        Update-Status $target.Message -Type Error
+        return
+    }
+
+    $success = Invoke-NetworkMutation -Adapter $adapter -ActionName "Add static route" -ScriptBlock {
+        $routeParams = @{
+            InterfaceIndex = $adapter.ifIndex
+            DestinationPrefix = $target.DestinationPrefix
+            NextHop = $target.NextHop
+            ErrorAction = "Stop"
+        }
+        if ($null -ne $target.RouteMetric) {
+            $routeParams.RouteMetric = [int]$target.RouteMetric
+        }
+        New-NetRoute @routeParams | Out-Null
+    } -Quiet
+
+    if ($success) {
+        Update-Status "Static route added: $($target.DestinationPrefix) via $($target.NextHop)" -Type Success
+        Write-OperationLog -Action "Add static route" -Result "Succeeded" -Detail "Adapter=$($adapter.Name); Prefix=$($target.DestinationPrefix); NextHop=$($target.NextHop)"
+        Refresh-StaticRouteList
+    }
+}
+
+function Remove-SelectedStaticRoute {
+    $adapter = Get-SelectedAdapter
+    if ($null -eq $adapter) {
+        Show-MessageBox -Message "Please select a network adapter first." -Title "No Adapter Selected" -Icon Warning
+        return
+    }
+    if ($null -eq $script:lstStaticRoutes.SelectedItem) {
+        Show-MessageBox -Message "Select a static route to remove." -Title "Static Route" -Icon Warning
+        return
+    }
+
+    $route = $script:lstStaticRoutes.SelectedItem.Tag
+    $success = Invoke-NetworkMutation -Adapter $adapter -ActionName "Remove static route" -ScriptBlock {
+        Remove-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix $route.DestinationPrefix -NextHop $route.NextHop -Confirm:$false -ErrorAction Stop
+    } -Quiet
+
+    if ($success) {
+        Update-Status "Static route removed: $($route.DestinationPrefix) via $($route.NextHop)" -Type Success
+        Write-OperationLog -Action "Remove static route" -Result "Succeeded" -Detail "Adapter=$($adapter.Name); Prefix=$($route.DestinationPrefix); NextHop=$($route.NextHop)"
+        Refresh-StaticRouteList
+    }
+}
+
 function Get-PacketCaptureDirectory {
     return (Join-Path $script:ConfigPath "Captures")
 }
@@ -9883,6 +10142,7 @@ function Import-Configuration {
 # ============================================================================
 $lstAdapters.Add_SelectionChanged({
     Update-AdapterDisplay
+    Refresh-StaticRouteList
 })
 
 $chkAdvancedAdapters.Add_Checked({
@@ -10035,6 +10295,9 @@ $btnPortScan.Add_Click({ Invoke-PortScan })
 $btnPacketCapture.Add_Click({ Toggle-PacketCapture })
 $btnCableDiagnostics.Add_Click({ Invoke-CableDiagnostics })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
+$btnAddStaticRoute.Add_Click({ Add-StaticRoute })
+$btnRemoveStaticRoute.Add_Click({ Remove-SelectedStaticRoute })
+$btnRefreshStaticRoutes.Add_Click({ Refresh-StaticRouteList })
 
 # Diagnostics button handlers
 $btnDiagPing.Add_Click({ Invoke-DiagPingTest })
