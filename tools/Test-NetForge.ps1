@@ -10,6 +10,7 @@ $settingsPath = Join-Path $repoRoot 'PSScriptAnalyzerSettings.psd1'
 $versionPath = Join-Path $repoRoot 'version.json'
 $dnsCatalogPath = Join-Path $repoRoot 'dns-providers.json'
 $dnsCatalogHashPath = "$dnsCatalogPath.sha256"
+$stringsPath = Join-Path $repoRoot 'strings'
 
 if (-not (Test-Path -LiteralPath $versionPath)) {
     throw "version.json was not found."
@@ -19,6 +20,12 @@ if (-not (Test-Path -LiteralPath $dnsCatalogPath)) {
 }
 if (-not (Test-Path -LiteralPath $dnsCatalogHashPath)) {
     throw "dns-providers.json.sha256 was not found."
+}
+if (-not (Test-Path -LiteralPath (Join-Path $stringsPath 'en-US.json'))) {
+    throw "strings/en-US.json was not found."
+}
+if (-not (Test-Path -LiteralPath (Join-Path $stringsPath 'es-ES.json'))) {
+    throw "strings/es-ES.json was not found."
 }
 
 $versionMetadata = Get-Content -Raw -LiteralPath $versionPath | ConvertFrom-Json

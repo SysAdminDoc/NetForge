@@ -113,6 +113,7 @@ $packageItems = @(
     'version.json',
     'dns-providers.json',
     'dns-providers.json.sha256',
+    'strings',
     'tools',
     'tests'
 )

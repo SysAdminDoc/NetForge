@@ -81,13 +81,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ## Research-Driven Additions
 
 ### P2
-- [ ] P2 - Externalize UI strings for localization
-  Why: All UI text is embedded in XAML/functions, blocking translation and increasing copy drift.
-  Evidence: `NetForge.ps1:700-1780`, Microsoft WPF globalization/localization guidance, DNS Jumper multi-language distribution.
-  Touches: XAML text, status/message strings, profile import/export labels, README locale notes.
-  Acceptance: User-visible strings resolve through a resource table, English remains default, missing keys fail tests, and at least one second locale file proves the path.
-  Complexity: L
-
 - [ ] P2 - Add configurable offline/privacy endpoints
   Why: Public-IP and speed-test features contact third-party endpoints automatically or on demand without user-visible endpoint policy.
   Evidence: `NetForge.ps1:3037-3068`, `NetForge.ps1:3293-3394`.

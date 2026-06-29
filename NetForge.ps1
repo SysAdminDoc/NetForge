@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.24.0
+    Version: 1.25.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.24.0"
+$script:AppVersion = "1.25.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -54,6 +54,13 @@ $script:ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.
 $script:DnsCatalogPath = Join-Path $script:ScriptRoot "dns-providers.json"
 $script:DnsCatalogHashPath = "$script:DnsCatalogPath.sha256"
 $script:DnsCatalogStatus = "Embedded DNS preset defaults"
+$script:StringsPath = Join-Path $script:ScriptRoot "strings"
+$script:DefaultLocale = "en-US"
+$script:UiLocale = $script:DefaultLocale
+$script:StringResources = @{}
+$script:DefaultStringResources = @{}
+$script:LocalizationStatus = "Embedded English UI text"
+$script:LocalizationMissingKeys = @()
 $script:ProfileSchemaVersion = 1
 $script:ProfileStoreLoadWarning = ""
 $script:ContinuousPingRunning = $false
@@ -166,6 +173,14 @@ if (Test-Path -LiteralPath $script:SettingsFile) {
                 $script:ProfilesPath = [System.IO.Path]::GetFullPath($candidatePath)
             } else {
                 $script:ProfileStoreLoadWarning = "ProfileStorePath is not rooted; using local profile storage."
+            }
+        }
+        if ($settings.UiLocale) {
+            $candidateLocale = ([string]$settings.UiLocale).Trim()
+            if ($candidateLocale -match '^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$') {
+                $script:UiLocale = $candidateLocale
+            } else {
+                $script:LocalizationStatus = "Invalid UiLocale in settings.json; using en-US."
             }
         }
     } catch {
@@ -470,6 +485,184 @@ $script:DnsPresets = [ordered]@{
         Primary = "109.69.8.51"
         Description = "Catalan DNS service"
         Category = "Public"
+    }
+}
+
+function ConvertFrom-StringResourceDocument {
+    param(
+        $ResourceDocument,
+        [string]$Path = ""
+    )
+
+    $messages = New-Object System.Collections.Generic.List[string]
+    $strings = [ordered]@{}
+
+    if ($null -eq $ResourceDocument) {
+        $messages.Add("Resource document is empty.")
+    } elseif ($null -eq $ResourceDocument.strings) {
+        $messages.Add("Resource document must contain a strings object.")
+    } else {
+        foreach ($property in $ResourceDocument.strings.PSObject.Properties) {
+            $key = [string]$property.Name
+            $value = $property.Value
+
+            if ([string]::IsNullOrWhiteSpace($key)) {
+                $messages.Add("Resource key cannot be blank.")
+                continue
+            }
+            if ($null -eq $value) {
+                $messages.Add("Resource key '$key' cannot be null.")
+                continue
+            }
+
+            $strings[$key] = [string]$value
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($messages.Count -eq 0)
+        Strings = $strings
+        Message = ($messages -join " ")
+        Path = $Path
+    }
+}
+
+function Read-StringResourceFile {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return [pscustomobject]@{
+            IsValid = $false
+            Strings = [ordered]@{}
+            Message = "Resource file was not found: $Path"
+            Path = $Path
+        }
+    }
+
+    try {
+        $resourceDocument = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+        return ConvertFrom-StringResourceDocument -ResourceDocument $resourceDocument -Path $Path
+    } catch {
+        return [pscustomobject]@{
+            IsValid = $false
+            Strings = [ordered]@{}
+            Message = $_.Exception.Message
+            Path = $Path
+        }
+    }
+}
+
+function Get-DynamicLocalizationKeyList {
+    return @(
+        "button.continuousPing.start",
+        "button.continuousPing.stop",
+        "button.speedTest.idle",
+        "button.speedTest.running",
+        "footer.adminStatusFormat"
+    )
+}
+
+function Initialize-StringResources {
+    param([string]$Locale = $script:UiLocale)
+
+    $script:StringResources = @{}
+    $script:DefaultStringResources = @{}
+    $script:LocalizationMissingKeys = @()
+
+    $defaultPath = Join-Path $script:StringsPath "$($script:DefaultLocale).json"
+    $defaultResult = Read-StringResourceFile -Path $defaultPath
+    if (-not $defaultResult.IsValid) {
+        $script:LocalizationStatus = "Using embedded English UI text. $($defaultResult.Message)"
+        return $defaultResult
+    }
+
+    foreach ($key in $defaultResult.Strings.Keys) {
+        $script:StringResources[$key] = $defaultResult.Strings[$key]
+        $script:DefaultStringResources[$key] = $defaultResult.Strings[$key]
+    }
+
+    $requestedLocale = if ([string]::IsNullOrWhiteSpace($Locale)) { $script:DefaultLocale } else { $Locale.Trim() }
+    if ($requestedLocale -notmatch '^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$') {
+        $script:LocalizationStatus = "Invalid locale '$requestedLocale'; using $($script:DefaultLocale)."
+        return $defaultResult
+    }
+
+    if ($requestedLocale -ne $script:DefaultLocale) {
+        $localePath = Join-Path $script:StringsPath "$requestedLocale.json"
+        $localeResult = Read-StringResourceFile -Path $localePath
+        if ($localeResult.IsValid) {
+            foreach ($key in $localeResult.Strings.Keys) {
+                $script:StringResources[$key] = $localeResult.Strings[$key]
+            }
+
+            $missingKeys = @($defaultResult.Strings.Keys | Where-Object { -not $localeResult.Strings.Contains($_) })
+            $script:LocalizationMissingKeys = $missingKeys
+            if ($missingKeys.Count -gt 0) {
+                $script:LocalizationStatus = "Loaded $requestedLocale with $($missingKeys.Count) fallback string(s)."
+            } else {
+                $script:LocalizationStatus = "Loaded $requestedLocale UI strings."
+            }
+        } else {
+            $script:LocalizationStatus = "Could not load $requestedLocale; using $($script:DefaultLocale). $($localeResult.Message)"
+        }
+    } else {
+        $script:LocalizationStatus = "Loaded $($script:DefaultLocale) UI strings."
+    }
+
+    return [pscustomobject]@{
+        IsValid = $true
+        Strings = $script:StringResources
+        Message = $script:LocalizationStatus
+        Path = $defaultPath
+    }
+}
+
+function Get-UiString {
+    param(
+        [string]$Key,
+        [string]$DefaultValue = ""
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Key) -and $script:StringResources.ContainsKey($Key)) {
+        return [string]$script:StringResources[$Key]
+    }
+
+    return $DefaultValue
+}
+
+function Invoke-XamlLocalization {
+    param([xml]$XamlDocument)
+
+    if ($null -eq $XamlDocument -or $script:DefaultStringResources.Count -eq 0) { return }
+
+    $textToKey = @{}
+    foreach ($key in $script:DefaultStringResources.Keys) {
+        $defaultText = [string]$script:DefaultStringResources[$key]
+        if ([string]::IsNullOrEmpty($defaultText)) { continue }
+        if (-not $textToKey.ContainsKey($defaultText)) {
+            $textToKey[$defaultText] = $key
+        }
+    }
+
+    $attributes = @("Title", "Header", "Content", "Text")
+    $nodes = $XamlDocument.SelectNodes("//*[@Title or @Header or @Content or @Text]")
+    foreach ($node in $nodes) {
+        foreach ($attributeName in $attributes) {
+            if (-not $node.HasAttribute($attributeName)) { continue }
+
+            $currentValue = $node.GetAttribute($attributeName)
+            if (-not $textToKey.ContainsKey($currentValue)) { continue }
+
+            $key = $textToKey[$currentValue]
+            $node.SetAttribute($attributeName, (Get-UiString -Key $key -DefaultValue $currentValue))
+        }
+    }
+}
+
+function Apply-Localization {
+    if ($script:txtFooterStatus) {
+        $footerFormat = Get-UiString -Key "footer.adminStatusFormat" -DefaultValue "NetForge v{0} | Running as Administrator"
+        $script:txtFooterStatus.Text = $footerFormat -f $script:AppVersion
     }
 }
 
@@ -839,7 +1032,7 @@ $script:DnsPresets = [ordered]@{
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.24.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.25.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -1887,7 +2080,7 @@ $script:DnsPresets = [ordered]@{
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="1" Text="NetForge v1.24.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.25.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -1897,6 +2090,8 @@ $script:DnsPresets = [ordered]@{
 # ============================================================================
 # WINDOW INITIALIZATION
 # ============================================================================
+[void](Initialize-StringResources -Locale $script:UiLocale)
+Invoke-XamlLocalization -XamlDocument $xaml
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
@@ -3863,7 +4058,7 @@ function Toggle-ContinuousPing {
     if ($script:ContinuousPingRunning) {
         # Stop continuous ping
         $script:ContinuousPingRunning = $false
-        $script:btnContinuousPing.Content = "Start Continuous Ping"
+        $script:btnContinuousPing.Content = Get-UiString -Key "button.continuousPing.start" -DefaultValue "Start Continuous Ping"
         if ($script:ContinuousPingPS) {
             try {
                 $script:ContinuousPingPS.Stop()
@@ -3884,7 +4079,7 @@ function Toggle-ContinuousPing {
     }
 
     $script:ContinuousPingRunning = $true
-    $script:btnContinuousPing.Content = "Stop Continuous Ping"
+    $script:btnContinuousPing.Content = Get-UiString -Key "button.continuousPing.stop" -DefaultValue "Stop Continuous Ping"
     $script:txtPingLog.Text = "Continuous ping to $target started...`n"
     $script:txtPingLog.Inlines.Clear()
     Update-Status "Continuous ping running to $target..."
@@ -3980,7 +4175,7 @@ function Invoke-SpeedTest {
     if ($script:SpeedTestRunning) { return }
     $script:SpeedTestRunning = $true
     $script:btnSpeedTest.IsEnabled = $false
-    $script:btnSpeedTest.Content = "Testing..."
+    $script:btnSpeedTest.Content = Get-UiString -Key "button.speedTest.running" -DefaultValue "Testing..."
     Update-Status "Running speed test..."
 
     $script:txtSpeedDown.Text = "..."
@@ -4069,7 +4264,7 @@ function Invoke-SpeedTest {
             $ps.Dispose()
             $script:SpeedTestRunning = $false
             $script:btnSpeedTest.IsEnabled = $true
-            $script:btnSpeedTest.Content = "Speed Test"
+            $script:btnSpeedTest.Content = Get-UiString -Key "button.speedTest.idle" -DefaultValue "Speed Test"
             $timer.Stop()
         }
     }.GetNewClosure())
@@ -7349,6 +7544,7 @@ Show-DotConfiguration
 Refresh-ProfileList
 Update-ProfileStoreDisplay
 Initialize-AccessibilityMetadata
+Apply-Localization
 Show-RestoreSnapshotButtonState
 Update-ConnectionStatus
 Update-PublicIP

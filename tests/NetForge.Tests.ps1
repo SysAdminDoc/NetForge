@@ -264,6 +264,97 @@ Describe 'DNS provider catalog' {
     }
 }
 
+Describe 'Localization resources' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'ConvertFrom-StringResourceDocument',
+            'Read-StringResourceFile',
+            'Get-DynamicLocalizationKeyList',
+            'Initialize-StringResources',
+            'Get-UiString'
+        )
+
+        $script:StringsPath = Join-Path $script:RepoRoot 'strings'
+        $script:DefaultLocale = 'en-US'
+        $script:UiLocale = 'en-US'
+        $script:StringResources = @{}
+        $script:DefaultStringResources = @{}
+        $script:LocalizationMissingKeys = @()
+    }
+
+    It 'keeps shipped locale files in key parity' {
+        $english = Get-Content -Raw -LiteralPath (Join-Path $script:StringsPath 'en-US.json') | ConvertFrom-Json
+        $spanish = Get-Content -Raw -LiteralPath (Join-Path $script:StringsPath 'es-ES.json') | ConvertFrom-Json
+        $englishKeys = @($english.strings.PSObject.Properties.Name | Sort-Object)
+        $spanishKeys = @($spanish.strings.PSObject.Properties.Name | Sort-Object)
+        $diff = @(Compare-Object -ReferenceObject $englishKeys -DifferenceObject $spanishKeys)
+
+        $diff.Count | Should -Be 0
+        foreach ($key in Get-DynamicLocalizationKeyList) {
+            $englishKeys | Should -Contain $key
+            $spanishKeys | Should -Contain $key
+        }
+
+        $translatedCount = @($englishKeys | Where-Object { [string]$english.strings.$_ -ne [string]$spanish.strings.$_ }).Count
+        $translatedCount | Should -BeGreaterThan 20
+    }
+
+    It 'covers static XAML text with English resource values' {
+        $source = Get-Content -Raw -LiteralPath $script:NetForgePath
+        $english = Get-Content -Raw -LiteralPath (Join-Path $script:StringsPath 'en-US.json') | ConvertFrom-Json
+        $resourceValues = @($english.strings.PSObject.Properties | ForEach-Object { [string]$_.Value })
+        $ignoredPatterns = @(
+            '^\{',
+            '^--$',
+            '^\d',
+            '^v\d',
+            '^NetForge v\d',
+            '^N$',
+            '^etForge$',
+            '^\*$',
+            '^ / $',
+            '^%$',
+            '^MB$',
+            '^Mbps$',
+            '^ms$',
+            '^sec$',
+            '^ERR$',
+            '^\.\.\.$',
+            '^dnsproxy\.exe$',
+            '^example\.com$',
+            '^quic://',
+            '^127\.0\.0\.1$',
+            '^1\.1\.1\.1:53$',
+            '^255\.255\.255\.0$'
+        )
+
+        $matches = [regex]::Matches($source, '\b(?:Text|Content|Header|Title)="([^"]+)"')
+        $staticValues = @($matches | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        foreach ($value in $staticValues) {
+            $ignored = $false
+            foreach ($pattern in $ignoredPatterns) {
+                if ($value -match $pattern) {
+                    $ignored = $true
+                    break
+                }
+            }
+
+            if (-not $ignored) {
+                $resourceValues | Should -Contain $value
+            }
+        }
+    }
+
+    It 'loads locale overlays and falls back to caller defaults' {
+        $result = Initialize-StringResources -Locale 'es-ES'
+
+        $result.IsValid | Should -BeTrue
+        Get-UiString -Key 'app.title' -DefaultValue 'fallback' | Should -Be 'NetForge - Administracion de red'
+        Get-UiString -Key 'missing.key' -DefaultValue 'fallback' | Should -Be 'fallback'
+        $script:LocalizationMissingKeys.Count | Should -Be 0
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(
