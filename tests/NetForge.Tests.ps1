@@ -41,6 +41,10 @@ Describe 'Profile validation' {
             'Test-ValidMacAddress',
             'Get-ProfileProperty',
             'ConvertTo-ProfileBoolean',
+            'Get-WlanXmlElementText',
+            'ConvertFrom-WlanSsidHex',
+            'ConvertFrom-WlanProfileXmlDocument',
+            'Get-ProfileImportRecords',
             'Get-SafeProfileFileName',
             'ConvertFrom-MappedDriveText',
             'ConvertTo-MappedDriveText',
@@ -158,6 +162,77 @@ Describe 'Profile validation' {
         $drives[0].DriveLetter | Should -Be 'Y'
         $text | Should -Match 'Y: \\\\server\\apps'
         $text | Should -Match 'Z: \\\\server\\data'
+    }
+
+    It 'converts WLAN XML exports into auto-apply profiles without storing secrets' {
+        [xml]$wlanXml = @'
+<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+  <name>ClinicSecure</name>
+  <SSIDConfig>
+    <SSID>
+      <hex>436C696E69632057694669</hex>
+      <name>Clinic WiFi</name>
+    </SSID>
+  </SSIDConfig>
+  <connectionType>ESS</connectionType>
+  <connectionMode>auto</connectionMode>
+  <MSM>
+    <security>
+      <authEncryption>
+        <authentication>WPA2PSK</authentication>
+        <encryption>AES</encryption>
+        <useOneX>false</useOneX>
+      </authEncryption>
+      <sharedKey>
+        <protected>false</protected>
+        <keyMaterial>not-imported</keyMaterial>
+      </sharedKey>
+    </security>
+  </MSM>
+</WLANProfile>
+'@
+
+        $profile = ConvertFrom-WlanProfileXmlDocument -Document $wlanXml -SourcePath 'Wi-Fi-ClinicSecure.xml'
+        $result = Get-ProfileValidationResult -ProfileData $profile
+
+        $result.IsValid | Should -BeTrue
+        $result.Profile.Name | Should -Be 'Wi-Fi - ClinicSecure'
+        $result.Profile.AutoApply | Should -BeTrue
+        $result.Profile.MatchSSID | Should -Be 'Clinic WiFi'
+        $result.Profile.UseDHCP | Should -BeTrue
+        $result.Profile.UseDHCPForDNS | Should -BeTrue
+        $result.Profile.Description | Should -Match 'Authentication: WPA2PSK'
+        $result.Profile.Description | Should -Match 'Wireless key material is not stored'
+        $result.Profile.Description | Should -Not -Match 'not-imported'
+    }
+
+    It 'reads WLAN XML import files and falls back to SSID hex names' {
+        $xmlPath = Join-Path $TestDrive 'Wi-Fi-Guest.xml'
+        @'
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+  <name>GuestNetwork</name>
+  <SSIDConfig>
+    <SSID>
+      <hex>4775657374</hex>
+    </SSID>
+  </SSIDConfig>
+</WLANProfile>
+'@ | Set-Content -LiteralPath $xmlPath -Encoding UTF8
+
+        $records = Get-ProfileImportRecords -Path $xmlPath
+        $result = Get-ProfileValidationResult -ProfileData $records.Profiles[0]
+
+        $records.SourceKind | Should -Be 'WLAN XML'
+        $records.Profiles.Count | Should -Be 1
+        $result.IsValid | Should -BeTrue
+        $result.Profile.MatchSSID | Should -Be 'Guest'
+    }
+
+    It 'rejects XML files that are not WLAN profile exports' {
+        [xml]$badXml = '<notAProfile />'
+
+        { ConvertFrom-WlanProfileXmlDocument -Document $badXml } | Should -Throw '*WLAN profile XML*'
     }
 
     It 'writes profile JSON atomically' {

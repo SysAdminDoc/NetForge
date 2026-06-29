@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.27.0
+    Version: 1.28.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -44,7 +44,7 @@ Add-Type -AssemblyName System.Windows.Forms
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.27.0"
+$script:AppVersion = "1.28.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -1120,7 +1120,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.27.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.28.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2251,7 +2251,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.27.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.28.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -6131,6 +6131,159 @@ function ConvertTo-ProfileBoolean {
     return $DefaultValue
 }
 
+function Get-WlanXmlElementText {
+    param(
+        [System.Xml.XmlNode]$RootNode,
+        [string[]]$LocalPath
+    )
+
+    $current = $RootNode
+    foreach ($segment in $LocalPath) {
+        if ($null -eq $current) { return "" }
+
+        $current = @($current.ChildNodes | Where-Object {
+            $_.NodeType -eq [System.Xml.XmlNodeType]::Element -and $_.LocalName -eq $segment
+        } | Select-Object -First 1)[0]
+    }
+
+    if ($null -eq $current) { return "" }
+    return ([string]$current.InnerText).Trim()
+}
+
+function ConvertFrom-WlanSsidHex {
+    param([string]$Hex)
+
+    $cleanHex = ([string]$Hex).Trim() -replace '\s', ''
+    if ([string]::IsNullOrWhiteSpace($cleanHex)) { return "" }
+    if (($cleanHex.Length % 2) -ne 0 -or $cleanHex -notmatch '^[0-9A-Fa-f]+$') { return "" }
+
+    try {
+        $bytes = New-Object byte[] ([int]($cleanHex.Length / 2))
+        for ($i = 0; $i -lt $bytes.Length; $i++) {
+            $bytes[$i] = [Convert]::ToByte($cleanHex.Substring($i * 2, 2), 16)
+        }
+
+        return ([System.Text.Encoding]::UTF8.GetString($bytes)).Trim([char]0).Trim()
+    } catch {
+        return ""
+    }
+}
+
+function ConvertFrom-WlanProfileXmlDocument {
+    param(
+        [xml]$Document,
+        [string]$SourcePath = ""
+    )
+
+    if ($null -eq $Document -or $null -eq $Document.DocumentElement -or $Document.DocumentElement.LocalName -ne "WLANProfile") {
+        throw "File is not a Windows WLAN profile XML export."
+    }
+
+    $root = $Document.DocumentElement
+    $profileName = Get-WlanXmlElementText -RootNode $root -LocalPath @("name")
+    $ssid = Get-WlanXmlElementText -RootNode $root -LocalPath @("SSIDConfig", "SSID", "name")
+    if ([string]::IsNullOrWhiteSpace($ssid)) {
+        $ssidHex = Get-WlanXmlElementText -RootNode $root -LocalPath @("SSIDConfig", "SSID", "hex")
+        $ssid = ConvertFrom-WlanSsidHex -Hex $ssidHex
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ssid)) {
+        throw "WLAN profile XML is missing an SSID name."
+    }
+    if ([string]::IsNullOrWhiteSpace($profileName)) {
+        $profileName = $ssid
+    }
+
+    $connectionMode = Get-WlanXmlElementText -RootNode $root -LocalPath @("connectionMode")
+    $authentication = Get-WlanXmlElementText -RootNode $root -LocalPath @("MSM", "security", "authEncryption", "authentication")
+    $encryption = Get-WlanXmlElementText -RootNode $root -LocalPath @("MSM", "security", "authEncryption", "encryption")
+    $sourceName = if ([string]::IsNullOrWhiteSpace($SourcePath)) { "WLAN XML" } else { [System.IO.Path]::GetFileName($SourcePath) }
+
+    $descriptionParts = @(
+        "Imported from Windows WLAN profile XML '$sourceName'.",
+        "SSID: $ssid."
+    )
+    if (-not [string]::IsNullOrWhiteSpace($authentication)) {
+        $descriptionParts += "Authentication: $authentication."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($encryption)) {
+        $descriptionParts += "Encryption: $encryption."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($connectionMode)) {
+        $descriptionParts += "Connection mode: $connectionMode."
+    }
+    $descriptionParts += "Wireless key material is not stored in NetForge."
+
+    return [pscustomobject]@{
+        SchemaVersion = $script:ProfileSchemaVersion
+        Name = "Wi-Fi - $profileName"
+        Description = ($descriptionParts -join " ")
+        AutoApply = $true
+        MatchSSID = $ssid
+        MatchGatewayMac = ""
+        UseDHCP = $true
+        IPAddress = ""
+        SubnetMask = "255.255.255.0"
+        Gateway = ""
+        PrefixLength = ""
+        UseDHCPForDNS = $true
+        PrimaryDNS = ""
+        SecondaryDNS = ""
+        ConfigureNetworkCategory = $false
+        NetworkCategory = ""
+        ConfigureProxy = $false
+        ProxyEnabled = $false
+        ProxyServer = ""
+        ProxyBypass = ""
+        ConfigureDefaultPrinter = $false
+        DefaultPrinterName = ""
+        ConfigureMappedDrives = $false
+        MappedDrives = @()
+        CreatedAt = (Get-Date).ToString("o")
+        UpdatedAt = (Get-Date).ToString("o")
+    }
+}
+
+function Get-ProfileImportRecords {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Import file was not found: $Path"
+    }
+
+    $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    if ($extension -eq ".xml") {
+        try {
+            [xml]$wlanXml = Get-Content -LiteralPath $Path -Raw
+        } catch {
+            throw "Could not read WLAN profile XML: $($_.Exception.Message)"
+        }
+
+        return [pscustomobject]@{
+            SourceKind = "WLAN XML"
+            SourcePath = $Path
+            Profiles = @((ConvertFrom-WlanProfileXmlDocument -Document $wlanXml -SourcePath $Path))
+        }
+    }
+
+    $import = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    $incomingProfiles = @()
+
+    if ($import.Profiles) {
+        $incomingProfiles = @($import.Profiles)
+    } elseif ($import.Name) {
+        $incomingProfiles = @($import)
+    } else {
+        throw "No profile records were found in $Path."
+    }
+
+    return [pscustomobject]@{
+        SourceKind = "JSON"
+        SourcePath = $Path
+        Profiles = @($incomingProfiles)
+    }
+}
+
 function Get-SafeProfileFileName {
     param([string]$Name)
 
@@ -7908,23 +8061,13 @@ function Export-AllConfiguration {
 
 function Import-Configuration {
     $openDialog = New-Object System.Windows.Forms.OpenFileDialog
-    $openDialog.Filter = "JSON Files (*.json)|*.json"
+    $openDialog.Filter = "Supported Imports (*.json;*.xml)|*.json;*.xml|JSON Files (*.json)|*.json|WLAN Profile XML (*.xml)|*.xml"
     $openDialog.Title = "Import Configuration"
 
     if ($openDialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         try {
-            $import = Get-Content $openDialog.FileName -Raw | ConvertFrom-Json
-            $incomingProfiles = @()
-
-            if ($import.Profiles) {
-                $incomingProfiles = @($import.Profiles)
-            } elseif ($import.Name) {
-                $incomingProfiles = @($import)
-            } else {
-                Write-ProfileImportLog -Lines @("Import rejected:", "No profile records were found in $($openDialog.FileName).")
-                Update-Status "Import rejected: no profiles found" -Type Error
-                return
-            }
+            $importRecords = Get-ProfileImportRecords -Path $openDialog.FileName
+            $incomingProfiles = @($importRecords.Profiles)
 
             $existingNames = @{}
             if (Test-Path -LiteralPath $script:ProfilesPath) {
@@ -7961,7 +8104,7 @@ function Import-Configuration {
             }
 
             $logLines = @(
-                "Import dry-run: $($accepted.Count) accepted, $($rejected.Count) rejected from $($openDialog.FileName)."
+                "Import dry-run: $($accepted.Count) accepted, $($rejected.Count) rejected from $($importRecords.SourcePath) ($($importRecords.SourceKind))."
             )
             foreach ($item in $accepted) {
                 $logLines += "Accepted: $($item.Profile.Name) -> $($item.SafeFileName)"

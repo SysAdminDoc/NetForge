@@ -9,8 +9,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 ### DNS Over HTTPS/TLS/QUIC
 
 ### Profiles
-- Cloud-sync profiles via OneDrive folder path
-- Import from `netsh wlan export profile` XML
 - Schedule profile switches (home at 6pm, work at 8am)
 
 ### Diagnostics
@@ -62,13 +60,7 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 - https://github.com/DnsChanger/dnsChanger-desktop — cross-platform Electron DNS changer
 
 ### Features to Borrow
-- Location-aware profile switching with auto-detect on network change events (argon-network-switcher, autoproxyswitcher) — "I plugged into clinic network, apply Clinic profile"
-- Bundled DNS preset list (Cloudflare 1.1.1.1, Quad9, NextDNS, AdGuard, Google) with one-click apply (DNSChanger)
-- DoQ encrypted DNS support via local proxy (AdGuard dnsproxy) - NetForge now has external dnsproxy controls plus native Windows DoH/DoT metadata
 - Per-application adapter binding (bindip) — pin Zoom to Wi-Fi, pin backup to Ethernet, without VPN split tunneling
-- Profile includes: IP+DNS+Proxy+printers+mapped-drives (argon-network-switcher)
-- Network Category (Public/Private) toggle via INetworkListManager (microsoft/windows-networking-tools) — common clinic workflow, awkward in Settings UI
-- DNS round-trip latency test per-profile to pick fastest resolver (DNSChanger feature)
 - System-service mode that watches for interface changes and re-applies policy (gpailler/DnsProxy)
 
 ### Patterns & Architectures Worth Studying

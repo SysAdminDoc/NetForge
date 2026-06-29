@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.27.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.28.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -84,7 +84,7 @@
 - Preview profile differences against the selected adapter before applying
 - Optional profile actions for Windows Public/Private network category, system proxy, default printer, and mapped network drives
 - Quick-apply profiles to any adapter
-- Import/export profiles as JSON
+- Import/export profiles as JSON, plus import Windows WLAN profile XML from `netsh wlan export profile`
 - Perfect for switching between work, home, and other networks
 
 ### Network Tools
@@ -178,7 +178,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.27.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.28.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
@@ -204,6 +204,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
    - Optionally set environment actions such as network category, proxy, default printer, or mapped drives
    - Click "Preview Diff" to review changes against the selected adapter
    - Fill in details and save
+   - Use the header Import button to import NetForge JSON exports or Windows WLAN profile XML exports
 5. **Manage WiFi**:
    - Go to the WiFi tab
    - Click "Scan Networks"
