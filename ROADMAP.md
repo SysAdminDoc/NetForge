@@ -147,3 +147,19 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
   Touches: `PSScriptAnalyzerSettings.psd1`, `tools\Test-NetForge.ps1`, `NetForge.ps1`, `tests\`.
   Acceptance: local checks document or baseline each intentional analyzer suppression by rule and function/line pattern, newly introduced violations fail the gate, and at least `PSUseShouldProcessForStateChangingFunctions` and `PSUseUsingScopeModifierInNewRunspaces` are narrowed to justified exceptions.
   Complexity: M
+
+- [ ] P2 — Add DHCP lease and server identity diagnostics
+  Why: adapter details show DHCP enabled/server state, but field troubleshooting needs lease timing and server identity evidence to spot expired leases or rogue DHCP before resetting adapters.
+  Evidence: `NetForge.ps1:2588-2589`, `NetForge.ps1:4843-4844`; Microsoft `Win32_NetworkAdapterConfiguration`; NETworkManager issue #3305; ManageEngine OpUtils DHCP monitoring.
+  Touches: `NetForge.ps1` Adapter Info and Network Tools diagnostics, operation logs, `tests\NetForge.Tests.ps1`.
+  Acceptance: selecting an adapter can show DHCP enabled state, server IP, lease obtained/expires/remaining time, DHCP server MAC from neighbor cache when available, optional domain-authorized server comparison via `Get-DhcpServerInDC` only when the cmdlet/domain context is available, clear unavailable/offline states, and Pester tests with mocked CIM, neighbor, missing-cmdlet, and authorized-server data.
+  Complexity: M
+
+### P3
+
+- [ ] P3 — Add manual RDAP and ASN ownership lookup for diagnostic targets
+  Why: reachability and port-scan output can prove connectivity but not who owns a public IP/netblock, and RDAP is the current JSON standard for IP network and ASN registration data.
+  Evidence: `NetForge.ps1:11870-12097`; NETworkManager issue #3348; RFC 9083; IANA RDAP bootstrap data.
+  Touches: `NetForge.ps1` Network Tools/Diagnostics target parser, endpoint-policy controls, operation log redaction, `tests\NetForge.Tests.ps1`.
+  Acceptance: a manual lookup accepts IPv4/IPv6 or hostname, resolves hostnames only after explicit action, uses IANA RDAP bootstrap JSON over HTTPS to choose the IP/ASN RDAP endpoint, displays netblock/name/country/abuse-contact fields when present, respects disabled/offline endpoint-policy states, never runs automatically during reachability or port scans, and tests cover bootstrap selection plus canned RDAP JSON formatting/redaction.
+  Complexity: L
