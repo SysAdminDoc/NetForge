@@ -104,6 +104,7 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
   Acceptance: local checks can run a non-mutating WPF load smoke that verifies all major tabs, supported themes, compact mode, automation names, and minimum window constraints without changing network settings; failures include the missing control name/tab/theme.
   Complexity: L
 
+
 - [ ] P2 — Add auto-apply priority and match-status inspector
   Why: NetSetMan exposes AutoSwitch priority/status, while NetForge mostly records auto-apply match/skip reasoning in logs.
   Evidence: NetSetMan AutoSwitch docs; `NetForge.ps1:10035-10070`; operation log auto-apply entries; RESEARCH.md Competitive Landscape.
@@ -140,3 +141,44 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
   Touches: `NetForge.ps1` Network Tools/Diagnostics target parser, endpoint-policy controls, operation log redaction, `tests\NetForge.Tests.ps1`.
   Acceptance: a manual lookup accepts IPv4/IPv6 or hostname, resolves hostnames only after explicit action, uses IANA RDAP bootstrap JSON over HTTPS to choose the IP/ASN RDAP endpoint, displays netblock/name/country/abuse-contact fields when present, respects disabled/offline endpoint-policy states, never runs automatically during reachability or port scans, and tests cover bootstrap selection plus canned RDAP JSON formatting/redaction.
   Complexity: L
+
+## Research-Driven Additions
+
+### P2
+
+- [ ] P2 — Add settings schema validation and migration backups
+  Why: settings now hold endpoint policy, protected secrets, app routing policies, theme, compact mode, and locale state, but there is no explicit schema version or corrupt-settings quarantine.
+  Evidence: `NetForge.ps1:8991-9048`; NETworkManager issue #2700; RESEARCH.md Security, Privacy, and Reliability.
+  Touches: `NetForge.ps1` settings helpers, `%APPDATA%\NetForge\settings.json` migration path, `tests\NetForge.Tests.ps1`.
+  Acceptance: settings include a `SettingsSchemaVersion`, load validates known keys/types, migrations create a timestamped backup before rewrite, corrupt settings are quarantined with a clear in-app warning, protected setting migration still succeeds, and tests cover valid, legacy, unknown-key, and corrupt JSON cases.
+  Complexity: M
+
+- [ ] P2 — Add configuration export privacy modes and import preview
+  Why: diagnostics export is redacted, but full configuration export still writes raw profiles and DNS presets without a clear shareable-vs-restorable choice or import preview.
+  Evidence: `NetForge.ps1:13603-13623`; NETworkManager issue #2700; RESEARCH.md Security, Privacy, and Reliability.
+  Touches: `NetForge.ps1` export/import helpers and dialogs, profile validation, operation log, `tests\NetForge.Tests.ps1`.
+  Acceptance: export offers full backup and redacted shareable modes with a manifest of included/suppressed fields, import shows accepted/rejected/conflicting profile counts before writing, failed imports leave existing profiles unchanged, and tests cover raw export, redacted export, conflict preview, and rollback-on-error behavior.
+  Complexity: M
+
+- [ ] P2 — Add capability preflight and degraded-feature matrix
+  Why: NetForge depends on Windows cmdlets, modules, optional tools, admin state, and endpoint policy that vary by host; failures should be visible before a user clicks a feature.
+  Evidence: live PowerShell 5.1 environment lacked `Get-FileHash`; `tools\Test-NetForge.ps1`; RESEARCH.md Security, Privacy, and Reliability.
+  Touches: `NetForge.ps1` Diagnostics tab/status helpers, startup initialization, hashing fallback helper, `tests\NetForge.Tests.ps1`.
+  Acceptance: Diagnostics shows a non-mutating capability matrix for admin state, NetTCPIP, DnsClient, NetSecurity, DhcpServer, pktmon, netsh, Get-AuthenticodeSignature, hashing support, endpoint policy, and optional proxy paths; unavailable capabilities disable or label dependent controls; tests cover available, missing-cmdlet, missing-module, and endpoint-disabled cases.
+  Complexity: M
+
+- [ ] P2 — Add Network List Manager identity as an auto-apply match source
+  Why: SSID and gateway matching are useful, but Windows exposes network identity/category through documented APIs that can make wired, VPN, and domain networks less brittle.
+  Evidence: `NetForge.ps1:10137-10323`; Microsoft NetworkChange API; Microsoft windows-networking-tools; RESEARCH.md Architecture Assessment.
+  Touches: `NetForge.ps1` profile schema/matcher/UI, auto-apply inspector item, operation logs, `tests\NetForge.Tests.ps1`.
+  Acceptance: profiles can capture and match Network List Manager network name/GUID/category when available, fall back cleanly when COM/API access fails, show this signal in the auto-apply inspector, preserve existing SSID/gateway behavior, and tests mock match, no-match, unavailable, and migrated-profile cases.
+  Complexity: M
+
+### P3
+
+- [ ] P3 — Add manual DNS resolver benchmark and comparison history
+  Why: NetForge can test resolver health, but resolver selection still lacks a bounded manual benchmark/history view like DNS Jumper-style workflows.
+  Evidence: DNS Jumper; DNS Changer Desktop; `dns-providers.json`; RESEARCH.md Competitive Landscape.
+  Touches: `NetForge.ps1` DNS tab/health helpers, DNS provider catalog display, endpoint-policy controls, `tests\NetForge.Tests.ps1`.
+  Acceptance: a manual benchmark runs selected current/custom/catalog resolvers with bounded query count/timeouts, records latency and failure rate without auto-applying changes, keeps local recent-history rows with clear endpoint-policy/offline states, and tests cover result formatting, timeout handling, disabled endpoint policy, and no-history state.
+  Complexity: M
