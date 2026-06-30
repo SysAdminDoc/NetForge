@@ -2,6 +2,12 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.51.0] - 2026-06-29
+
+- Added: Diagnostics export privacy mode with a preview manifest and bundled `redaction-report.json`.
+- Changed: Diagnostics exports now redact webhook URLs, proxy hosts, mapped-drive UNC paths, SSIDs, MACs, adapter names, and local paths when privacy mode is enabled.
+- Added: Pester coverage for diagnostics export redaction, privacy-off behavior, and preview manifest formatting.
+
 ## [v1.50.0] - 2026-06-29
 
 - Changed: App interface guards now persist the program path and allowed adapter so they can be reconciled after adapter changes.

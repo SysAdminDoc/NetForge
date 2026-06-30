@@ -30,6 +30,7 @@
     "button.exportAll": "Exportar todo",
     "button.exportDiagnostics": "Exportar diagnosticos",
     "button.exportQr": "Exportar QR",
+    "button.redactBundle": "Redactar paquete",
     "button.flushDns": "Vaciar cache DNS",
     "button.fullNetworkReset": "Restablecer red",
     "button.generate": "Generar",

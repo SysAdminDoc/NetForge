@@ -1574,6 +1574,91 @@ Describe 'Packet capture helpers' {
     }
 }
 
+Describe 'Diagnostics export redaction helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Add-DiagnosticsRedactionCount',
+            'Add-DiagnosticsRedactionFile',
+            'Add-DiagnosticsValue',
+            'Get-DiagnosticsProxyTokens',
+            'Get-DiagnosticsRedactionValues',
+            'New-DiagnosticsRedactionReport',
+            'ConvertTo-DiagnosticsRedactedText',
+            'New-DiagnosticsExportManifest',
+            'Format-DiagnosticsExportPreview'
+        )
+        $script:AppVersion = '1.50.0'
+    }
+
+    It 'redacts webhook proxy mapped-drive SSID gateway MAC adapter and local path values' {
+        $profile = [pscustomobject]@{
+            MatchSSID = 'ClinicPrivate'
+            MatchGatewayMac = '00-11-22-33-44-55'
+            ProxyServer = 'proxy.clinic.local:8080'
+        }
+        $adapter = [pscustomobject]@{
+            Name = 'Clinic Ethernet'
+            InterfaceDescription = 'Intel Sensitive NIC'
+            MacAddress = 'AA-BB-CC-DD-EE-FF'
+        }
+        $values = Get-DiagnosticsRedactionValues -Profiles @($profile) -Adapter $adapter -ConfigPath 'C:\Users\matt\AppData\Roaming\NetForge' -ProfilesPath 'D:\NetForgeProfiles' -LogsPath 'C:\Users\matt\AppData\Roaming\NetForge\Logs'
+        $report = New-DiagnosticsRedactionReport -PrivacyMode:$true
+        $raw = @(
+            'https://discord.com/api/webhooks/123456789012345678/abc.DEF_ghi-jkl',
+            'proxy.clinic.local:8080',
+            '\\fileserver\share',
+            'ClinicPrivate',
+            '00-11-22-33-44-55',
+            'AA-BB-CC-DD-EE-FF',
+            'Clinic Ethernet',
+            'C:\Users\matt\AppData\Roaming\NetForge'
+        ) -join "`n"
+
+        $redacted = ConvertTo-DiagnosticsRedactedText -Text $raw -Values $values -Report $report -PrivacyMode:$true
+
+        $redacted | Should -Not -Match 'api/webhooks/123456789012345678/abc'
+        $redacted | Should -Not -Match 'proxy\.clinic\.local'
+        $redacted | Should -Not -Match 'fileserver'
+        $redacted | Should -Not -Match 'ClinicPrivate'
+        $redacted | Should -Not -Match '00-11-22-33-44-55'
+        $redacted | Should -Not -Match 'AA-BB-CC-DD-EE-FF'
+        $redacted | Should -Not -Match 'Clinic Ethernet'
+        $redacted | Should -Not -Match 'C:\\Users\\matt'
+        $redacted | Should -Match '\[redacted-proxy\]'
+        $redacted | Should -Match '\[redacted-ssid\]'
+        $redacted | Should -Match '\[redacted-mac\]'
+        $report.Categories.WebhookUrls | Should -BeGreaterThan 0
+        $report.Categories.ProxyServers | Should -BeGreaterThan 0
+        $report.Categories.MappedDrivePaths | Should -BeGreaterThan 0
+        $report.Categories.SSIDs | Should -BeGreaterThan 0
+        $report.Categories.GatewayMacs | Should -BeGreaterThan 0
+        $report.Categories.LocalPaths | Should -BeGreaterThan 0
+        $report.Categories.AdapterNames | Should -BeGreaterThan 0
+    }
+
+    It 'leaves diagnostics text unchanged when privacy mode is off' {
+        $values = Get-DiagnosticsRedactionValues -Profiles @([pscustomobject]@{ MatchSSID = 'ClinicPrivate'; ProxyServer = 'proxy.clinic.local:8080' })
+        $report = New-DiagnosticsRedactionReport -PrivacyMode:$false
+        $raw = 'ClinicPrivate uses proxy.clinic.local:8080'
+
+        ConvertTo-DiagnosticsRedactedText -Text $raw -Values $values -Report $report -PrivacyMode:$false | Should -Be $raw
+        $report.Categories.SSIDs | Should -Be 0
+        $report.Categories.ProxyServers | Should -Be 0
+    }
+
+    It 'builds a diagnostics export preview manifest' {
+        $manifest = New-DiagnosticsExportManifest -DestinationPath 'C:\Temp\diag.zip' -PrivacyMode:$true -LogFiles @('a.log', 'b.log') -ProfileFiles @('clinic.json')
+        $preview = Format-DiagnosticsExportPreview -Manifest $manifest
+
+        $manifest.Destination | Should -Be 'diag.zip'
+        $manifest.PrivacyMode | Should -BeTrue
+        ($manifest.Includes | Where-Object { $_.Name -eq 'Logs' }).Count | Should -Be 2
+        ($manifest.Includes | Where-Object { $_.Name -eq 'Profiles' }).Count | Should -Be 1
+        $preview | Should -Match 'Diagnostics export preview'
+        $preview | Should -Match 'redaction-report\.json'
+    }
+}
+
 Describe 'Cable diagnostic helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

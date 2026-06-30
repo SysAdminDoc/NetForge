@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.50.0
+    Version: 1.51.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -90,7 +90,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.50.0"
+$script:AppVersion = "1.51.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -257,6 +257,7 @@ $script:AccessibilityNames = @{
     btnReleaseIP = "Release IP address"
     btnRenewIP = "Renew IP address"
     btnRestoreNetworkState = "Restore last network state"
+    chkDiagnosticsPrivacyMode = "Redact diagnostics export"
     btnExportDiagnostics = "Export diagnostics"
     txtRdpTarget = "Remote Desktop host or RDP file"
     txtRdpProfileName = "Remote Desktop profile name"
@@ -322,7 +323,7 @@ $script:AccessibilityTabOrder = @(
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
-    "btnFlushDns", "btnRestoreNetworkState", "btnExportDiagnostics", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
+    "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
     "txtAppRoutingProgram", "btnBrowseAppRoutingProgram", "cmbAppRoutingInterface", "btnApplyAppRouting", "btnRemoveAppRouting", "btnRefreshAppRouting", "lstAppRoutingRules",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
@@ -1529,7 +1530,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.50.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.51.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2469,6 +2470,7 @@ function Apply-Localization {
                                         <Button x:Name="btnReleaseIP" Content="Release IP" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnRenewIP" Content="Renew IP" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnRestoreNetworkState" Content="Restore Last Network State" Style="{StaticResource ModernButton}" Margin="0,0,12,12" IsEnabled="False"/>
+                                        <CheckBox x:Name="chkDiagnosticsPrivacyMode" Content="Redact Bundle" Style="{StaticResource ModernCheckBox}" IsChecked="True" Margin="0,0,12,12" VerticalAlignment="Center"/>
                                         <Button x:Name="btnExportDiagnostics" Content="Export Diagnostics" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnResetWinsock" Content="Reset Winsock" Style="{StaticResource DangerButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnResetTCP" Content="Reset TCP/IP Stack" Style="{StaticResource DangerButton}" Margin="0,0,12,12"/>
@@ -2925,7 +2927,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.50.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.51.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -13228,6 +13230,277 @@ function Disable-SelectedAdapter {
 # ============================================================================
 # EXPORT/IMPORT FUNCTIONS
 # ============================================================================
+function New-DiagnosticsRedactionReport {
+    param([bool]$PrivacyMode = $true)
+
+    return [ordered]@{
+        PrivacyMode = [bool]$PrivacyMode
+        Categories = [ordered]@{
+            WebhookUrls = 0
+            ProxyServers = 0
+            MappedDrivePaths = 0
+            SSIDs = 0
+            GatewayMacs = 0
+            LocalPaths = 0
+            AdapterNames = 0
+        }
+        Files = @()
+    }
+}
+
+function Add-DiagnosticsRedactionCount {
+    param(
+        [System.Collections.IDictionary]$Report,
+        [string]$Category,
+        [int]$Count
+    )
+
+    if ($null -eq $Report -or [string]::IsNullOrWhiteSpace($Category) -or $Count -le 0) { return }
+    if (-not $Report.Categories.Contains($Category)) {
+        $Report.Categories[$Category] = 0
+    }
+    $Report.Categories[$Category] = [int]$Report.Categories[$Category] + $Count
+}
+
+function Add-DiagnosticsRedactionFile {
+    param(
+        [System.Collections.IDictionary]$Report,
+        [string]$Path,
+        [string]$Kind,
+        [bool]$Redacted
+    )
+
+    if ($null -eq $Report) { return }
+    $Report.Files = @($Report.Files) + [pscustomobject]@{
+        Path = [string]$Path
+        Kind = [string]$Kind
+        Redacted = [bool]$Redacted
+    }
+}
+
+function Add-DiagnosticsValue {
+    param(
+        [System.Collections.Generic.List[string]]$List,
+        [AllowEmptyString()][string]$Value
+    )
+
+    $text = ([string]$Value).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return }
+    if (-not $List.Contains($text)) {
+        [void]$List.Add($text)
+    }
+}
+
+function Get-DiagnosticsProxyTokens {
+    param([string]$ProxyServer)
+
+    $tokens = New-Object System.Collections.Generic.List[string]
+    foreach ($part in (([string]$ProxyServer) -split '[;,]')) {
+        $text = $part.Trim()
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+        Add-DiagnosticsValue -List $tokens -Value $text
+
+        $withoutScheme = $text -replace '^[A-Za-z][A-Za-z0-9+\-.]*://', ''
+        $proxyHost = ($withoutScheme -split '/')[0]
+        if ($proxyHost -match '^\[(.+?)\](?::\d+)?$') {
+            Add-DiagnosticsValue -List $tokens -Value $Matches[1]
+        } elseif ($proxyHost -match '^([^:]+)(?::\d+)?$') {
+            Add-DiagnosticsValue -List $tokens -Value $Matches[1]
+        }
+    }
+
+    return @($tokens)
+}
+
+function Get-DiagnosticsRedactionValues {
+    param(
+        [object[]]$Profiles = @(),
+        $Adapter = $null,
+        [string]$ConfigPath = "",
+        [string]$ProfilesPath = "",
+        [string]$LogsPath = ""
+    )
+
+    $proxyServers = New-Object System.Collections.Generic.List[string]
+    $ssids = New-Object System.Collections.Generic.List[string]
+    $gatewayMacs = New-Object System.Collections.Generic.List[string]
+    $localPaths = New-Object System.Collections.Generic.List[string]
+    $adapterNames = New-Object System.Collections.Generic.List[string]
+
+    foreach ($profile in @($Profiles | Where-Object { $_ })) {
+        if ($profile.PSObject.Properties["ProxyServer"]) {
+            foreach ($token in @(Get-DiagnosticsProxyTokens -ProxyServer ([string]$profile.ProxyServer))) {
+                Add-DiagnosticsValue -List $proxyServers -Value $token
+            }
+        }
+        if ($profile.PSObject.Properties["MatchSSID"]) {
+            Add-DiagnosticsValue -List $ssids -Value ([string]$profile.MatchSSID)
+        }
+        if ($profile.PSObject.Properties["MatchGatewayMac"]) {
+            Add-DiagnosticsValue -List $gatewayMacs -Value ([string]$profile.MatchGatewayMac)
+        }
+    }
+
+    if ($Adapter) {
+        foreach ($propertyName in @("Name", "InterfaceAlias", "InterfaceDescription", "MacAddress")) {
+            $property = $Adapter.PSObject.Properties[$propertyName]
+            if ($property) {
+                if ($propertyName -eq "MacAddress") {
+                    Add-DiagnosticsValue -List $gatewayMacs -Value ([string]$property.Value)
+                } else {
+                    Add-DiagnosticsValue -List $adapterNames -Value ([string]$property.Value)
+                }
+            }
+        }
+    }
+
+    foreach ($path in @($ConfigPath, $ProfilesPath, $LogsPath)) {
+        Add-DiagnosticsValue -List $localPaths -Value $path
+    }
+
+    return [pscustomobject]@{
+        ProxyServers = @($proxyServers)
+        SSIDs = @($ssids)
+        GatewayMacs = @($gatewayMacs)
+        LocalPaths = @($localPaths | Sort-Object Length -Descending)
+        AdapterNames = @($adapterNames | Sort-Object Length -Descending)
+    }
+}
+
+function ConvertTo-DiagnosticsRedactedText {
+    param(
+        [AllowEmptyString()][string]$Text,
+        $Values,
+        [System.Collections.IDictionary]$Report,
+        [bool]$PrivacyMode = $true
+    )
+
+    $result = [string]$Text
+    if (-not $PrivacyMode) { return $result }
+
+    $webhookPattern = 'https://(?:discord(?:app)?\.com)/api/webhooks/\d+/[A-Za-z0-9._-]+'
+    $webhookMatches = [regex]::Matches($result, $webhookPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($webhookMatches.Count -gt 0) {
+        Add-DiagnosticsRedactionCount -Report $Report -Category "WebhookUrls" -Count $webhookMatches.Count
+        $result = [regex]::Replace($result, $webhookPattern, 'https://discord.com/api/webhooks/[redacted]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+
+    foreach ($value in @($Values.ProxyServers)) {
+        $pattern = [regex]::Escape([string]$value)
+        $matches = [regex]::Matches($result, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($matches.Count -gt 0) {
+            Add-DiagnosticsRedactionCount -Report $Report -Category "ProxyServers" -Count $matches.Count
+            $result = [regex]::Replace($result, $pattern, '[redacted-proxy]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        }
+    }
+
+    $uncPattern = '\\\\[^\\\s"'']+\\[^\s"'']+'
+    $uncMatches = [regex]::Matches($result, $uncPattern)
+    if ($uncMatches.Count -gt 0) {
+        Add-DiagnosticsRedactionCount -Report $Report -Category "MappedDrivePaths" -Count $uncMatches.Count
+        $result = [regex]::Replace($result, $uncPattern, '\\[redacted-host]\[redacted-share]')
+    }
+
+    foreach ($value in @($Values.SSIDs)) {
+        $pattern = [regex]::Escape([string]$value)
+        $matches = [regex]::Matches($result, $pattern)
+        if ($matches.Count -gt 0) {
+            Add-DiagnosticsRedactionCount -Report $Report -Category "SSIDs" -Count $matches.Count
+            $result = [regex]::Replace($result, $pattern, '[redacted-ssid]')
+        }
+    }
+
+    foreach ($value in @($Values.GatewayMacs)) {
+        $pattern = [regex]::Escape([string]$value)
+        $matches = [regex]::Matches($result, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($matches.Count -gt 0) {
+            Add-DiagnosticsRedactionCount -Report $Report -Category "GatewayMacs" -Count $matches.Count
+            $result = [regex]::Replace($result, $pattern, '[redacted-mac]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        }
+    }
+
+    $macPattern = '\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b|\b[0-9a-f]{12}\b'
+    $macMatches = [regex]::Matches($result, $macPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($macMatches.Count -gt 0) {
+        Add-DiagnosticsRedactionCount -Report $Report -Category "GatewayMacs" -Count $macMatches.Count
+        $result = [regex]::Replace($result, $macPattern, '[redacted-mac]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    }
+
+    foreach ($value in @($Values.LocalPaths)) {
+        $pattern = [regex]::Escape([string]$value)
+        $matches = [regex]::Matches($result, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($matches.Count -gt 0) {
+            Add-DiagnosticsRedactionCount -Report $Report -Category "LocalPaths" -Count $matches.Count
+            $result = [regex]::Replace($result, $pattern, '[redacted-path]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        }
+    }
+
+    foreach ($value in @($Values.AdapterNames)) {
+        $pattern = [regex]::Escape([string]$value)
+        $matches = [regex]::Matches($result, $pattern)
+        if ($matches.Count -gt 0) {
+            Add-DiagnosticsRedactionCount -Report $Report -Category "AdapterNames" -Count $matches.Count
+            $result = [regex]::Replace($result, $pattern, '[redacted-adapter]')
+        }
+    }
+
+    return $result
+}
+
+function Write-DiagnosticsRedactedTextFile {
+    param(
+        [string]$Path,
+        [AllowEmptyString()][string]$Text,
+        $Values,
+        [System.Collections.IDictionary]$Report,
+        [string]$Kind,
+        [string]$ReportPath = "",
+        [bool]$PrivacyMode = $true
+    )
+
+    $redacted = ConvertTo-DiagnosticsRedactedText -Text $Text -Values $Values -Report $Report -PrivacyMode:$PrivacyMode
+    Set-Content -LiteralPath $Path -Value $redacted -Encoding UTF8
+    $reportedPath = if ([string]::IsNullOrWhiteSpace($ReportPath)) { [System.IO.Path]::GetFileName($Path) } else { $ReportPath }
+    Add-DiagnosticsRedactionFile -Report $Report -Path $reportedPath -Kind $Kind -Redacted:$PrivacyMode
+}
+
+function New-DiagnosticsExportManifest {
+    param(
+        [string]$DestinationPath,
+        [bool]$PrivacyMode,
+        [object[]]$LogFiles = @(),
+        [object[]]$ProfileFiles = @()
+    )
+
+    return [ordered]@{
+        Version = $script:AppVersion
+        GeneratedAt = (Get-Date).ToString("o")
+        Destination = [System.IO.Path]::GetFileName($DestinationPath)
+        PrivacyMode = [bool]$PrivacyMode
+        Includes = @(
+            [pscustomobject]@{ Name = "adapter-state.json"; Count = 1; Redacted = [bool]$PrivacyMode },
+            [pscustomobject]@{ Name = "Logs"; Count = @($LogFiles).Count; Redacted = [bool]$PrivacyMode },
+            [pscustomobject]@{ Name = "Profiles"; Count = @($ProfileFiles).Count; Redacted = [bool]$PrivacyMode },
+            [pscustomobject]@{ Name = "redaction-report.json"; Count = 1; Redacted = $false }
+        )
+        RedactionCategories = @("WebhookUrls", "ProxyServers", "MappedDrivePaths", "SSIDs", "GatewayMacs", "LocalPaths", "AdapterNames")
+    }
+}
+
+function Format-DiagnosticsExportPreview {
+    param($Manifest)
+
+    $sb = New-Object System.Text.StringBuilder
+    $sb.AppendLine("Diagnostics export preview") | Out-Null
+    $sb.AppendLine("==========================") | Out-Null
+    $sb.AppendLine("Destination: $($Manifest.Destination)") | Out-Null
+    $sb.AppendLine("Privacy mode: $($Manifest.PrivacyMode)") | Out-Null
+    foreach ($item in @($Manifest.Includes)) {
+        $sb.AppendLine(("{0}: {1} item(s), redacted={2}" -f $item.Name, $item.Count, $item.Redacted)) | Out-Null
+    }
+    return $sb.ToString()
+}
+
 function Export-DiagnosticsBundle {
     $saveDialog = New-Object System.Windows.Forms.SaveFileDialog
     $saveDialog.Filter = "Zip Files (*.zip)|*.zip"
@@ -13246,14 +13519,42 @@ function Export-DiagnosticsBundle {
         New-Item -Path $logsTarget -ItemType Directory -Force | Out-Null
         New-Item -Path $profilesTarget -ItemType Directory -Force | Out-Null
 
-        if (Test-Path -LiteralPath $script:LogsPath) {
-            Copy-Item -Path (Join-Path $script:LogsPath "*") -Destination $logsTarget -Force -ErrorAction SilentlyContinue
-        }
-        if (Test-Path -LiteralPath $script:ProfilesPath) {
-            Copy-Item -Path (Join-Path $script:ProfilesPath "*.json") -Destination $profilesTarget -Force -ErrorAction SilentlyContinue
+        $privacyMode = $true
+        if ($script:chkDiagnosticsPrivacyMode) {
+            $privacyMode = [bool]$script:chkDiagnosticsPrivacyMode.IsChecked
         }
 
         $adapter = Get-SelectedAdapter
+        $profiles = @(Get-Profiles)
+        $logFiles = @()
+        $profileFiles = @()
+        if (Test-Path -LiteralPath $script:LogsPath) {
+            $logFiles = @(Get-ChildItem -LiteralPath $script:LogsPath -File -ErrorAction SilentlyContinue)
+        }
+        if (Test-Path -LiteralPath $script:ProfilesPath) {
+            $profileFiles = @(Get-ChildItem -LiteralPath $script:ProfilesPath -Filter "*.json" -File -ErrorAction SilentlyContinue)
+        }
+
+        $redactionValues = Get-DiagnosticsRedactionValues -Profiles $profiles -Adapter $adapter -ConfigPath $script:ConfigPath -ProfilesPath $script:ProfilesPath -LogsPath $script:LogsPath
+        $redactionReport = New-DiagnosticsRedactionReport -PrivacyMode:$privacyMode
+        $manifest = New-DiagnosticsExportManifest -DestinationPath $saveDialog.FileName -PrivacyMode:$privacyMode -LogFiles $logFiles -ProfileFiles $profileFiles
+        $previewText = Format-DiagnosticsExportPreview -Manifest $manifest
+        if ($script:txtDiagOutput) {
+            $script:txtDiagOutput.Text = $previewText
+        }
+        $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $tempRoot "preview-manifest.json") -Encoding UTF8
+
+        foreach ($logFile in $logFiles) {
+            $targetPath = Join-Path $logsTarget $logFile.Name
+            $text = Get-Content -Raw -LiteralPath $logFile.FullName -ErrorAction SilentlyContinue
+            Write-DiagnosticsRedactedTextFile -Path $targetPath -Text $text -Values $redactionValues -Report $redactionReport -Kind "Log" -ReportPath ("Logs/{0}" -f $logFile.Name) -PrivacyMode:$privacyMode
+        }
+        foreach ($profileFile in $profileFiles) {
+            $targetPath = Join-Path $profilesTarget $profileFile.Name
+            $text = Get-Content -Raw -LiteralPath $profileFile.FullName -ErrorAction SilentlyContinue
+            Write-DiagnosticsRedactedTextFile -Path $targetPath -Text $text -Values $redactionValues -Report $redactionReport -Kind "Profile" -ReportPath ("Profiles/{0}" -f $profileFile.Name) -PrivacyMode:$privacyMode
+        }
+
         $adapterSnapshot = $null
         if ($adapter) {
             try {
@@ -13271,18 +13572,22 @@ function Export-DiagnosticsBundle {
             LogsPath = $script:LogsPath
             SelectedAdapter = if ($adapter) { $adapter | Select-Object Name, InterfaceDescription, ifIndex, Status, MacAddress, LinkSpeed } else { $null }
             AdapterSnapshot = $adapterSnapshot
-            Profiles = Get-Profiles
+            Profiles = $profiles
             RecentProfileLoadWarnings = $script:LastProfileLoadWarnings
         }
 
-        $state | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $tempRoot "adapter-state.json") -Encoding UTF8
+        $stateJson = $state | ConvertTo-Json -Depth 10
+        Write-DiagnosticsRedactedTextFile -Path (Join-Path $tempRoot "adapter-state.json") -Text $stateJson -Values $redactionValues -Report $redactionReport -Kind "State" -ReportPath "adapter-state.json" -PrivacyMode:$privacyMode
+        $redactionReport["GeneratedAt"] = (Get-Date).ToString("o")
+        $redactionReport["Version"] = $script:AppVersion
+        $redactionReport | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $tempRoot "redaction-report.json") -Encoding UTF8
 
         if (Test-Path -LiteralPath $saveDialog.FileName) {
             Remove-Item -LiteralPath $saveDialog.FileName -Force
         }
         Compress-Archive -Path (Join-Path $tempRoot "*") -DestinationPath $saveDialog.FileName -Force
 
-        Write-OperationLog -Action "Export diagnostics" -Result "Succeeded" -Detail $saveDialog.FileName
+        Write-OperationLog -Action "Export diagnostics" -Result "Succeeded" -Detail "Path=$($saveDialog.FileName); PrivacyMode=$privacyMode; Logs=$($logFiles.Count); Profiles=$($profileFiles.Count)"
         Update-Status "Diagnostics exported to $($saveDialog.FileName)" -Type Success
     } catch {
         Write-OperationLog -Action "Export diagnostics" -Result "Failed" -Detail $_.Exception.Message

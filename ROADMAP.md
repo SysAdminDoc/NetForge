@@ -53,13 +53,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 
 ### P1
 
-- [ ] P1 — Add redacted diagnostics export with preview manifest
-  Why: diagnostics export currently copies profiles/logs and embeds all loaded profiles, which can expose SSIDs, proxy servers, mapped-drive paths, adapter names, and local paths.
-  Evidence: `NetForge.ps1:12834-12863`; RESEARCH.md Security; GlassWire/Portmaster trust patterns.
-  Touches: `NetForge.ps1` diagnostics export, profile serialization helpers, operation log redaction helpers, `tests/NetForge.Tests.ps1`.
-  Acceptance: export shows a preview manifest before writing, redacts webhook-like URLs, proxy hosts, mapped-drive UNC hosts, SSIDs/gateway MACs when privacy mode is selected, includes a `redaction-report.json`, and Pester proves raw sensitive test values do not appear in exported JSON/log text.
-  Complexity: M
-
 - [ ] P1 — Add DoQ proxy binary trust and session observability
   Why: NetForge launches an operator-selected `dnsproxy.exe` but does not record binary hash/publisher, capture stdout/stderr, or explain proxy crash/hang states.
   Evidence: `NetForge.ps1:7768-7833`; AdGuard `dnsproxy` issues; Control D `ctrld` issue 308; RESEARCH.md Competitive Landscape.
