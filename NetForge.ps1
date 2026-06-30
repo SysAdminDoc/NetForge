@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.48.0
+    Version: 1.49.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -90,7 +90,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.48.0"
+$script:AppVersion = "1.49.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -137,6 +137,9 @@ $script:SpeedTestEndpoint = "https://speed.cloudflare.com/__down?bytes=1048576"
 $script:DiscordWebhookEnabled = $false
 $script:DiscordWebhookUrl = ""
 $script:DiscordWebhookLastStatus = "Discord webhook notifications are disabled."
+$script:ProtectedSettingNames = @("DiscordWebhookUrl")
+$script:PendingProtectedSettingMigrations = [ordered]@{}
+$script:SecretSettingLoadWarning = ""
 $script:SpeedTestRunning = $false
 $script:WifiScanRunning = $false
 $script:WifiNetworks = @()
@@ -426,6 +429,121 @@ function Resolve-UiThemeName {
     return "GitHub Dark"
 }
 
+function Test-ProtectedAppSettingName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+    foreach ($settingName in @($script:ProtectedSettingNames)) {
+        if ($settingName -ieq $Name) { return $true }
+    }
+
+    return $false
+}
+
+function Get-ProtectedAppSettingName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        throw "Setting name is required."
+    }
+
+    return ("{0}Protected" -f $Name)
+}
+
+function Initialize-ProtectedDataApi {
+    try {
+        Add-Type -AssemblyName System.Security -ErrorAction Stop
+    } catch {
+        [void]$_.Exception
+    }
+}
+
+function Protect-AppSettingSecret {
+    param([AllowEmptyString()][string]$Value)
+
+    if ([string]::IsNullOrEmpty($Value)) { return "" }
+
+    Initialize-ProtectedDataApi
+    try {
+        $plainBytes = [System.Text.Encoding]::UTF8.GetBytes($Value)
+        $protectedBytes = [System.Security.Cryptography.ProtectedData]::Protect(
+            $plainBytes,
+            $null,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+        )
+        return [Convert]::ToBase64String($protectedBytes)
+    } catch {
+        throw "Could not protect setting secret with current-user DPAPI. $($_.Exception.Message)"
+    }
+}
+
+function Unprotect-AppSettingSecret {
+    param([AllowEmptyString()][string]$ProtectedValue)
+
+    if ([string]::IsNullOrWhiteSpace($ProtectedValue)) { return "" }
+
+    Initialize-ProtectedDataApi
+    try {
+        $protectedBytes = [Convert]::FromBase64String($ProtectedValue)
+        $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
+            $protectedBytes,
+            $null,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+        )
+        return [System.Text.Encoding]::UTF8.GetString($plainBytes)
+    } catch {
+        throw "Could not decrypt protected setting secret. $($_.Exception.Message)"
+    }
+}
+
+function Get-AppSettingSecretValue {
+    param(
+        $Settings,
+        [string]$Name
+    )
+
+    $result = [ordered]@{
+        HasValue = $false
+        Value = ""
+        IsProtected = $false
+        NeedsMigration = $false
+        Error = ""
+    }
+
+    if ($null -eq $Settings -or [string]::IsNullOrWhiteSpace($Name)) {
+        return [pscustomobject]$result
+    }
+
+    $protectedName = Get-ProtectedAppSettingName -Name $Name
+    $protectedProperty = $Settings.PSObject.Properties[$protectedName]
+    $plainProperty = $Settings.PSObject.Properties[$Name]
+
+    if ($protectedProperty -and -not [string]::IsNullOrWhiteSpace([string]$protectedProperty.Value)) {
+        $result.IsProtected = $true
+        try {
+            $plainValue = Unprotect-AppSettingSecret -ProtectedValue ([string]$protectedProperty.Value)
+            if (-not [string]::IsNullOrWhiteSpace($plainValue)) {
+                $result.HasValue = $true
+                $result.Value = $plainValue.Trim()
+            }
+            return [pscustomobject]$result
+        } catch {
+            $result.Error = $_.Exception.Message
+            if (-not $plainProperty -or [string]::IsNullOrWhiteSpace([string]$plainProperty.Value)) {
+                return [pscustomobject]$result
+            }
+        }
+    }
+
+    if ($plainProperty -and -not [string]::IsNullOrWhiteSpace([string]$plainProperty.Value)) {
+        $result.HasValue = $true
+        $result.Value = ([string]$plainProperty.Value).Trim()
+        $result.NeedsMigration = $true
+    }
+
+    return [pscustomobject]$result
+}
+
 if (Test-Path -LiteralPath $script:SettingsFile) {
     try {
         $settings = Get-Content -Raw -LiteralPath $script:SettingsFile | ConvertFrom-Json
@@ -463,8 +581,15 @@ if (Test-Path -LiteralPath $script:SettingsFile) {
         if ($null -ne $settings.DiscordWebhookEnabled) {
             $script:DiscordWebhookEnabled = -not (([string]$settings.DiscordWebhookEnabled).Trim() -match '^(0|false|no|off|disabled)$')
         }
-        if ($settings.DiscordWebhookUrl) {
-            $script:DiscordWebhookUrl = ([string]$settings.DiscordWebhookUrl).Trim()
+        $discordWebhookSecret = Get-AppSettingSecretValue -Settings $settings -Name "DiscordWebhookUrl"
+        if ($discordWebhookSecret.HasValue) {
+            $script:DiscordWebhookUrl = [string]$discordWebhookSecret.Value
+        }
+        if ($discordWebhookSecret.NeedsMigration -and -not [string]::IsNullOrWhiteSpace($script:DiscordWebhookUrl)) {
+            $script:PendingProtectedSettingMigrations["DiscordWebhookUrl"] = $script:DiscordWebhookUrl
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$discordWebhookSecret.Error)) {
+            $script:SecretSettingLoadWarning = [string]$discordWebhookSecret.Error
         }
     } catch {
         $script:ProfileStoreLoadWarning = "Could not read settings.json; using local profile storage. $($_.Exception.Message)"
@@ -1403,7 +1528,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.48.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.49.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2799,7 +2924,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.48.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.49.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -8874,7 +8999,18 @@ function Save-AppSetting {
     }
 
     $settings = Get-AppSettings
-    $settings[$Name] = $Value
+    if (Test-ProtectedAppSettingName -Name $Name) {
+        $protectedName = Get-ProtectedAppSettingName -Name $Name
+        if ([string]::IsNullOrWhiteSpace([string]$Value)) {
+            [void]$settings.Remove($Name)
+            [void]$settings.Remove($protectedName)
+        } else {
+            $settings[$protectedName] = Protect-AppSettingSecret -Value ([string]$Value)
+            [void]$settings.Remove($Name)
+        }
+    } else {
+        $settings[$Name] = $Value
+    }
     $settings["UpdatedAt"] = (Get-Date).ToString("o")
 
     $tempPath = Join-Path $script:ConfigPath "settings.$([guid]::NewGuid().ToString('N')).tmp"
@@ -8896,6 +9032,24 @@ function Save-AppSetting {
         }
     }
 }
+
+function Complete-PendingProtectedSettingMigrations {
+    if ($null -eq $script:PendingProtectedSettingMigrations -or $script:PendingProtectedSettingMigrations.Count -eq 0) {
+        return
+    }
+
+    foreach ($settingName in @($script:PendingProtectedSettingMigrations.Keys)) {
+        try {
+            Save-AppSetting -Name $settingName -Value $script:PendingProtectedSettingMigrations[$settingName]
+        } catch {
+            $script:SecretSettingLoadWarning = "Could not migrate protected setting '$settingName'. $($_.Exception.Message)"
+        }
+    }
+
+    $script:PendingProtectedSettingMigrations = [ordered]@{}
+}
+
+Complete-PendingProtectedSettingMigrations
 
 function Set-EndpointPolicyStatus {
     param([string]$Message)
@@ -9184,6 +9338,8 @@ function Initialize-DiscordWebhookControls {
 
     if (-not $script:DiscordWebhookEnabled) {
         Set-DiscordWebhookStatus -Message "Discord webhook notifications are disabled."
+    } elseif (-not [string]::IsNullOrWhiteSpace([string]$script:SecretSettingLoadWarning)) {
+        Set-DiscordWebhookStatus -Message "Discord webhook secret could not be read: $script:SecretSettingLoadWarning"
     } elseif (Test-DiscordWebhookUrl -Url $script:DiscordWebhookUrl) {
         Set-DiscordWebhookStatus -Message "Discord webhook enabled for $(Get-DiscordWebhookRedactedUrl -Url $script:DiscordWebhookUrl)."
     } else {
@@ -9215,8 +9371,16 @@ function Save-DiscordWebhookSettings {
     $script:DiscordWebhookEnabled = $enabled
     $script:DiscordWebhookUrl = $url
 
-    Save-AppSetting -Name "DiscordWebhookEnabled" -Value $enabled
-    Save-AppSetting -Name "DiscordWebhookUrl" -Value $url
+    try {
+        Save-AppSetting -Name "DiscordWebhookUrl" -Value $url
+        Save-AppSetting -Name "DiscordWebhookEnabled" -Value $enabled
+    } catch {
+        $errorText = $_.Exception.Message
+        Set-DiscordWebhookStatus -Message "Discord webhook settings could not be saved: $errorText"
+        Write-OperationLog -Action "Discord profile webhook" -Result "Failed" -Detail "Settings save failed. $errorText"
+        Update-Status "Discord webhook settings save failed" -Type Error
+        return
+    }
 
     if ($enabled) {
         $redactedUrl = Get-DiscordWebhookRedactedUrl -Url $url

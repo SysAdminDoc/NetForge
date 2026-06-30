@@ -53,13 +53,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 
 ### P0
 
-- [ ] P0 — Protect persisted webhook and future secret settings with DPAPI
-  Why: Discord webhook URLs are bearer secrets and are currently saved in plaintext `settings.json`.
-  Evidence: `NetForge.ps1:466-467`, `NetForge.ps1:9218-9219`; Microsoft `ProtectedData`; RESEARCH.md Security.
-  Touches: `NetForge.ps1` settings load/save helpers, Discord webhook helpers, `tests/NetForge.Tests.ps1`.
-  Acceptance: existing plaintext `DiscordWebhookUrl` migrates to current-user protected storage, `settings.json` retains only non-secret flags or a secret reference, UI still shows redacted status, webhook send still works, and Pester covers migration, missing secret, and invalid secret cases.
-  Complexity: M
-
 - [ ] P0 — Reconcile app interface guards after adapter topology changes
   Why: current guards block only adapters present at apply time, so newly added adapters can bypass an intended app restriction.
   Evidence: `NetForge.ps1:10775-10800`, `NetForge.ps1:10972-10980`, `NetForge.ps1:10124-10159`; Microsoft NetSecurity interface filter docs; RESEARCH.md Security.

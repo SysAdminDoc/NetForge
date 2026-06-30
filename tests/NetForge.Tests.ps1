@@ -840,6 +840,15 @@ Describe 'Endpoint privacy policy' {
             'Get-PublicIpEndpointList',
             'Get-SpeedTestEndpointCatalog',
             'Resolve-SpeedTestEndpoint',
+            'Test-ProtectedAppSettingName',
+            'Get-ProtectedAppSettingName',
+            'Initialize-ProtectedDataApi',
+            'Protect-AppSettingSecret',
+            'Unprotect-AppSettingSecret',
+            'Get-AppSettingSecretValue',
+            'Get-AppSettings',
+            'Save-AppSetting',
+            'Complete-PendingProtectedSettingMigrations',
             'ConvertTo-DiscordWebhookSafeText',
             'Test-DiscordWebhookUrl',
             'Get-DiscordWebhookRedactedUrl',
@@ -847,6 +856,7 @@ Describe 'Endpoint privacy policy' {
         )
         $versionMetadata = Get-Content -Raw -LiteralPath (Join-Path $script:RepoRoot 'version.json') | ConvertFrom-Json
         $script:AppVersion = [string]$versionMetadata.Version
+        $script:ProtectedSettingNames = @('DiscordWebhookUrl')
     }
 
     It 'normalizes persisted endpoint policy booleans' {
@@ -884,6 +894,97 @@ Describe 'Endpoint privacy policy' {
         $source | Should -Match 'ExternalSpeedTestEnabled'
         $source | Should -Match 'SpeedTestEndpoint'
         $source | Should -Match 'DiscordWebhookEnabled'
+        $source | Should -Match 'ProtectedSettingNames'
+    }
+
+    It 'protects Discord webhook settings with current-user DPAPI' {
+        $url = 'https://discord.com/api/webhooks/123456789012345678/abc.DEF_ghi-jkl'
+
+        Test-ProtectedAppSettingName -Name 'DiscordWebhookUrl' | Should -BeTrue
+        Get-ProtectedAppSettingName -Name 'DiscordWebhookUrl' | Should -Be 'DiscordWebhookUrlProtected'
+
+        $protected = Protect-AppSettingSecret -Value $url
+        $protected | Should -Not -BeNullOrEmpty
+        $protected | Should -Not -Be $url
+        Unprotect-AppSettingSecret -ProtectedValue $protected | Should -Be $url
+    }
+
+    It 'reads legacy plaintext webhook settings as migration candidates' {
+        $url = 'https://discord.com/api/webhooks/123456789012345678/abc.DEF_ghi-jkl'
+        $settings = [pscustomobject]@{
+            DiscordWebhookEnabled = $true
+            DiscordWebhookUrl = $url
+        }
+
+        $secret = Get-AppSettingSecretValue -Settings $settings -Name 'DiscordWebhookUrl'
+
+        $secret.HasValue | Should -BeTrue
+        $secret.Value | Should -Be $url
+        $secret.IsProtected | Should -BeFalse
+        $secret.NeedsMigration | Should -BeTrue
+        $secret.Error | Should -Be ''
+    }
+
+    It 'handles missing and invalid protected webhook settings without exposing secrets' {
+        $missing = Get-AppSettingSecretValue -Settings ([pscustomobject]@{}) -Name 'DiscordWebhookUrl'
+        $missing.HasValue | Should -BeFalse
+        $missing.Value | Should -Be ''
+
+        $invalid = Get-AppSettingSecretValue -Settings ([pscustomobject]@{
+            DiscordWebhookUrlProtected = 'not-base64'
+        }) -Name 'DiscordWebhookUrl'
+
+        $invalid.HasValue | Should -BeFalse
+        $invalid.Value | Should -Be ''
+        $invalid.IsProtected | Should -BeTrue
+        $invalid.NeedsMigration | Should -BeFalse
+        $invalid.Error | Should -Match 'Could not decrypt protected setting secret'
+    }
+
+    It 'stores Discord webhook URLs only as protected settings' {
+        $script:ConfigPath = Join-Path $TestDrive 'secret-settings'
+        $script:SettingsFile = Join-Path $script:ConfigPath 'settings.json'
+        $url = 'https://discord.com/api/webhooks/123456789012345678/abc.DEF_ghi-jkl'
+
+        Save-AppSetting -Name 'DiscordWebhookUrl' -Value $url
+        $settingsText = Get-Content -Raw -LiteralPath $script:SettingsFile
+        $settings = $settingsText | ConvertFrom-Json
+        $secret = Get-AppSettingSecretValue -Settings $settings -Name 'DiscordWebhookUrl'
+
+        $settingsText | Should -Not -Match ([regex]::Escape($url))
+        $settings.PSObject.Properties['DiscordWebhookUrl'] | Should -BeNullOrEmpty
+        $settings.DiscordWebhookUrlProtected | Should -Not -BeNullOrEmpty
+        $secret.HasValue | Should -BeTrue
+        $secret.Value | Should -Be $url
+        $secret.IsProtected | Should -BeTrue
+        $secret.NeedsMigration | Should -BeFalse
+    }
+
+    It 'migrates pending legacy webhook settings to protected storage' {
+        $script:ConfigPath = Join-Path $TestDrive 'migration-settings'
+        $script:SettingsFile = Join-Path $script:ConfigPath 'settings.json'
+        New-Item -Path $script:ConfigPath -ItemType Directory -Force | Out-Null
+        $url = 'https://discord.com/api/webhooks/123456789012345678/abc.DEF_ghi-jkl'
+        [pscustomobject]@{
+            DiscordWebhookEnabled = $true
+            DiscordWebhookUrl = $url
+        } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $script:SettingsFile -Encoding UTF8
+
+        $script:PendingProtectedSettingMigrations = [ordered]@{
+            DiscordWebhookUrl = $url
+        }
+        Complete-PendingProtectedSettingMigrations
+
+        $settingsText = Get-Content -Raw -LiteralPath $script:SettingsFile
+        $settings = $settingsText | ConvertFrom-Json
+        $secret = Get-AppSettingSecretValue -Settings $settings -Name 'DiscordWebhookUrl'
+
+        $settingsText | Should -Not -Match ([regex]::Escape($url))
+        $settings.PSObject.Properties['DiscordWebhookUrl'] | Should -BeNullOrEmpty
+        $settings.DiscordWebhookUrlProtected | Should -Not -BeNullOrEmpty
+        $settings.DiscordWebhookEnabled | Should -BeTrue
+        $secret.Value | Should -Be $url
+        $script:PendingProtectedSettingMigrations.Count | Should -Be 0
     }
 
     It 'accepts only Discord HTTPS webhook URLs and redacts tokens' {
