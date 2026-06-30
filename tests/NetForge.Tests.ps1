@@ -1187,11 +1187,28 @@ Describe 'App interface guard helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(
             'ConvertTo-AppRoutingSafeRuleText',
+            'Get-AppSettings',
             'Get-AppRoutingFirewallRuleName',
+            'Get-AppRoutingPolicies',
             'Get-AppRoutingPolicyPlan',
+            'Get-AppRoutingPolicyRepairPlan',
+            'Get-AppRoutingRuleSpec',
+            'Get-ProtectedAppSettingName',
+            'Initialize-ProtectedDataApi',
+            'New-AppRoutingPolicyRecord',
+            'Protect-AppSettingSecret',
+            'Remove-AppRoutingStoredPolicy',
+            'Save-AppRoutingPolicies',
+            'Save-AppRoutingPolicyRecord',
+            'Save-AppSetting',
+            'Test-AppRoutingFirewallRuleMatchesSpec',
+            'Test-ProtectedAppSettingName',
+            'Unprotect-AppSettingSecret',
             'Format-AppRoutingRuleRows'
         )
         $script:AppRoutingRuleGroup = 'NetForge App Routing'
+        $script:AppRoutingPolicySettingName = 'AppRoutingPolicies'
+        $script:ProtectedSettingNames = @('DiscordWebhookUrl')
     }
 
     It 'plans outbound app blocks for every adapter except the allowed interface' {
@@ -1238,6 +1255,128 @@ Describe 'App interface guard helpers' {
         $rows | Should -Match 'C:\\Apps\\browser\.exe'
         $rows | Should -Match 'Blocked interface: Wi-Fi'
         (Format-AppRoutingRuleRows -Rules @()) | Should -Match 'No NetForge app interface guards'
+    }
+
+    It 'persists app guard policy records by program path and allowed interface' {
+        $script:ConfigPath = Join-Path $TestDrive 'NetForge'
+        $script:SettingsFile = Join-Path $script:ConfigPath 'settings.json'
+        $program = Join-Path $TestDrive 'browser.exe'
+        Set-Content -LiteralPath $program -Value 'stub' -Encoding ASCII
+        $adapters = @(
+            [pscustomobject]@{ Name = 'Wi-Fi'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Clinic VPN'; Status = 'Up' }
+        )
+        $plan = Get-AppRoutingPolicyPlan -ProgramPath $program -InterfaceAlias 'Clinic VPN' -Adapters $adapters
+
+        Save-AppRoutingPolicyRecord -Plan $plan
+
+        $settings = Get-Content -Raw -LiteralPath $script:SettingsFile | ConvertFrom-Json
+        $storedPolicies = @($settings.AppRoutingPolicies)
+        $loadedPolicies = @(Get-AppRoutingPolicies)
+        $storedPolicies.Count | Should -Be 1
+        $storedPolicies[0].ProgramPath | Should -Be ([System.IO.Path]::GetFullPath($program))
+        $storedPolicies[0].InterfaceAlias | Should -Be 'Clinic VPN'
+        $loadedPolicies.Count | Should -Be 1
+        $loadedPolicies[0].ProgramPath | Should -Be ([System.IO.Path]::GetFullPath($program))
+
+        Remove-AppRoutingStoredPolicy -ProgramPath $program | Should -Be 1
+        @(Get-AppRoutingPolicies).Count | Should -Be 0
+    }
+
+    It 'plans a missing firewall rule when a new adapter appears' {
+        $program = Join-Path $TestDrive 'backup.exe'
+        Set-Content -LiteralPath $program -Value 'stub' -Encoding ASCII
+        $resolvedProgram = [System.IO.Path]::GetFullPath($program)
+        $adapters = @(
+            [pscustomobject]@{ Name = 'Wi-Fi'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Ethernet'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Clinic VPN'; Status = 'Up' }
+        )
+        $existingRules = @(
+            [pscustomobject]@{
+                RuleName = Get-AppRoutingFirewallRuleName -ProgramPath $resolvedProgram -InterfaceAlias 'Wi-Fi'
+                Program = $resolvedProgram
+                InterfaceAlias = 'Wi-Fi'
+                Enabled = 'True'
+                Action = 'Block'
+                Direction = 'Outbound'
+            }
+        )
+
+        $repair = Get-AppRoutingPolicyRepairPlan -Policies @(
+            [pscustomobject]@{ ProgramPath = $resolvedProgram; InterfaceAlias = 'Clinic VPN' }
+        ) -ExistingRules $existingRules -Adapters $adapters
+
+        $repair.RulesToCreate.Count | Should -Be 1
+        $repair.RulesToCreate[0].InterfaceAlias | Should -Be 'Ethernet'
+        $repair.RulesToRemove.Count | Should -Be 0
+        $repair.HasChanges | Should -BeTrue
+    }
+
+    It 'plans stale firewall rule removal when an adapter disappears' {
+        $program = Join-Path $TestDrive 'backup.exe'
+        Set-Content -LiteralPath $program -Value 'stub' -Encoding ASCII
+        $resolvedProgram = [System.IO.Path]::GetFullPath($program)
+        $adapters = @(
+            [pscustomobject]@{ Name = 'Wi-Fi'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Clinic VPN'; Status = 'Up' }
+        )
+        $existingRules = @(
+            [pscustomobject]@{
+                RuleName = Get-AppRoutingFirewallRuleName -ProgramPath $resolvedProgram -InterfaceAlias 'Wi-Fi'
+                Program = $resolvedProgram
+                InterfaceAlias = 'Wi-Fi'
+                Enabled = 'True'
+                Action = 'Block'
+                Direction = 'Outbound'
+            },
+            [pscustomobject]@{
+                RuleName = Get-AppRoutingFirewallRuleName -ProgramPath $resolvedProgram -InterfaceAlias 'Ethernet'
+                Program = $resolvedProgram
+                InterfaceAlias = 'Ethernet'
+                Enabled = 'True'
+                Action = 'Block'
+                Direction = 'Outbound'
+            }
+        )
+
+        $repair = Get-AppRoutingPolicyRepairPlan -Policies @(
+            [pscustomobject]@{ ProgramPath = $resolvedProgram; InterfaceAlias = 'Clinic VPN' }
+        ) -ExistingRules $existingRules -Adapters $adapters
+
+        $repair.RulesToCreate.Count | Should -Be 0
+        $repair.RulesToRemove.Count | Should -Be 1
+        $repair.RulesToRemove[0].InterfaceAlias | Should -Be 'Ethernet'
+        $repair.HasChanges | Should -BeTrue
+    }
+
+    It 'leaves unchanged app interface guard topology untouched' {
+        $program = Join-Path $TestDrive 'backup.exe'
+        Set-Content -LiteralPath $program -Value 'stub' -Encoding ASCII
+        $resolvedProgram = [System.IO.Path]::GetFullPath($program)
+        $adapters = @(
+            [pscustomobject]@{ Name = 'Wi-Fi'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Ethernet'; Status = 'Up' },
+            [pscustomobject]@{ Name = 'Clinic VPN'; Status = 'Up' }
+        )
+        $existingRules = foreach ($alias in @('Wi-Fi', 'Ethernet')) {
+            [pscustomobject]@{
+                RuleName = Get-AppRoutingFirewallRuleName -ProgramPath $resolvedProgram -InterfaceAlias $alias
+                Program = $resolvedProgram
+                InterfaceAlias = $alias
+                Enabled = 'True'
+                Action = 'Block'
+                Direction = 'Outbound'
+            }
+        }
+
+        $repair = Get-AppRoutingPolicyRepairPlan -Policies @(
+            [pscustomobject]@{ ProgramPath = $resolvedProgram; InterfaceAlias = 'Clinic VPN' }
+        ) -ExistingRules $existingRules -Adapters $adapters
+
+        $repair.RulesToCreate.Count | Should -Be 0
+        $repair.RulesToRemove.Count | Should -Be 0
+        $repair.HasChanges | Should -BeFalse
     }
 }
 

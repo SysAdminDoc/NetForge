@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.49.0
+    Version: 1.50.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -90,7 +90,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.49.0"
+$script:AppVersion = "1.50.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -162,6 +162,7 @@ $script:NetworkChangeSubscribed = $false
 $script:TrayIcon = $null
 $script:TrayContextMenu = $null
 $script:AppRoutingRuleGroup = "NetForge App Routing"
+$script:AppRoutingPolicySettingName = "AppRoutingPolicies"
 $script:RdpProcess = $null
 $script:RdpRestoreSnapshot = $null
 $script:RdpMonitorTimer = $null
@@ -1528,7 +1529,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.49.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.50.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -2924,7 +2925,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.49.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.50.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -10292,6 +10293,7 @@ function Register-NetworkChangeAutoApply {
         $addressHandler = [System.Net.NetworkInformation.NetworkAddressChangedEventHandler]{
             $window.Dispatcher.BeginInvoke([action]{
                 Invoke-AutoApplyProfile -Trigger "NetworkAddressChanged"
+                [void](Invoke-AppRoutingPolicyRepair -Trigger "NetworkAddressChanged")
             }) | Out-Null
         }.GetNewClosure()
 
@@ -10305,6 +10307,7 @@ function Register-NetworkChangeAutoApply {
             $triggerText = $availabilityTrigger
             $window.Dispatcher.BeginInvoke(([action]{
                 Invoke-AutoApplyProfile -Trigger $triggerText
+                [void](Invoke-AppRoutingPolicyRepair -Trigger $triggerText)
             }).GetNewClosure()) | Out-Null
         }.GetNewClosure()
 
@@ -10965,6 +10968,188 @@ function Get-AppRoutingPolicyPlan {
     }
 }
 
+function New-AppRoutingPolicyRecord {
+    param(
+        $Plan,
+        $ExistingPolicy = $null,
+        [datetime]$Now = (Get-Date)
+    )
+
+    $createdAt = $Now.ToString("o")
+    if ($ExistingPolicy -and $ExistingPolicy.PSObject.Properties["CreatedAt"] -and -not [string]::IsNullOrWhiteSpace([string]$ExistingPolicy.CreatedAt)) {
+        $createdAt = [string]$ExistingPolicy.CreatedAt
+    }
+
+    return [pscustomobject]@{
+        SchemaVersion = 1
+        ProgramPath = [string]$Plan.ProgramPath
+        InterfaceAlias = [string]$Plan.InterfaceAlias
+        CreatedAt = $createdAt
+        UpdatedAt = $Now.ToString("o")
+    }
+}
+
+function Get-AppRoutingPolicies {
+    $settings = Get-AppSettings
+    $policies = @()
+    if ($null -eq $settings -or -not $settings.Contains($script:AppRoutingPolicySettingName)) {
+        return @($policies)
+    }
+
+    foreach ($policy in @($settings[$script:AppRoutingPolicySettingName])) {
+        if ($null -eq $policy) { continue }
+        $programPath = if ($policy.PSObject.Properties["ProgramPath"]) { ([string]$policy.ProgramPath).Trim() } else { "" }
+        $interfaceAlias = if ($policy.PSObject.Properties["InterfaceAlias"]) { ([string]$policy.InterfaceAlias).Trim() } else { "" }
+        if ([string]::IsNullOrWhiteSpace($programPath) -or [string]::IsNullOrWhiteSpace($interfaceAlias)) { continue }
+
+        $policies += [pscustomobject]@{
+            SchemaVersion = if ($policy.PSObject.Properties["SchemaVersion"]) { [int]$policy.SchemaVersion } else { 1 }
+            ProgramPath = $programPath
+            InterfaceAlias = $interfaceAlias
+            CreatedAt = if ($policy.PSObject.Properties["CreatedAt"]) { [string]$policy.CreatedAt } else { "" }
+            UpdatedAt = if ($policy.PSObject.Properties["UpdatedAt"]) { [string]$policy.UpdatedAt } else { "" }
+        }
+    }
+
+    return @($policies)
+}
+
+function Save-AppRoutingPolicies {
+    param([object[]]$Policies)
+
+    $records = @($Policies | Where-Object { $_ -and $_.ProgramPath -and $_.InterfaceAlias })
+    Save-AppSetting -Name $script:AppRoutingPolicySettingName -Value @($records)
+}
+
+function Save-AppRoutingPolicyRecord {
+    param($Plan)
+
+    $policies = @(Get-AppRoutingPolicies)
+    $existing = @($policies | Where-Object { [string]$_.ProgramPath -ieq [string]$Plan.ProgramPath } | Select-Object -First 1)
+    $remaining = @($policies | Where-Object { [string]$_.ProgramPath -ine [string]$Plan.ProgramPath })
+    $existingPolicy = if ($existing.Count -gt 0) { $existing[0] } else { $null }
+    $remaining += New-AppRoutingPolicyRecord -Plan $Plan -ExistingPolicy $existingPolicy
+    Save-AppRoutingPolicies -Policies $remaining
+}
+
+function Remove-AppRoutingStoredPolicy {
+    param([string]$ProgramPath)
+
+    $programText = ([string]$ProgramPath).Trim()
+    if ([string]::IsNullOrWhiteSpace($programText)) { return 0 }
+
+    try {
+        $programText = [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($programText))
+    } catch {
+        $programText = ([string]$ProgramPath).Trim()
+    }
+
+    $policies = @(Get-AppRoutingPolicies)
+    $remaining = @($policies | Where-Object { [string]$_.ProgramPath -ine $programText })
+    $removed = $policies.Count - $remaining.Count
+    if ($removed -gt 0) {
+        Save-AppRoutingPolicies -Policies $remaining
+    }
+
+    return $removed
+}
+
+function Get-AppRoutingRuleSpec {
+    param(
+        $Plan,
+        [string]$BlockedAlias
+    )
+
+    $ruleName = Get-AppRoutingFirewallRuleName -ProgramPath $Plan.ProgramPath -InterfaceAlias $BlockedAlias
+    $displayName = "$($Plan.RuleName) - block $BlockedAlias"
+    $description = "NetForge app interface guard: allows $($Plan.ProgramPath) only on $($Plan.InterfaceAlias) by blocking outbound traffic on $BlockedAlias."
+
+    return [pscustomobject]@{
+        RuleName = $ruleName
+        DisplayName = $displayName
+        RuleGroup = $script:AppRoutingRuleGroup
+        Description = $description
+        ProgramPath = [string]$Plan.ProgramPath
+        AllowedInterfaceAlias = [string]$Plan.InterfaceAlias
+        InterfaceAlias = [string]$BlockedAlias
+    }
+}
+
+function Test-AppRoutingFirewallRuleMatchesSpec {
+    param(
+        $Rule,
+        $Spec
+    )
+
+    if ($null -eq $Rule -or $null -eq $Spec) { return $false }
+    if ([string]$Rule.RuleName -ine [string]$Spec.RuleName) { return $false }
+    if ([string]$Rule.Program -ine [string]$Spec.ProgramPath) { return $false }
+    if ([string]$Rule.InterfaceAlias -ine [string]$Spec.InterfaceAlias) { return $false }
+    if ($Rule.PSObject.Properties["Action"] -and -not [string]::IsNullOrWhiteSpace([string]$Rule.Action) -and [string]$Rule.Action -ine "Block") { return $false }
+    if ($Rule.PSObject.Properties["Direction"] -and -not [string]::IsNullOrWhiteSpace([string]$Rule.Direction) -and [string]$Rule.Direction -ine "Outbound") { return $false }
+    if ($Rule.PSObject.Properties["Enabled"] -and -not [string]::IsNullOrWhiteSpace([string]$Rule.Enabled) -and [string]$Rule.Enabled -notmatch '^(True|Enabled)$') { return $false }
+
+    return $true
+}
+
+function Get-AppRoutingPolicyRepairPlan {
+    param(
+        [object[]]$Policies,
+        [object[]]$ExistingRules = @(),
+        [object[]]$Adapters = @()
+    )
+
+    $rulesToCreate = @()
+    $rulesToRemove = @()
+    $desiredRules = @()
+    $skippedPolicies = @()
+    $existingRuleList = @($ExistingRules | Where-Object { $_ })
+
+    foreach ($policy in @($Policies | Where-Object { $_ })) {
+        $programPath = if ($policy.PSObject.Properties["ProgramPath"]) { [string]$policy.ProgramPath } else { "" }
+        $interfaceAlias = if ($policy.PSObject.Properties["InterfaceAlias"]) { [string]$policy.InterfaceAlias } else { "" }
+        $plan = Get-AppRoutingPolicyPlan -ProgramPath $programPath -InterfaceAlias $interfaceAlias -Adapters $Adapters
+        if (-not $plan.IsValid) {
+            $skippedPolicies += [pscustomobject]@{
+                ProgramPath = $programPath
+                InterfaceAlias = $interfaceAlias
+                Message = $plan.Message
+            }
+            continue
+        }
+
+        $ownedRules = @($existingRuleList | Where-Object { [string]$_.Program -ieq [string]$plan.ProgramPath })
+        $policyDesiredRules = @()
+        foreach ($blockedAlias in @($plan.BlockedAliases)) {
+            $policyDesiredRules += Get-AppRoutingRuleSpec -Plan $plan -BlockedAlias $blockedAlias
+        }
+        $desiredRules += $policyDesiredRules
+
+        foreach ($rule in $ownedRules) {
+            $matchingSpec = @($policyDesiredRules | Where-Object { [string]$_.RuleName -ieq [string]$rule.RuleName } | Select-Object -First 1)
+            if ($matchingSpec.Count -eq 0 -or -not (Test-AppRoutingFirewallRuleMatchesSpec -Rule $rule -Spec $matchingSpec[0])) {
+                $rulesToRemove += $rule
+            }
+        }
+
+        foreach ($spec in $policyDesiredRules) {
+            $matchingRule = @($ownedRules | Where-Object { [string]$_.RuleName -ieq [string]$spec.RuleName } | Select-Object -First 1)
+            if ($matchingRule.Count -eq 0 -or -not (Test-AppRoutingFirewallRuleMatchesSpec -Rule $matchingRule[0] -Spec $spec)) {
+                $rulesToCreate += $spec
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        PoliciesEvaluated = @($Policies).Count
+        DesiredRules = @($desiredRules)
+        RulesToCreate = @($rulesToCreate)
+        RulesToRemove = @($rulesToRemove | Sort-Object RuleName -Unique)
+        SkippedPolicies = @($skippedPolicies)
+        HasChanges = (($rulesToCreate.Count + $rulesToRemove.Count) -gt 0)
+    }
+}
+
 function Format-AppRoutingRuleRows {
     param([object[]]$Rules)
 
@@ -11009,6 +11194,73 @@ function Get-AppRoutingFirewallRules {
     }
 
     return @($results)
+}
+
+function Invoke-AppRoutingPolicyRepair {
+    param([string]$Trigger = "Manual")
+
+    $policies = @(Get-AppRoutingPolicies)
+    if ($policies.Count -eq 0) {
+        return [pscustomobject]@{
+            Succeeded = $true
+            RulesCreated = 0
+            RulesRemoved = 0
+            SkippedPolicies = @()
+            Message = "No persisted app interface guard policies."
+        }
+    }
+
+    try {
+        $existingRules = @(Get-AppRoutingFirewallRules)
+        $repairPlan = Get-AppRoutingPolicyRepairPlan -Policies $policies -ExistingRules $existingRules
+        $removed = 0
+        $created = 0
+
+        foreach ($rule in @($repairPlan.RulesToRemove)) {
+            Remove-NetFirewallRule -Name $rule.RuleName -Confirm:$false -ErrorAction Stop
+            $removed++
+            Write-OperationLog -Action "App interface guard repair" -Result "RemovedStale" -Detail "Trigger=$Trigger; Program=$($rule.Program); Blocked=$($rule.InterfaceAlias); Rule=$($rule.RuleName)"
+        }
+
+        foreach ($spec in @($repairPlan.RulesToCreate)) {
+            New-NetFirewallRule -Name $spec.RuleName -DisplayName $spec.DisplayName -Group $spec.RuleGroup -Description $spec.Description -Enabled True -Profile Any -Direction Outbound -Action Block -Program $spec.ProgramPath -InterfaceAlias $spec.InterfaceAlias -ErrorAction Stop | Out-Null
+            $created++
+            Write-OperationLog -Action "App interface guard repair" -Result "CreatedMissing" -Detail "Trigger=$Trigger; Program=$($spec.ProgramPath); Allowed=$($spec.AllowedInterfaceAlias); Blocked=$($spec.InterfaceAlias); Rule=$($spec.RuleName)"
+        }
+
+        foreach ($skipped in @($repairPlan.SkippedPolicies)) {
+            Write-OperationLog -Action "App interface guard repair" -Result "SkippedPolicy" -Detail "Trigger=$Trigger; Program=$($skipped.ProgramPath); Allowed=$($skipped.InterfaceAlias); $($skipped.Message)"
+        }
+
+        if ($created -gt 0 -or $removed -gt 0 -or @($repairPlan.SkippedPolicies).Count -gt 0) {
+            Refresh-AppRoutingRuleList
+        }
+
+        $message = "App interface guards reconciled: created $created, removed $removed"
+        if (@($repairPlan.SkippedPolicies).Count -gt 0) {
+            $message += ", skipped $(@($repairPlan.SkippedPolicies).Count)"
+        }
+        Write-OperationLog -Action "App interface guard repair" -Result "Completed" -Detail "Trigger=$Trigger; $message"
+
+        return [pscustomobject]@{
+            Succeeded = $true
+            RulesCreated = $created
+            RulesRemoved = $removed
+            SkippedPolicies = @($repairPlan.SkippedPolicies)
+            Message = $message
+        }
+    } catch {
+        $message = "App interface guard repair failed: $($_.Exception.Message)"
+        Write-OperationLog -Action "App interface guard repair" -Result "Failed" -Detail "Trigger=$Trigger; $message"
+        Set-AppRoutingStatus -Message $message -Type Error
+        return [pscustomobject]@{
+            Succeeded = $false
+            RulesCreated = 0
+            RulesRemoved = 0
+            SkippedPolicies = @()
+            Message = $message
+        }
+    }
 }
 
 function Set-AppRoutingStatus {
@@ -11084,6 +11336,7 @@ function Refresh-AppRoutingRuleList {
 
 function Initialize-AppRoutingControls {
     Refresh-AppRoutingInterfaceList
+    [void](Invoke-AppRoutingPolicyRepair -Trigger "Startup")
     Refresh-AppRoutingRuleList
 }
 
@@ -11134,22 +11387,19 @@ function Apply-AppRoutingPolicy {
     }
 
     try {
-        $removed = Remove-AppRoutingPolicyByProgram -ProgramPath $plan.ProgramPath
-        $created = 0
-        foreach ($blockedAlias in @($plan.BlockedAliases)) {
-            $ruleName = Get-AppRoutingFirewallRuleName -ProgramPath $plan.ProgramPath -InterfaceAlias $blockedAlias
-            $displayName = "$($plan.RuleName) - block $blockedAlias"
-            $description = "NetForge app interface guard: allows $($plan.ProgramPath) only on $($plan.InterfaceAlias) by blocking outbound traffic on $blockedAlias."
-            New-NetFirewallRule -Name $ruleName -DisplayName $displayName -Group $script:AppRoutingRuleGroup -Description $description -Enabled True -Profile Any -Direction Outbound -Action Block -Program $plan.ProgramPath -InterfaceAlias $blockedAlias -ErrorAction Stop | Out-Null
-            $created++
+        Save-AppRoutingPolicyRecord -Plan $plan
+        $repair = Invoke-AppRoutingPolicyRepair -Trigger "ManualApply"
+        if (-not $repair.Succeeded) {
+            return
         }
-
         Refresh-AppRoutingRuleList
-        $message = "App interface guard applied for $([System.IO.Path]::GetFileName($plan.ProgramPath)): allowed on $($plan.InterfaceAlias), blocked on $created other current adapter(s)."
-        if ($created -eq 0) {
+        $created = [int]$repair.RulesCreated
+        $removed = [int]$repair.RulesRemoved
+        $message = "App interface guard applied for $([System.IO.Path]::GetFileName($plan.ProgramPath)): allowed on $($plan.InterfaceAlias), repaired $created missing and $removed stale firewall rule(s)."
+        if ($plan.BlockedAliases.Count -eq 0) {
             $message = "App interface guard saved no firewall rules because no other current adapters were found."
         }
-        Write-OperationLog -Action "App interface guard" -Result "Applied" -Detail "Program=$($plan.ProgramPath); Allowed=$($plan.InterfaceAlias); Created=$created; Removed=$removed"
+        Write-OperationLog -Action "App interface guard" -Result "Applied" -Detail "Program=$($plan.ProgramPath); Allowed=$($plan.InterfaceAlias); Created=$created; Removed=$removed; Persisted=True"
         Set-AppRoutingStatus -Message $message -Type Success
     } catch {
         $message = "App interface guard failed: $($_.Exception.Message)"
@@ -11172,10 +11422,11 @@ function Remove-SelectedAppRoutingPolicy {
     }
 
     try {
+        $storedRemoved = Remove-AppRoutingStoredPolicy -ProgramPath $programPath
         $removed = Remove-AppRoutingPolicyByProgram -ProgramPath $programPath
         Refresh-AppRoutingRuleList
-        Write-OperationLog -Action "App interface guard" -Result "Removed" -Detail "Program=$programPath; Removed=$removed"
-        Set-AppRoutingStatus -Message "Removed $removed app interface guard rule(s) for $([System.IO.Path]::GetFileName($programPath))." -Type Success
+        Write-OperationLog -Action "App interface guard" -Result "Removed" -Detail "Program=$programPath; Removed=$removed; StoredPoliciesRemoved=$storedRemoved"
+        Set-AppRoutingStatus -Message "Removed $removed app interface guard rule(s) and $storedRemoved stored policy record(s) for $([System.IO.Path]::GetFileName($programPath))." -Type Success
     } catch {
         $message = "App interface guard removal failed: $($_.Exception.Message)"
         Write-OperationLog -Action "App interface guard" -Result "RemoveFailed" -Detail $message
@@ -13324,6 +13575,7 @@ $btnApplyAppRouting.Add_Click({ Apply-AppRoutingPolicy })
 $btnRemoveAppRouting.Add_Click({ Remove-SelectedAppRoutingPolicy })
 $btnRefreshAppRouting.Add_Click({
     Refresh-AppRoutingInterfaceList
+    [void](Invoke-AppRoutingPolicyRepair -Trigger "ManualRefresh")
     Refresh-AppRoutingRuleList
 })
 $btnResetWinsock.Add_Click({ Invoke-ResetWinsock })

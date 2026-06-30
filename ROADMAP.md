@@ -51,15 +51,6 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 
 ## Research-Driven Additions
 
-### P0
-
-- [ ] P0 — Reconcile app interface guards after adapter topology changes
-  Why: current guards block only adapters present at apply time, so newly added adapters can bypass an intended app restriction.
-  Evidence: `NetForge.ps1:10775-10800`, `NetForge.ps1:10972-10980`, `NetForge.ps1:10124-10159`; Microsoft NetSecurity interface filter docs; RESEARCH.md Security.
-  Touches: `NetForge.ps1` app routing helpers, network-change handler, app routing UI status, `tests/NetForge.Tests.ps1`.
-  Acceptance: NetForge persists each app guard policy as program path plus allowed interface, detects missing/stale firewall rules on startup and NetworkChange events, repairs drift idempotently, logs created/removed rules, and tests cover added adapter, removed adapter, and unchanged topology.
-  Complexity: L
-
 ### P1
 
 - [ ] P1 — Add redacted diagnostics export with preview manifest

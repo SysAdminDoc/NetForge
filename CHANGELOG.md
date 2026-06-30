@@ -2,6 +2,12 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.50.0] - 2026-06-29
+
+- Changed: App interface guards now persist the program path and allowed adapter so they can be reconciled after adapter changes.
+- Added: Startup, NetworkChange, and manual Refresh Guards repair for missing or stale NetForge-owned firewall interface rules.
+- Added: Pester coverage for persisted app guard policies, added adapters, removed adapters, and unchanged topology.
+
 ## [v1.49.0] - 2026-06-29
 
 - Changed: Discord webhook URLs now migrate from plaintext settings to current-user DPAPI-protected storage.

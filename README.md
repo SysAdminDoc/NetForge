@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.49.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.50.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -112,8 +112,8 @@
   - Apply a saved profile, launch `mstsc.exe` to a host or `.rdp` file, and monitor the RDP client
   - Revert the captured pre-RDP network state automatically when RDP exits, or manually from Network Tools
 - **App Interface Guard**:
-  - Restrict a selected executable to one allowed adapter by creating Windows Firewall/WFP outbound blocks on other current adapters
-  - Refresh, inspect, and remove NetForge-owned per-app interface rules from Network Tools
+  - Restrict a selected executable to one allowed adapter by creating Windows Firewall/WFP outbound blocks on other adapters
+  - Persist guard policies and repair missing or stale NetForge-owned firewall rules after startup, network-change events, or manual refresh
 - **Detailed Adapter Information**:
   - Interface index and type
   - Link speed and media state
@@ -222,7 +222,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.49.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.50.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
