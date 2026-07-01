@@ -2,6 +2,14 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.56.0] - 2026-07-01
+
+- Performance: Cache Get-NetAdapter results with 10-second TTL to avoid 6+ redundant WMI calls per 30-second cycle.
+- Security: Mask Discord webhook URL in UI TextBox; shows redacted form, preserves stored URL on re-save.
+- Fixed: Add confirmation dialog before writing to system hosts file.
+- Fixed: Eliminate startup theme color flash by injecting resolved BgPrimary into XAML before parsing.
+- Added: Schedule validation edge case tests (Weekends, midnight, end-of-day, case-insensitive days).
+
 ## [v1.55.0] - 2026-07-01
 
 - Security: Hosts group names now reject newline characters; defense-in-depth strip in section builder.

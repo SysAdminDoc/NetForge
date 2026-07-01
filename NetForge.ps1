@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.55.0
+    Version: 1.56.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -91,7 +91,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.55.0"
+$script:AppVersion = "1.56.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -1548,7 +1548,7 @@ function Apply-Localization {
                     <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
                     <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
                     <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.55.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                        <TextBlock Text="v1.56.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
@@ -3045,7 +3045,7 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.55.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.56.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
