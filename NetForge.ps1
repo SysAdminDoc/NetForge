@@ -14431,6 +14431,10 @@ function Remove-SelectedHostsGroup {
 }
 
 function Save-HostsGroups {
+    $groupCount = @($script:HostsGroups).Count
+    $confirm = Show-MessageBox -Message "Write $groupCount hosts group(s) to the system hosts file?`n$([System.IO.Path]::Combine($env:WinDir, 'System32\drivers\etc\hosts'))`n`nA backup will be created before changes are applied." -Title "Confirm Hosts File Update" -Buttons YesNo -Icon Question
+    if ($confirm -ne [System.Windows.MessageBoxResult]::Yes) { return }
+
     try {
         $path = Get-HostsFilePath
         $currentText = ""

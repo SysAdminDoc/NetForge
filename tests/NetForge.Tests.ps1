@@ -172,6 +172,27 @@ Describe 'Profile validation' {
         Test-ProfileScheduleDue -ProfileData $result.Profile -Now ([datetime]'2026-06-28T08:05:00') | Should -BeFalse
     }
 
+    It 'normalizes weekend schedule and boundary times' {
+        $weekend = Normalize-ProfileScheduleDays -Days 'Weekends'
+        $weekend.IsValid | Should -BeTrue
+        $weekend.Days | Should -Contain 'Saturday'
+        $weekend.Days | Should -Contain 'Sunday'
+        $weekend.Days.Count | Should -Be 2
+
+        $midnight = Normalize-ProfileScheduleTime -Time '00:00'
+        $midnight.IsValid | Should -BeTrue
+        $midnight.Time | Should -Be '00:00'
+
+        $endOfDay = Normalize-ProfileScheduleTime -Time '23:59'
+        $endOfDay.IsValid | Should -BeTrue
+        $endOfDay.Time | Should -Be '23:59'
+
+        $caseDays = Normalize-ProfileScheduleDays -Days 'MONDAY,friday'
+        $caseDays.IsValid | Should -BeTrue
+        $caseDays.Days | Should -Contain 'Monday'
+        $caseDays.Days | Should -Contain 'Friday'
+    }
+
     It 'rejects invalid profile data before writing' {
         $profile = [pscustomobject]@{
             Name = 'Bad'
