@@ -3149,10 +3149,10 @@ function Update-Status {
     $window.Dispatcher.Invoke([action]{
         $script:txtStatusBar.Text = $Message
         switch ($Type) {
-            "Success" { $script:txtStatusBar.Foreground = [System.Windows.Media.Brushes]::LightGreen }
-            "Error"   { $script:txtStatusBar.Foreground = [System.Windows.Media.Brushes]::Salmon }
-            "Warning" { $script:txtStatusBar.Foreground = [System.Windows.Media.Brushes]::Orange }
-            default   { $script:txtStatusBar.Foreground = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(139,148,158))) }
+            "Success" { $script:txtStatusBar.Foreground = $window.Resources["AccentGreenBrush"] }
+            "Error"   { $script:txtStatusBar.Foreground = $window.Resources["AccentRedBrush"] }
+            "Warning" { $script:txtStatusBar.Foreground = $window.Resources["AccentOrangeBrush"] }
+            default   { $script:txtStatusBar.Foreground = $window.Resources["TextSecondaryBrush"] }
         }
     })
     Write-OperationLog -Action "Status" -Result $Type -Detail $Message
@@ -4568,11 +4568,11 @@ function Show-MacOverrideDisplay {
     $override = Get-MacOverride -Adapter $adapter
     if ($override) {
         $script:txtMacOverrideStatus.Text = "Override active: $override"
-        $script:txtMacOverrideStatus.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#d29922")
+        $script:txtMacOverrideStatus.Foreground = $window.Resources["AccentOrangeBrush"]
         $script:txtMacOverride.Text = $override
     } else {
         $script:txtMacOverrideStatus.Text = "No override"
-        $script:txtMacOverrideStatus.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
+        $script:txtMacOverrideStatus.Foreground = $window.Resources["TextPrimaryBrush"]
         $script:txtMacOverride.Text = ""
     }
 }
@@ -4822,20 +4822,6 @@ function Get-SubnetFromPrefix {
     return "{0}.{1}.{2}.{3}" -f $bytes[0], $bytes[1], $bytes[2], $bytes[3]
 }
 
-function Get-PrefixFromSubnet {
-    param([string]$Subnet)
-    try {
-        $ip = [System.Net.IPAddress]::Parse($Subnet)
-        $bytes = $ip.GetAddressBytes()
-        $binary = ""
-        foreach ($b in $bytes) {
-            $binary += [Convert]::ToString($b, 2).PadLeft(8, '0')
-        }
-        return ($binary.ToCharArray() | Where-Object { $_ -eq '1' }).Count
-    } catch {
-        return 24
-    }
-}
 
 # ============================================================================
 # NETWORK ADAPTER FUNCTIONS
@@ -4919,7 +4905,7 @@ function Refresh-AdapterList {
 
     foreach ($adapter in $adapters) {
         $status = if ($adapter.Status -eq "Up") { "[OK]" } else { "[--]" }
-        $color = if ($adapter.Status -eq "Up") { "#3fb950" } else { "#6e7681" }
+        $statusBrush = if ($adapter.Status -eq "Up") { $window.Resources["AccentGreenBrush"] } else { $window.Resources["TextMutedBrush"] }
 
         $item = New-Object System.Windows.Controls.StackPanel
         $item.Orientation = "Vertical"
@@ -4930,7 +4916,7 @@ function Refresh-AdapterList {
 
         $statusText = New-Object System.Windows.Controls.TextBlock
         $statusText.Text = $status
-        $statusText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom($color)
+        $statusText.Foreground = $statusBrush
         $statusText.FontFamily = New-Object System.Windows.Media.FontFamily("Consolas")
         $statusText.FontSize = 12
         $statusText.Margin = "0,0,8,0"
@@ -4940,7 +4926,7 @@ function Refresh-AdapterList {
         $nameText.Text = $adapter.Name
         $nameText.FontSize = 13
         $nameText.FontWeight = "Medium"
-        $nameText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
+        $nameText.Foreground = $window.Resources["TextPrimaryBrush"]
 
         $namePanel.Children.Add($statusText) | Out-Null
         $namePanel.Children.Add($nameText) | Out-Null
@@ -4949,7 +4935,7 @@ function Refresh-AdapterList {
         $adapterKind = Get-AdapterConnectionKind -Adapter $adapter
         $descText.Text = "$adapterKind | $($adapter.InterfaceDescription)"
         $descText.FontSize = 11
-        $descText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
+        $descText.Foreground = $window.Resources["TextSecondaryBrush"]
         $descText.Margin = "22,4,0,0"
 
         $item.Children.Add($namePanel) | Out-Null
@@ -4994,7 +4980,7 @@ function Update-AdapterDisplay {
         if ($script:txtIPv6Prefix) { $script:txtIPv6Prefix.Text = "64" }
         if ($script:txtIPv6Gateway) { $script:txtIPv6Gateway.Text = "" }
         Set-IPv6ConfigurationControlState
-        $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#6e7681")
+        $script:statusIndicator.Fill = $window.Resources["TextMutedBrush"]
         Show-MacOverrideDisplay
         Show-InterfaceMetricDisplay
         return
@@ -5005,9 +4991,9 @@ function Update-AdapterDisplay {
     $script:txtStatus.Text = $adapter.Status
 
     if ($adapter.Status -eq "Up") {
-        $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#3fb950")
+        $script:statusIndicator.Fill = $window.Resources["AccentGreenBrush"]
     } else {
-        $script:statusIndicator.Fill = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
+        $script:statusIndicator.Fill = $window.Resources["AccentRedBrush"]
     }
 
     # Get IP configuration
@@ -5126,7 +5112,7 @@ function Update-AdapterDetails {
         $ipInterface = Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
         $script:txtInfoDHCP.Text = if ($ipInterface.Dhcp -eq "Enabled") { "Yes" } else { "No" }
 
-        $cimConfig = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.InterfaceIndex -eq $adapter.ifIndex }
+        $cimConfig = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "InterfaceIndex = $($adapter.ifIndex)" -ErrorAction SilentlyContinue
         $dhcpInfo = Format-DhcpLeaseInfo -CimConfig $cimConfig
         $script:txtInfoDHCPServer.Text = $dhcpInfo.ServerText
 
@@ -5155,7 +5141,7 @@ function Update-ConnectionStatus {
         $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
 
         if ($null -eq $activeAdapter) {
-            $script:connStatusDot.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
+            $script:connStatusDot.Background = $window.Resources["AccentRedBrush"]
             $script:txtConnStatus.Text = "Disconnected"
             $script:txtConnLocalIP.Text = "--"
             $script:txtConnGateway.Text = "--"
@@ -5164,7 +5150,7 @@ function Update-ConnectionStatus {
             return
         }
 
-        $script:connStatusDot.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#3fb950")
+        $script:connStatusDot.Background = $window.Resources["AccentGreenBrush"]
         $script:txtConnStatus.Text = "Connected"
 
         # Local IP
@@ -5246,25 +5232,25 @@ function Update-WifiInfo {
         $signalNum = 0
         if ($signal -match '(\d+)') { $signalNum = [int]$Matches[1] }
         if ($signalNum -ge 70) {
-            $script:txtWifiSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#3fb950")
+            $script:txtWifiSignal.Foreground = $window.Resources["AccentGreenBrush"]
         } elseif ($signalNum -ge 40) {
-            $script:txtWifiSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#d29922")
+            $script:txtWifiSignal.Foreground = $window.Resources["AccentOrangeBrush"]
         } else {
-            $script:txtWifiSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
+            $script:txtWifiSignal.Foreground = $window.Resources["AccentRedBrush"]
         }
     } catch {
         Write-OperationLog -Action "Update WiFi info" -Result "Warning" -Detail $_.Exception.Message
     }
 }
 
-function Get-WifiSignalColor {
+function Get-WifiSignalBrush {
     param([string]$Signal)
 
     $signalNum = 0
     if ($Signal -match '(\d+)') { $signalNum = [int]$Matches[1] }
-    if ($signalNum -ge 70) { return "#3fb950" }
-    if ($signalNum -ge 40) { return "#d29922" }
-    return "#f85149"
+    if ($signalNum -ge 70) { return $window.Resources["AccentGreenBrush"] }
+    if ($signalNum -ge 40) { return $window.Resources["AccentOrangeBrush"] }
+    return $window.Resources["AccentRedBrush"]
 }
 
 function Get-WifiChannelBand {
@@ -5356,20 +5342,24 @@ function Format-WifiSpectrumReport {
 function Get-WifiBadgeElement {
     param(
         [string]$Text,
-        [string]$Color
+        [string]$ThemeKey
     )
+
+    $brush = $window.Resources["${ThemeKey}Brush"]
+    $color = $window.Resources[$ThemeKey]
+    $bgColor = [System.Windows.Media.Color]::FromArgb(48, $color.R, $color.G, $color.B)
 
     $border = New-Object System.Windows.Controls.Border
     $border.CornerRadius = "4"
     $border.Padding = "6,2"
     $border.Margin = "8,0,0,0"
     $border.VerticalAlignment = "Center"
-    $border.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("$Color" + "30")
+    $border.Background = New-Object System.Windows.Media.SolidColorBrush($bgColor)
 
     $textBlock = New-Object System.Windows.Controls.TextBlock
     $textBlock.Text = $Text
     $textBlock.FontSize = 10
-    $textBlock.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom($Color)
+    $textBlock.Foreground = $brush
     $border.Child = $textBlock
 
     return $border
@@ -5387,7 +5377,7 @@ function Get-WifiNetworkListItem {
 
     $signalText = New-Object System.Windows.Controls.TextBlock
     $signalText.Text = if ($Network.Signal) { "[$($Network.Signal)]" } else { "[--]" }
-    $signalText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom((Get-WifiSignalColor -Signal $Network.Signal))
+    $signalText.Foreground = Get-WifiSignalBrush -Signal $Network.Signal
     $signalText.FontFamily = New-Object System.Windows.Media.FontFamily("Consolas")
     $signalText.FontSize = 12
     $signalText.Margin = "0,0,8,0"
@@ -5397,23 +5387,23 @@ function Get-WifiNetworkListItem {
     $ssidText.Text = $Network.SSID
     $ssidText.FontSize = 13
     $ssidText.FontWeight = "Medium"
-    $ssidText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
+    $ssidText.Foreground = $window.Resources["TextPrimaryBrush"]
 
-    $authColor = if ($Network.Authentication -match "Open") { "#d29922" } else { "#58a6ff" }
-    $profileColor = if ($Network.HasProfile) { "#3fb950" } else { "#8b949e" }
+    $authThemeKey = if ($Network.Authentication -match "Open") { "AccentOrange" } else { "AccentBlue" }
+    $profileThemeKey = if ($Network.HasProfile) { "AccentGreen" } else { "TextMuted" }
     $profileText = if ($Network.HasProfile) { "Saved" } else { "New" }
 
     $headerPanel.Children.Add($signalText) | Out-Null
     $headerPanel.Children.Add($ssidText) | Out-Null
-    $headerPanel.Children.Add((Get-WifiBadgeElement -Text $Network.Authentication -Color $authColor)) | Out-Null
-    $headerPanel.Children.Add((Get-WifiBadgeElement -Text $profileText -Color $profileColor)) | Out-Null
+    $headerPanel.Children.Add((Get-WifiBadgeElement -Text $Network.Authentication -ThemeKey $authThemeKey)) | Out-Null
+    $headerPanel.Children.Add((Get-WifiBadgeElement -Text $profileText -ThemeKey $profileThemeKey)) | Out-Null
 
     $detailsText = New-Object System.Windows.Controls.TextBlock
     $channels = if ($Network.Channels -and $Network.Channels.Count -gt 0) { $Network.Channels -join ", " } else { "--" }
     $bands = if ($Network.Bands -and $Network.Bands.Count -gt 0) { $Network.Bands -join ", " } else { "--" }
     $detailsText.Text = "$($Network.Encryption) | $bands | Ch $channels | $($Network.BssidCount) BSSID(s)"
     $detailsText.FontSize = 11
-    $detailsText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
+    $detailsText.Foreground = $window.Resources["TextSecondaryBrush"]
     $detailsText.Margin = "22,4,0,0"
 
     $item.Children.Add($headerPanel) | Out-Null
@@ -5442,7 +5432,7 @@ function Show-WifiSelection {
     $script:txtWifiDetailProfile.Text = if ($network.HasProfile) { "Saved Windows profile" } else { "No saved profile" }
     $script:txtWifiDetailSecurity.Text = "$($network.Authentication) / $($network.Encryption)"
     $script:txtWifiDetailSignal.Text = $network.Signal
-    $script:txtWifiDetailSignal.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom((Get-WifiSignalColor -Signal $network.Signal))
+    $script:txtWifiDetailSignal.Foreground = Get-WifiSignalBrush -Signal $network.Signal
 
     $radio = if ($network.RadioTypes -and $network.RadioTypes.Count -gt 0) { $network.RadioTypes -join ", " } else { "--" }
     $bands = if ($network.Bands -and $network.Bands.Count -gt 0) { $network.Bands -join ", " } else { "--" }
@@ -5678,12 +5668,13 @@ function Invoke-WifiNetworkScan {
                 }
             } catch {
                 Show-WifiNetworkList -Networks @() -InterfaceName $null -Message "WiFi scan failed: $($_.Exception.Message)"
+            } finally {
+                $ps.Dispose()
             }
 
             $script:WifiScanRunning = $false
             $script:btnWifiRefresh.IsEnabled = $true
             Show-WifiActionState
-            $ps.Dispose()
             $timer.Stop()
         }
     }.GetNewClosure())
@@ -5867,11 +5858,12 @@ $($security.SharedKey)
                 }
             } catch {
                 Update-Status "WiFi connect failed: $($_.Exception.Message)" -Type Error
+            } finally {
+                $ps.Dispose()
             }
 
             $script:btnWifiRefresh.IsEnabled = $true
             Show-WifiActionState
-            $ps.Dispose()
             $timer.Stop()
         }
     }.GetNewClosure())
@@ -5924,10 +5916,11 @@ function Invoke-WifiDisconnect {
                 }
             } catch {
                 Update-Status "WiFi disconnect failed: $($_.Exception.Message)" -Type Error
+            } finally {
+                $ps.Dispose()
             }
 
             Show-WifiActionState
-            $ps.Dispose()
             $timer.Stop()
         }
     }.GetNewClosure())
@@ -6007,8 +6000,9 @@ function Update-PublicIP {
             } catch {
                 $script:txtConnPublicIP.Text = "Error"
                 Write-OperationLog -Action "PublicIPLookup" -Result "Error" -Detail $_.Exception.Message
+            } finally {
+                $ps.Dispose()
             }
-            $ps.Dispose()
             $timer.Stop()
         }
     }.GetNewClosure())
@@ -6104,8 +6098,9 @@ function Invoke-DiagPingTest {
                 }
             } catch {
                 $script:txtPingLog.Text = "Error running ping test."
+            } finally {
+                $ps.Dispose()
             }
-            $ps.Dispose()
             $script:btnDiagPing.IsEnabled = $true
             Update-Status "Ping test complete"
             $timer.Stop()
@@ -6396,12 +6391,13 @@ function Invoke-LatencyHistogram {
                 $script:txtPingLog.Text = "Error running latency histogram: $($_.Exception.Message)"
                 Write-OperationLog -Action "LatencyHistogram" -Result "Error" -Detail $_.Exception.Message
                 Update-Status "Latency histogram failed" -Type Error
+            } finally {
+                $ps.Dispose()
             }
 
             $script:LatencyHistogramRunning = $false
             $script:btnLatencyHistogram.IsEnabled = $true
             $script:btnLatencyHistogram.Content = Get-UiString -Key "button.latencyHistogram.idle" -DefaultValue "Latency Histogram"
-            $ps.Dispose()
             $timer.Stop()
         }
     }.GetNewClosure())
@@ -6483,17 +6479,17 @@ function Toggle-ContinuousPing {
 
                         if ($info.Time -ge 0) {
                             $ms = $info.Time
-                            $color = "#3fb950"
-                            if ($ms -gt 100) { $color = "#f85149" }
-                            elseif ($ms -gt 50) { $color = "#d29922" }
+                            $brush = $window.Resources["AccentGreenBrush"]
+                            if ($ms -gt 100) { $brush = $window.Resources["AccentRedBrush"] }
+                            elseif ($ms -gt 50) { $brush = $window.Resources["AccentOrangeBrush"] }
 
                             $run = New-Object System.Windows.Documents.Run
                             $run.Text = "[$ts] #$($script:PingCounter) Reply from $t : ${ms}ms`n"
-                            $run.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom($color)
+                            $run.Foreground = $brush
                         } else {
                             $run = New-Object System.Windows.Documents.Run
                             $run.Text = "[$ts] #$($script:PingCounter) Request timed out ($($info.Status))`n"
-                            $run.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f85149")
+                            $run.Foreground = $window.Resources["AccentRedBrush"]
                         }
 
                         # Convert TextBlock to use Inlines for color
@@ -6509,8 +6505,9 @@ function Toggle-ContinuousPing {
                     }
                 } catch {
                     Write-OperationLog -Action "Continuous ping result" -Result "Warning" -Detail $_.Exception.Message
+                } finally {
+                    $ps.Dispose()
                 }
-                $ps.Dispose()
                 $resultTimer.Stop()
             }
         }.GetNewClosure())
@@ -6624,8 +6621,9 @@ function Invoke-SpeedTest {
                 $script:txtSpeedDown.Text = "ERR"
                 Write-OperationLog -Action "SpeedTest" -Result "Error" -Detail $_.Exception.Message
                 Update-Status "Speed test error" -Type Error
+            } finally {
+                $ps.Dispose()
             }
-            $ps.Dispose()
             $script:SpeedTestRunning = $false
             $script:btnSpeedTest.IsEnabled = $true
             $script:btnSpeedTest.Content = Get-UiString -Key "button.speedTest.idle" -DefaultValue "Speed Test"
@@ -6710,9 +6708,10 @@ function Invoke-DnsLookup {
                     $script:txtDnsLookupOutput.Text = $result[0]
                 }
             } catch {
-                $script:txtDnsLookupOutput.Text = "Error performing DNS lookup."
+                $script:txtDnsLookupOutput.Text = "DNS lookup failed: $($_.Exception.Message)"
+            } finally {
+                $ps.Dispose()
             }
-            $ps.Dispose()
             $script:btnDnsLookup.IsEnabled = $true
             Update-Status "DNS lookup complete"
             $timer.Stop()
@@ -6757,7 +6756,7 @@ function Select-RdapBootstrapEndpoint {
             if ($netAddr.AddressFamily -ne $parsed.AddressFamily) { continue }
 
             $netBytes = $netAddr.GetAddressBytes()
-            $fullBytes = $prefixLen / 8
+            $fullBytes = [Math]::Floor($prefixLen / 8)
             $remainBits = $prefixLen % 8
             $match = $true
 
@@ -7153,7 +7152,6 @@ function Invoke-CheckRelease {
 
         try {
             $result = $ps.EndInvoke($handle)
-            $ps.Dispose()
 
             if (-not $result -or -not $result.Success) {
                 $errorMsg = if ($result -and $result.Error) { $result.Error } else { "No response from GitHub API." }
@@ -7184,6 +7182,7 @@ function Invoke-CheckRelease {
             $script:txtReleaseCheckOutput.Text = "Release check error: $($_.Exception.Message)"
             Update-Status "Release check failed" -Type Error
         } finally {
+            $ps.Dispose()
             $script:btnCheckRelease.IsEnabled = $true
         }
     }.GetNewClosure())
@@ -7530,38 +7529,24 @@ function Refresh-DnsPresets {
         $nameText.Text = $name
         $nameText.FontSize = 13
         $nameText.FontWeight = "Medium"
-        $nameText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
+        $nameText.Foreground = $window.Resources["TextPrimaryBrush"]
 
-        $categoryBorder = New-Object System.Windows.Controls.Border
-        $categoryBorder.CornerRadius = "4"
-        $categoryBorder.Padding = "6,2"
-        $categoryBorder.Margin = "10,0,0,0"
-        $categoryBorder.VerticalAlignment = "Center"
-
-        $categoryColor = switch ($data.Category) {
-            "Public"      { "#1f6feb" }
-            "Security"    { "#f85149" }
-            "Privacy"     { "#a371f7" }
-            "Family"      { "#3fb950" }
-            "Ad-Blocking" { "#d29922" }
-            default       { "#6e7681" }
+        $categoryThemeKey = switch ($data.Category) {
+            "Public"      { "AccentBlue" }
+            "Security"    { "AccentRed" }
+            "Privacy"     { "AccentBlue" }
+            "Family"      { "AccentGreen" }
+            "Ad-Blocking" { "AccentOrange" }
+            default       { "TextMuted" }
         }
-        $categoryBorder.Background = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("$categoryColor" + "30")
-
-        $categoryText = New-Object System.Windows.Controls.TextBlock
-        $categoryText.Text = $data.Category
-        $categoryText.FontSize = 10
-        $categoryText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom($categoryColor)
-        $categoryBorder.Child = $categoryText
-
         $headerPanel.Children.Add($nameText) | Out-Null
-        $headerPanel.Children.Add($categoryBorder) | Out-Null
+        $headerPanel.Children.Add((Get-WifiBadgeElement -Text $data.Category -ThemeKey $categoryThemeKey)) | Out-Null
 
         $descText = New-Object System.Windows.Controls.TextBlock
         $capabilityText = if ($data.Capabilities -and $data.Capabilities.Count -gt 0) { " [$($data.Capabilities -join ', ')]" } else { "" }
         $descText.Text = "$($data.Description)$capabilityText"
         $descText.FontSize = 11
-        $descText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
+        $descText.Foreground = $window.Resources["TextSecondaryBrush"]
         $descText.Margin = "0,4,0,0"
 
         $dnsText = New-Object System.Windows.Controls.TextBlock
@@ -7573,7 +7558,7 @@ function Refresh-DnsPresets {
         }
         $dnsText.FontSize = 11
         $dnsText.FontFamily = New-Object System.Windows.Media.FontFamily("Consolas")
-        $dnsText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#58a6ff")
+        $dnsText.Foreground = $window.Resources["AccentBlueBrush"]
         $dnsText.Margin = "0,4,0,0"
 
         $item.Children.Add($headerPanel) | Out-Null
@@ -9389,6 +9374,7 @@ function Get-SafeProfileFileName {
     $safeName = ([string]$Name).Trim() -replace '[^\w\-]', '_'
     $safeName = $safeName.Trim("_")
     if ([string]::IsNullOrWhiteSpace($safeName)) { $safeName = "Profile" }
+    if ($safeName.Length -gt 200) { $safeName = $safeName.Substring(0, 200) }
     return "$safeName.json"
 }
 
@@ -10885,11 +10871,11 @@ function Update-ProfileStoreDisplay {
     $script:txtProfileStorePath.Text = if ([string]::IsNullOrWhiteSpace($health.Path)) { $script:ProfilesPath } else { $health.Path }
     $script:txtProfileStoreStatus.Text = $health.Message
     $script:txtProfileStoreStatus.Foreground = if ($health.IsValid -and $health.InvalidCount -eq 0) {
-        [System.Windows.Media.Brushes]::LightGreen
+        $window.Resources["AccentGreenBrush"]
     } elseif ($health.IsValid) {
-        [System.Windows.Media.Brushes]::Orange
+        $window.Resources["AccentOrangeBrush"]
     } else {
-        [System.Windows.Media.Brushes]::Salmon
+        $window.Resources["AccentRedBrush"]
     }
 }
 
@@ -11050,12 +11036,12 @@ function Refresh-ProfileList {
         $nameText.Text = $profile.Name
         $nameText.FontSize = 13
         $nameText.FontWeight = "Medium"
-        $nameText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#f0f6fc")
+        $nameText.Foreground = $window.Resources["TextPrimaryBrush"]
 
         $descText = New-Object System.Windows.Controls.TextBlock
         $descText.Text = if ($profile.Description) { $profile.Description } else { "No description" }
         $descText.FontSize = 11
-        $descText.Foreground = (New-Object System.Windows.Media.BrushConverter).ConvertFrom("#8b949e")
+        $descText.Foreground = $window.Resources["TextSecondaryBrush"]
         $descText.Margin = "0,4,0,0"
 
         $item.Children.Add($nameText) | Out-Null
@@ -12103,10 +12089,10 @@ function Set-RdpLaunchStatus {
     if ($script:txtRdpStatus) {
         $script:txtRdpStatus.Text = $Message
         switch ($Type) {
-            "Success" { $script:txtRdpStatus.Foreground = [System.Windows.Media.Brushes]::LightGreen }
-            "Error"   { $script:txtRdpStatus.Foreground = [System.Windows.Media.Brushes]::Salmon }
-            "Warning" { $script:txtRdpStatus.Foreground = [System.Windows.Media.Brushes]::Orange }
-            default   { $script:txtRdpStatus.Foreground = (New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(139,148,158))) }
+            "Success" { $script:txtRdpStatus.Foreground = $window.Resources["AccentGreenBrush"] }
+            "Error"   { $script:txtRdpStatus.Foreground = $window.Resources["AccentRedBrush"] }
+            "Warning" { $script:txtRdpStatus.Foreground = $window.Resources["AccentOrangeBrush"] }
+            default   { $script:txtRdpStatus.Foreground = $window.Resources["TextSecondaryBrush"] }
         }
     }
 
@@ -13131,7 +13117,7 @@ function Invoke-ReleaseIP {
 
     Update-Status "Releasing IP address..."
     try {
-        $output = ipconfig /release $adapter.Name 2>&1
+        $output = & ipconfig /release "$($adapter.Name)" 2>&1
         $script:txtDiagOutput.Text = $output | Out-String
         Update-Status "IP released on $($adapter.Name)" -Type Success
         Update-AdapterDisplay
@@ -13149,7 +13135,7 @@ function Invoke-RenewIP {
 
     Update-Status "Renewing IP address..."
     try {
-        $output = ipconfig /renew $adapter.Name 2>&1
+        $output = & ipconfig /renew "$($adapter.Name)" 2>&1
         $script:txtDiagOutput.Text = $output | Out-String
         Update-Status "IP renewed on $($adapter.Name)" -Type Success
         Update-AdapterDisplay
@@ -14423,7 +14409,7 @@ function Stop-PacketCapture {
         }
 
         if ($OpenWireshark -and $tools.HasWireshark) {
-            Start-Process -FilePath $tools.WiresharkPath -ArgumentList $script:PacketCapturePcapPath
+            Start-Process -FilePath $tools.WiresharkPath -ArgumentList ('"{0}"' -f $script:PacketCapturePcapPath)
             $openedWireshark = $true
         }
 
@@ -14652,14 +14638,22 @@ function Invoke-RdapLookup {
 
                     $ipBytes = $parsed.GetAddressBytes()
                     $netBytes = $netAddr.GetAddressBytes()
-                    $fullBytes = $prefixLen / 8
+                    $fullBytes = [Math]::Floor($prefixLen / 8)
+                    $remainBits = $prefixLen % 8
                     $match = $true
                     for ($i = 0; $i -lt $fullBytes -and $i -lt $netBytes.Count; $i++) {
                         if ($ipBytes[$i] -ne $netBytes[$i]) { $match = $false; break }
                     }
+                    if ($match -and $remainBits -gt 0 -and $fullBytes -lt $netBytes.Count) {
+                        $mask = [byte](0xFF -shl (8 - $remainBits))
+                        if (($ipBytes[$fullBytes] -band $mask) -ne ($netBytes[$fullBytes] -band $mask)) { $match = $false }
+                    }
 
                     if ($match) {
-                        $rdapEndpoint = $service[1] | Select-Object -First 1
+                        $candidateUrl = $service[1] | Select-Object -First 1
+                        if ($candidateUrl -match '^https://') {
+                            $rdapEndpoint = $candidateUrl
+                        }
                         break
                     }
                 }
@@ -14689,7 +14683,6 @@ function Invoke-RdapLookup {
 
         try {
             $result = $ps.EndInvoke($handle)
-            $ps.Dispose()
 
             if (-not $result -or -not $result.Success) {
                 $errorMsg = if ($result -and $result.Error) { $result.Error } else { "No response." }
@@ -14706,6 +14699,8 @@ function Invoke-RdapLookup {
         } catch {
             $script:txtDiagOutput.Text = "RDAP lookup error: $($_.Exception.Message)"
             Update-Status "RDAP lookup failed" -Type Error
+        } finally {
+            $ps.Dispose()
         }
     }.GetNewClosure())
     $timer.Start()
@@ -15485,12 +15480,16 @@ $window.Add_Closing({
     if ($script:ContinuousPingTimer) {
         $script:ContinuousPingTimer.Stop()
     }
+    if ($script:ContinuousPingPS) {
+        try { $script:ContinuousPingPS.Stop(); $script:ContinuousPingPS.Dispose() } catch { }
+    }
     if ($script:MtrRunning) {
         Stop-MtrTrace
     }
     if ($script:PortScanPowerShell) {
         try {
             $script:PortScanPowerShell.Stop()
+            $script:PortScanPowerShell.Dispose()
         } catch {
             Write-OperationLog -Action "Port scan stop" -Result "Warning" -Detail $_.Exception.Message
         }
@@ -15498,6 +15497,7 @@ $window.Add_Closing({
     if ($script:ReachabilityWizardPowerShell) {
         try {
             $script:ReachabilityWizardPowerShell.Stop()
+            $script:ReachabilityWizardPowerShell.Dispose()
         } catch {
             Write-OperationLog -Action "Reachability wizard stop" -Result "Warning" -Detail $_.Exception.Message
         }
