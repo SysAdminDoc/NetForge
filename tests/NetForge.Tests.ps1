@@ -1883,6 +1883,52 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'Vendored dependency manifest' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Test-VendoredDependencyManifest')
+    }
+
+    It 'validates real vendored DLLs and license files' {
+        $repoRoot = Split-Path -Parent $PSScriptRoot
+        $manifestPath = Join-Path $repoRoot 'lib\dependencies.json'
+        if (-not (Test-Path -LiteralPath $manifestPath)) {
+            Set-ItResult -Skipped -Because 'dependencies.json not found'
+            return
+        }
+
+        $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+        $result = Test-VendoredDependencyManifest -Manifest $manifest -LibDirectory (Join-Path $repoRoot 'lib') -LicenseDirectory (Join-Path $repoRoot 'licenses')
+
+        $result.Issues.Count | Should -Be 0
+        $result.Entries.Count | Should -BeGreaterThan 0
+        foreach ($entry in $result.Entries) {
+            $entry.VersionMatch | Should -BeTrue -Because "$($entry.Name) DLL version should match manifest"
+        }
+    }
+
+    It 'detects version drift and missing files' {
+        $manifest = [pscustomobject]@{
+            SchemaVersion = 1
+            Dependencies = @(
+                [pscustomobject]@{
+                    Name = 'FakeLib'
+                    FileName = 'FakeLib.dll'
+                    Version = '9.9.9.9'
+                    License = 'MIT'
+                    LicenseFile = 'FakeLib-LICENSE.txt'
+                    SourceUrl = 'https://example.com'
+                    NuGetId = 'FakeLib'
+                }
+            )
+        }
+
+        $result = Test-VendoredDependencyManifest -Manifest $manifest -LibDirectory $TestDrive -LicenseDirectory $TestDrive
+
+        $result.Issues.Count | Should -BeGreaterThan 0
+        ($result.Issues -join ' ') | Should -Match 'not found'
+    }
+}
+
 Describe 'DNS catalog freshness helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

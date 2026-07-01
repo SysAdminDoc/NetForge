@@ -6955,6 +6955,79 @@ function Test-DnsProviderEntry {
     return $issues
 }
 
+function Test-VendoredDependencyManifest {
+    param(
+        [pscustomobject]$Manifest,
+        [string]$LibDirectory,
+        [string]$LicenseDirectory
+    )
+
+    $issues = @()
+    $entries = @()
+
+    if ($null -eq $Manifest -or $null -eq $Manifest.Dependencies) {
+        return [pscustomobject]@{ Issues = @("Dependency manifest is empty or missing Dependencies array."); Entries = @() }
+    }
+    if ([int]$Manifest.SchemaVersion -ne 1) {
+        return [pscustomobject]@{ Issues = @("Unsupported manifest schema version."); Entries = @() }
+    }
+
+    foreach ($dep in $Manifest.Dependencies) {
+        $name = [string]$dep.Name
+        $fileName = [string]$dep.FileName
+        $expectedVersion = [string]$dep.Version
+        $licenseFile = [string]$dep.LicenseFile
+
+        $dllPath = Join-Path $LibDirectory $fileName
+        $licensePath = Join-Path $LicenseDirectory $licenseFile
+
+        $actualVersion = $null
+        $dllExists = Test-Path -LiteralPath $dllPath -PathType Leaf
+        $licenseExists = (-not [string]::IsNullOrWhiteSpace($licenseFile)) -and (Test-Path -LiteralPath $licensePath -PathType Leaf)
+
+        if (-not $dllExists) {
+            $issues += "$($name): DLL '$fileName' not found in lib directory."
+        } else {
+            try {
+                $assembly = [System.Reflection.Assembly]::LoadFile((Resolve-Path -LiteralPath $dllPath).Path)
+                $actualVersion = $assembly.GetName().Version.ToString()
+            } catch {
+                $issues += "$($name): Failed to read DLL version from '$fileName'."
+            }
+
+            if ($actualVersion -and $actualVersion -ne $expectedVersion) {
+                $issues += "$($name): DLL version drift ($actualVersion != manifest $expectedVersion)."
+            }
+        }
+
+        if (-not $licenseExists) {
+            $issues += "$($name): License file '$licenseFile' not found."
+        }
+
+        $entries += [pscustomobject]@{
+            Name = $name
+            FileName = $fileName
+            ExpectedVersion = $expectedVersion
+            ActualVersion = $actualVersion
+            License = [string]$dep.License
+            SourceUrl = [string]$dep.SourceUrl
+            DllExists = $dllExists
+            LicenseExists = $licenseExists
+            VersionMatch = ($actualVersion -eq $expectedVersion)
+        }
+    }
+
+    $libFiles = @(Get-ChildItem -LiteralPath $LibDirectory -Filter '*.dll' -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
+    $manifestFiles = @($Manifest.Dependencies | ForEach-Object { [string]$_.FileName })
+    foreach ($libFile in $libFiles) {
+        if ($manifestFiles -notcontains $libFile) {
+            $issues += "Unknown DLL '$libFile' not listed in dependency manifest."
+        }
+    }
+
+    return [pscustomobject]@{ Issues = $issues; Entries = $entries }
+}
+
 function Format-DnsCatalogFreshnessReport {
     param(
         [int]$TotalProviders,

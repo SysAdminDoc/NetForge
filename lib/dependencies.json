@@ -1,0 +1,24 @@
+{
+  "SchemaVersion": 1,
+  "UpdatedAt": "2026-07-01",
+  "Dependencies": [
+    {
+      "Name": "QRCoder",
+      "FileName": "QRCoder.dll",
+      "Version": "1.8.0.0",
+      "License": "MIT",
+      "LicenseFile": "QRCoder-LICENSE.txt",
+      "SourceUrl": "https://github.com/codebude/QRCoder",
+      "NuGetId": "QRCoder"
+    },
+    {
+      "Name": "ZXing.Net",
+      "FileName": "zxing.dll",
+      "Version": "0.16.11.0",
+      "License": "Apache-2.0",
+      "LicenseFile": "ZXing.Net-LICENSE.txt",
+      "SourceUrl": "https://github.com/micjahn/ZXing.Net",
+      "NuGetId": "ZXing.Net"
+    }
+  ]
+}

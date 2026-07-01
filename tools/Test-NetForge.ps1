@@ -126,6 +126,26 @@ if (Test-Path -LiteralPath $distPath) {
     }
 }
 
+$libPath = Join-Path $repoRoot 'lib'
+$licensesPath = Join-Path $repoRoot 'licenses'
+$depManifestPath = Join-Path $libPath 'dependencies.json'
+if (Test-Path -LiteralPath $depManifestPath) {
+    $depManifest = Get-Content -Raw -LiteralPath $depManifestPath | ConvertFrom-Json
+
+    $depAst = [scriptblock]::Create($scriptText).Ast
+    $depFuncName = 'Test-VendoredDependencyManifest'
+    $depFuncAst = $depAst.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $depFuncName }, $true)
+    if ($null -ne $depFuncAst) {
+        Invoke-Expression "function $depFuncName $($depFuncAst.Body.Extent.Text)"
+
+        $depResult = Test-VendoredDependencyManifest -Manifest $depManifest -LibDirectory $libPath -LicenseDirectory $licensesPath
+        if ($depResult.Issues.Count -gt 0) {
+            throw "Vendored dependency check failed: $($depResult.Issues -join '; ')"
+        }
+        Write-Host "Vendored dependency manifest verified ($($depResult.Entries.Count) entries)."
+    }
+}
+
 $scriptPaths = @($scriptPath)
 $scriptPaths += @(Get-ChildItem -Path (Join-Path $repoRoot 'tools'), (Join-Path $repoRoot 'tests') -Filter '*.ps1' -File -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
 $scriptPaths = @($scriptPaths | Select-Object -Unique)
