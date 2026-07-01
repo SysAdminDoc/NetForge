@@ -495,6 +495,27 @@ Describe 'RDP profile launch helpers' {
         $plan.ArgumentList | Should -Be ('"' + $rdpPath + '"')
         $plan.DisplayTarget | Should -Be $rdpPath
     }
+
+    It 'rejects a non-existent RDP file' {
+        $plan = Get-RdpLaunchPlan -Target 'C:\nonexistent\missing.rdp'
+
+        $plan.IsValid | Should -BeFalse
+        $plan.Message | Should -Match 'not found'
+    }
+
+    It 'rejects empty target' {
+        $plan = Get-RdpLaunchPlan -Target ''
+
+        $plan.IsValid | Should -BeFalse
+        $plan.Message | Should -Match 'host or .rdp file'
+    }
+
+    It 'accepts a simple hostname' {
+        $plan = Get-RdpLaunchPlan -Target 'server01'
+
+        $plan.IsValid | Should -BeTrue
+        $plan.ArgumentList | Should -Be '/v:server01'
+    }
 }
 
 Describe 'Encrypted DNS endpoint helpers' {
@@ -650,6 +671,38 @@ Describe 'DNS provider catalog' {
         $result.IsValid | Should -BeFalse
         $result.Message | Should -Match 'invalid IPv4'
         $result.Message | Should -Match 'unknown capability'
+    }
+
+    It 'rejects catalogs with missing required provider fields' {
+        $catalog = [pscustomobject]@{
+            SchemaVersion = 1
+            Providers = @(
+                [pscustomobject]@{
+                    Name = ''
+                    Category = ''
+                    Description = ''
+                    IPv4Primary = '8.8.8.8'
+                    IPv4Secondary = '8.8.4.4'
+                    Capabilities = @('ipv4')
+                }
+            )
+        }
+
+        $result = ConvertFrom-DnsProviderCatalog -Catalog $catalog
+        $result.IsValid | Should -BeFalse
+    }
+
+    It 'rejects null catalog' {
+        $result = ConvertFrom-DnsProviderCatalog -Catalog $null
+        $result.IsValid | Should -BeFalse
+        $result.Message | Should -Match 'empty'
+    }
+
+    It 'rejects wrong schema version' {
+        $catalog = [pscustomobject]@{ SchemaVersion = 99; Providers = @() }
+        $result = ConvertFrom-DnsProviderCatalog -Catalog $catalog
+        $result.IsValid | Should -BeFalse
+        $result.Message | Should -Match 'schema'
     }
 }
 
@@ -1479,6 +1532,51 @@ Describe 'Hosts file group helpers' {
         $replacement | Should -Not -Match 'NetForge group: Work'
         (Format-HostsGroupRows -Groups $groups) | Should -Match 'Work \(1 entry\)'
         (Format-HostsGroupRows -Groups @()) | Should -Match 'No NetForge-managed hosts groups'
+    }
+
+    It 'replaces an existing managed section without duplicating' {
+        $groups = @(
+            [pscustomobject]@{
+                Name = 'Initial'
+                Enabled = $true
+                Entries = @([pscustomobject]@{ Address = '10.0.0.1'; HostNames = @('server.local') })
+            }
+        )
+
+        $initial = Update-HostsManagedSection -CurrentText "127.0.0.1 localhost" -Groups $groups
+        $initial | Should -Match 'NetForge group: Initial'
+
+        $updated = @(
+            [pscustomobject]@{
+                Name = 'Replaced'
+                Enabled = $true
+                Entries = @([pscustomobject]@{ Address = '10.0.0.2'; HostNames = @('new.local') })
+            }
+        )
+
+        $result = Update-HostsManagedSection -CurrentText $initial -Groups $updated
+        $result | Should -Match '127.0.0.1 localhost'
+        $result | Should -Match 'NetForge group: Replaced'
+        $result | Should -Not -Match 'NetForge group: Initial'
+
+        $beginCount = ([regex]::Matches($result, [regex]::Escape((Get-HostsSectionBeginMarker)))).Count
+        $endCount = ([regex]::Matches($result, [regex]::Escape((Get-HostsSectionEndMarker)))).Count
+        $beginCount | Should -Be 1
+        $endCount | Should -Be 1
+    }
+
+    It 'handles empty hosts file gracefully' {
+        $groups = @(
+            [pscustomobject]@{
+                Name = 'Test'
+                Enabled = $true
+                Entries = @([pscustomobject]@{ Address = '10.0.0.1'; HostNames = @('test.local') })
+            }
+        )
+
+        $result = Update-HostsManagedSection -CurrentText "" -Groups $groups
+        $result | Should -Match 'NetForge group: Test'
+        $result | Should -Match '10.0.0.1 test.local'
     }
 }
 
@@ -2323,6 +2421,30 @@ Describe 'Settings schema validation' {
         $result = Test-SettingsSchema -Settings $settings
 
         $result.SchemaVersion | Should -Be 0
+        $result.IsValid | Should -BeTrue
+    }
+
+    It 'accepts empty settings hash' {
+        $settings = [ordered]@{}
+        $result = Test-SettingsSchema -Settings $settings
+        $result.IsValid | Should -BeTrue
+        $result.SchemaVersion | Should -Be 0
+    }
+
+    It 'accepts all known setting keys' {
+        $known = Get-KnownSettingNames
+        $settings = [ordered]@{}
+        foreach ($k in $known) { $settings[$k] = 'test' }
+        $result = Test-SettingsSchema -Settings $settings
+        $result.IsValid | Should -BeTrue
+    }
+
+    It 'ignores SettingsReadWarning key' {
+        $settings = [ordered]@{
+            SettingsReadWarning = 'test warning'
+            UiTheme = 'Nord'
+        }
+        $result = Test-SettingsSchema -Settings $settings
         $result.IsValid | Should -BeTrue
     }
 }
