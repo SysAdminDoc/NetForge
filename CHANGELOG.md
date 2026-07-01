@@ -2,6 +2,22 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.54.0] - 2026-07-01
+
+- Fixed: Diagnostic targets (ping, traceroute, nslookup, port scan, RDAP) now validated for safe characters before use.
+- Fixed: Proxy server and bypass values validated before registry write; rejects dangerous characters.
+- Added: Five tests for Get-ProfileApplyTarget covering DHCP, static, invalid IP, invalid DNS, and proxy cases.
+- Fixed: Continuous ping overlap guard prevents runspace accumulation when probes take longer than the 2-second interval.
+- Fixed: ARP cache priming uses 500ms Ping instead of synchronous Test-Connection to avoid blocking UI thread.
+- Fixed: Hosts file write uses atomic temp-file-then-copy pattern; backup directory capped at 20 files.
+- Fixed: Settings corruption now shows a warning in the status bar after initialization.
+- Added: Empty-state guidance text for adapter list and profile list when no items exist.
+- Fixed: Ping/traceroute jobs handle timeout (60s/120s) and Failed/Stopped states instead of polling forever.
+- Fixed: Hardcoded English strings (Connected, Disconnected, Select an adapter, Not configured, Saved, New) now localized via Get-UiString with en-US and es-ES entries.
+- Added: Tooltips on abbreviated buttons (Cable Diag, Auto Metric, Export QR, Import QR).
+- Fixed: DoQ proxy path resolution restricted to .exe files only.
+- Fixed: Release packager verifies version consistency before packaging.
+
 ## [v1.53.0] - 2026-07-01
 
 - Fixed: RDAP CIDR prefix matching used float division; non-byte-aligned prefixes could select wrong endpoints.

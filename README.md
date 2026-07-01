@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows" alt="Windows"/>
   <img src="https://img.shields.io/badge/PowerShell-5.1+-5391FE?style=for-the-badge&logo=powershell&logoColor=white" alt="PowerShell"/>
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/Version-1.53.0-orange?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/Version-1.54.0-orange?style=for-the-badge" alt="Version"/>
 </p>
 
 <p align="center">
@@ -223,7 +223,7 @@ irm https://raw.githubusercontent.com/SysAdminDoc/NetForge/main/NetForge.ps1 -Ou
 
 ### Version and Release Package
 ```powershell
-.\tools\Set-NetForgeVersion.ps1 -Version 1.53.0
+.\tools\Set-NetForgeVersion.ps1 -Version 1.54.0
 .\tools\New-NetForgeReleasePackage.ps1
 ```
 
