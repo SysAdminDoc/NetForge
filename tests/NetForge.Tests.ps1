@@ -1896,6 +1896,42 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'DNS resolver benchmark' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Format-DnsBenchmarkResult',
+            'Format-DnsBenchmarkReport'
+        )
+    }
+
+    It 'formats a benchmark result with latency stats' {
+        $result = Format-DnsBenchmarkResult -Server 'Cloudflare' -Queries 5 -Successes 5 -Failures 0 -MinMs 12.3 -AvgMs 18.7 -MaxMs 25.1
+
+        $result.Server | Should -Be 'Cloudflare'
+        $result.FailRate | Should -Be 0
+        $result.MinMs | Should -Be 12.3
+        $result.AvgMs | Should -Be 18.7
+    }
+
+    It 'formats a benchmark report sorted by avg latency' {
+        $results = @(
+            (Format-DnsBenchmarkResult -Server 'SlowDNS' -Queries 5 -Successes 5 -Failures 0 -MinMs 50 -AvgMs 80 -MaxMs 120),
+            (Format-DnsBenchmarkResult -Server 'FastDNS' -Queries 5 -Successes 5 -Failures 0 -MinMs 5 -AvgMs 10 -MaxMs 15)
+        )
+
+        $report = Format-DnsBenchmarkReport -Results $results
+
+        $report | Should -Match 'Fastest: FastDNS'
+        $report | Should -Match 'SlowDNS'
+    }
+
+    It 'handles empty benchmark results' {
+        $report = Format-DnsBenchmarkReport -Results @()
+
+        $report | Should -Be 'No benchmark results.'
+    }
+}
+
 Describe 'Configuration export and import preview' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

@@ -265,6 +265,8 @@ $script:AccessibilityNames = @{
     btnRefreshAutoApply = "Refresh auto-apply inspector"
     cmbLocaleSelector = "UI language selector"
     btnSaveLocale = "Save locale setting"
+    btnDnsBenchmark = "Run DNS resolver benchmark"
+    txtDnsBenchmarkOutput = "DNS benchmark results"
     btnRefreshCapabilities = "Scan host capabilities"
     txtCapabilityMatrix = "Host capability scan results"
     txtAutoApplyInspector = "Auto-apply match status"
@@ -328,7 +330,7 @@ $script:AccessibilityTabOrder = @(
     "lstAdapters", "cmbUiTheme", "chkCompactMode", "btnRefresh", "chkAdvancedAdapters", "btnEnableAdapter", "btnDisableAdapter",
     "txtInterfaceMetric", "chkMetricIPv4", "chkMetricIPv6", "btnApplyMetric", "btnAutoMetric", "btnIPv4FirstMetric", "btnIPv6FirstMetric",
     "rbDHCP", "rbStatic", "txtIPAddress", "txtSubnet", "txtGateway", "txtPrefix", "chkConfigureIPv6Address", "txtIPv6Address", "txtIPv6Prefix", "txtIPv6Gateway", "btnApplyIP",
-    "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns",
+    "rbDnsDHCP", "rbDnsPreset", "rbDnsCustom", "txtDnsSearch", "cmbDnsCategory", "lstDnsPresets", "btnApplyDns", "btnDnsBenchmark",
     "lstProfiles", "btnNewProfile", "btnDeleteProfile", "btnExportProfileQr", "btnImportProfileQr", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
@@ -2127,6 +2129,28 @@ function Apply-Localization {
                                             <Button x:Name="btnApplyDoqLocalDns" Content="Apply Local DNS" Style="{StaticResource ModernButton}" Padding="14,8"/>
                                         </StackPanel>
                                     </Grid>
+                                </Border>
+
+                                <!-- DNS Benchmark -->
+                                <TextBlock Text="DNS RESOLVER BENCHMARK" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,20,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Benchmark selected preset resolvers (5 queries each)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <Button x:Name="btnDnsBenchmark" Grid.Column="1" Content="Run Benchmark" Style="{StaticResource PrimaryButton}" Padding="16,8"/>
+                                        </Grid>
+
+                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="300">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <TextBlock x:Name="txtDnsBenchmarkOutput" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Run Benchmark to test resolver latency."/>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </StackPanel>
                                 </Border>
 
                                 <!-- Apply Button -->
@@ -6690,6 +6714,183 @@ function Invoke-DnsLookup {
             $script:btnDnsLookup.IsEnabled = $true
             Update-Status "DNS lookup complete"
             $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+# ============================================================================
+# DNS BENCHMARK FUNCTIONS
+# ============================================================================
+function Format-DnsBenchmarkResult {
+    param(
+        [string]$Server,
+        [int]$Queries,
+        [int]$Successes,
+        [int]$Failures,
+        [double]$MinMs,
+        [double]$AvgMs,
+        [double]$MaxMs
+    )
+
+    $failRate = if ($Queries -gt 0) { [Math]::Round(($Failures / $Queries) * 100, 1) } else { 0 }
+    return [pscustomobject]@{
+        Server = $Server
+        Queries = $Queries
+        Successes = $Successes
+        Failures = $Failures
+        FailRate = $failRate
+        MinMs = [Math]::Round($MinMs, 1)
+        AvgMs = [Math]::Round($AvgMs, 1)
+        MaxMs = [Math]::Round($MaxMs, 1)
+    }
+}
+
+function Format-DnsBenchmarkReport {
+    param([pscustomobject[]]$Results)
+
+    if ($null -eq $Results -or $Results.Count -eq 0) {
+        return "No benchmark results."
+    }
+
+    $lines = @()
+    $lines += "DNS resolver benchmark results:"
+    $lines += ""
+    $lines += "{0,-20} {1,6} {2,6} {3,6} {4,8} {5,8}" -f "Server", "Min", "Avg", "Max", "Fail%", "Queries"
+    $lines += "{0,-20} {1,6} {2,6} {3,6} {4,8} {5,8}" -f ("=" * 20), ("=" * 6), ("=" * 6), ("=" * 6), ("=" * 8), ("=" * 8)
+
+    $sorted = @($Results | Sort-Object AvgMs)
+    foreach ($r in $sorted) {
+        $lines += "{0,-20} {1,5}ms {2,5}ms {3,5}ms {4,7}% {5,8}" -f $r.Server, $r.MinMs, $r.AvgMs, $r.MaxMs, $r.FailRate, $r.Queries
+    }
+
+    $lines += ""
+    $best = $sorted[0]
+    $lines += "Fastest: $($best.Server) ($($best.AvgMs) ms avg)"
+
+    return ($lines -join "`n")
+}
+
+function Invoke-DnsBenchmark {
+    if (-not $script:PublicIpLookupEnabled) {
+        $script:txtDnsBenchmarkOutput.Text = "DNS benchmark is unavailable when endpoint policy is disabled."
+        Update-Status "DNS benchmark skipped: endpoint policy disabled" -Type Warning
+        return
+    }
+
+    $servers = @()
+    foreach ($key in $script:DnsPresets.Keys) {
+        $preset = $script:DnsPresets[$key]
+        if ($preset.Primary -and $preset.Primary -ne "DHCP") {
+            $servers += [pscustomobject]@{ Name = $key; Address = $preset.Primary }
+        }
+    }
+
+    if ($servers.Count -eq 0) {
+        $script:txtDnsBenchmarkOutput.Text = "No DNS resolver addresses to benchmark."
+        Update-Status "DNS benchmark: no resolvers" -Type Warning
+        return
+    }
+
+    if ($servers.Count -gt 15) {
+        $servers = @($servers | Select-Object -First 15)
+    }
+
+    $script:btnDnsBenchmark.IsEnabled = $false
+    $script:txtDnsBenchmarkOutput.Text = "Benchmarking $($servers.Count) resolvers..."
+    Update-Status "DNS benchmark running..."
+
+    $benchScript = {
+        param($ServerList, $QueryCount)
+
+        function ConvertTo-DnsQueryMessage {
+            $id = [byte[]]@(0xAB, 0xCD)
+            $flags = [byte[]]@(0x01, 0x00)
+            $counts = [byte[]]@(0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+            $name = [byte[]]@(0x07) + [System.Text.Encoding]::ASCII.GetBytes("example") + [byte[]]@(0x03) + [System.Text.Encoding]::ASCII.GetBytes("com") + [byte[]]@(0x00)
+            $qtype = [byte[]]@(0x00, 0x01)
+            $qclass = [byte[]]@(0x00, 0x01)
+            return $id + $flags + $counts + $name + $qtype + $qclass
+        }
+
+        $results = @()
+        foreach ($server in $ServerList) {
+            $latencies = @()
+            $failures = 0
+
+            for ($i = 0; $i -lt $QueryCount; $i++) {
+                $client = $null
+                try {
+                    $ipAddr = [System.Net.IPAddress]::Parse($server.Address)
+                    $client = New-Object System.Net.Sockets.UdpClient($ipAddr.AddressFamily)
+                    $client.Client.SendTimeout = 2000
+                    $client.Client.ReceiveTimeout = 2000
+                    $endpoint = New-Object System.Net.IPEndPoint($ipAddr, 53)
+                    $query = ConvertTo-DnsQueryMessage
+                    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                    $client.Connect($endpoint)
+                    [void]$client.Send($query, $query.Length)
+                    $anyAddr = if ($ipAddr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) { [System.Net.IPAddress]::IPv6Any } else { [System.Net.IPAddress]::Any }
+                    $remoteEp = New-Object System.Net.IPEndPoint($anyAddr, 0)
+                    [void]$client.Receive([ref]$remoteEp)
+                    $sw.Stop()
+                    $latencies += $sw.Elapsed.TotalMilliseconds
+                } catch {
+                    $failures++
+                } finally {
+                    if ($client) { $client.Dispose() }
+                }
+            }
+
+            if ($latencies.Count -gt 0) {
+                $results += [pscustomobject]@{
+                    Server = $server.Name
+                    Queries = $QueryCount
+                    Successes = $latencies.Count
+                    Failures = $failures
+                    MinMs = ($latencies | Measure-Object -Minimum).Minimum
+                    AvgMs = ($latencies | Measure-Object -Average).Average
+                    MaxMs = ($latencies | Measure-Object -Maximum).Maximum
+                }
+            } else {
+                $results += [pscustomobject]@{
+                    Server = $server.Name
+                    Queries = $QueryCount
+                    Successes = 0
+                    Failures = $failures
+                    MinMs = 0
+                    AvgMs = 0
+                    MaxMs = 0
+                }
+            }
+        }
+        return $results
+    }
+
+    $job = Start-Job -ScriptBlock $benchScript -ArgumentList @(,$servers), 5
+
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(500)
+    $timer.Add_Tick({
+        if ($job.State -notin @("Completed", "Failed", "Stopped")) { return }
+        $timer.Stop()
+
+        try {
+            $rawResults = @(Receive-Job $job -ErrorAction Stop)
+            $formatted = @()
+            foreach ($r in $rawResults) {
+                $formatted += Format-DnsBenchmarkResult -Server $r.Server -Queries $r.Queries -Successes $r.Successes -Failures $r.Failures -MinMs $r.MinMs -AvgMs $r.AvgMs -MaxMs $r.MaxMs
+            }
+            $report = Format-DnsBenchmarkReport -Results $formatted
+            $script:txtDnsBenchmarkOutput.Text = $report
+            Write-OperationLog -Action "DNS benchmark" -Result "Info" -Detail "$($formatted.Count) resolvers tested"
+            Update-Status "DNS benchmark complete" -Type Success
+        } catch {
+            $script:txtDnsBenchmarkOutput.Text = "Benchmark failed: $($_.Exception.Message)"
+            Update-Status "DNS benchmark failed" -Type Error
+        } finally {
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            $script:btnDnsBenchmark.IsEnabled = $true
         }
     }.GetNewClosure())
     $timer.Start()
@@ -14916,6 +15117,7 @@ $btnIPv4FirstMetric.Add_Click({ Invoke-AdapterBindingPriority -Mode "IPv4First" 
 $btnIPv6FirstMetric.Add_Click({ Invoke-AdapterBindingPriority -Mode "IPv6First" })
 $btnApplyIP.Add_Click({ Apply-IPConfiguration })
 $btnApplyDns.Add_Click({ Apply-DNSConfiguration })
+$btnDnsBenchmark.Add_Click({ Invoke-DnsBenchmark })
 $btnRegisterDoh.Add_Click({ Register-DohEncryption })
 $btnRegisterDot.Add_Click({ Register-DotEncryption })
 $btnTestEncryptedDns.Add_Click({ Invoke-EncryptedDnsHealthTest })
