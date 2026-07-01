@@ -1896,6 +1896,58 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'DHCP lease diagnostics' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Format-DhcpLeaseInfo')
+    }
+
+    It 'formats DHCP server with lease timing' {
+        $now = Get-Date
+        $cim = [pscustomobject]@{
+            DHCPServer = '192.168.1.1'
+            DHCPLeaseObtained = $now.AddHours(-12)
+            DHCPLeaseExpires = $now.AddHours(12)
+        }
+
+        $result = Format-DhcpLeaseInfo -CimConfig $cim
+
+        $result.ServerText | Should -Match '192\.168\.1\.1'
+        $result.ServerText | Should -Match 'Lease:'
+        $result.LeaseText | Should -Not -BeNullOrEmpty
+    }
+
+    It 'reports expired lease' {
+        $now = Get-Date
+        $cim = [pscustomobject]@{
+            DHCPServer = '10.0.0.1'
+            DHCPLeaseObtained = $now.AddHours(-48)
+            DHCPLeaseExpires = $now.AddHours(-1)
+        }
+
+        $result = Format-DhcpLeaseInfo -CimConfig $cim
+
+        $result.ServerText | Should -Match 'EXPIRED'
+    }
+
+    It 'handles missing CIM config gracefully' {
+        $result = Format-DhcpLeaseInfo -CimConfig $null
+
+        $result.ServerText | Should -Be '--'
+        $result.LeaseText | Should -BeNullOrEmpty
+    }
+
+    It 'handles DHCP server with no lease fields' {
+        $cim = [pscustomobject]@{
+            DHCPServer = '192.168.1.1'
+        }
+
+        $result = Format-DhcpLeaseInfo -CimConfig $cim
+
+        $result.ServerText | Should -Be '192.168.1.1'
+        $result.LeaseText | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Settings schema validation' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

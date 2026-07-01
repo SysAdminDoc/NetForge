@@ -130,7 +130,7 @@
     "label.description": "Descripcion",
     "label.destinationPrefix": "Prefijo de destino",
     "label.dhcpEnabled": "DHCP activo",
-    "label.dhcpServer": "Servidor DHCP",
+    "label.dhcpServer": "Servidor DHCP / Concesion",
     "label.dnsConfiguration": "Configuracion DNS",
     "label.dnsConfigurationMode": "MODO DE CONFIGURACION DNS",
     "label.dnsLookup": "BUSQUEDA DNS",

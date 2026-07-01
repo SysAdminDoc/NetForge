@@ -2717,8 +2717,8 @@ function Apply-Localization {
                                             <TextBlock x:Name="txtInfoDHCP" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="DHCP Server" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoDHCPServer" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="DHCP Server / Lease" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoDHCPServer" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,0,16">
@@ -4977,6 +4977,51 @@ function Update-AdapterDisplay {
     Show-InterfaceMetricDisplay
 }
 
+function Format-DhcpLeaseInfo {
+    param([pscustomobject]$CimConfig)
+
+    if ($null -eq $CimConfig) {
+        return [pscustomobject]@{ ServerText = "--"; LeaseText = $null }
+    }
+
+    $server = if ($CimConfig.DHCPServer) { [string]$CimConfig.DHCPServer } else { $null }
+    if ([string]::IsNullOrWhiteSpace($server)) {
+        return [pscustomobject]@{ ServerText = "--"; LeaseText = $null }
+    }
+
+    $leaseObtained = $null
+    $leaseExpires = $null
+    if ($CimConfig.PSObject.Properties['DHCPLeaseObtained'] -and $null -ne $CimConfig.DHCPLeaseObtained) {
+        try { $leaseObtained = [datetime]$CimConfig.DHCPLeaseObtained } catch { }
+    }
+    if ($CimConfig.PSObject.Properties['DHCPLeaseExpires'] -and $null -ne $CimConfig.DHCPLeaseExpires) {
+        try { $leaseExpires = [datetime]$CimConfig.DHCPLeaseExpires } catch { }
+    }
+
+    $parts = @($server)
+
+    if ($null -ne $leaseObtained -and $null -ne $leaseExpires) {
+        $remaining = $leaseExpires - (Get-Date)
+        $remainText = if ($remaining.TotalSeconds -le 0) {
+            "EXPIRED"
+        } elseif ($remaining.TotalHours -ge 24) {
+            "{0:N0}d {1:N0}h" -f $remaining.Days, $remaining.Hours
+        } elseif ($remaining.TotalMinutes -ge 60) {
+            "{0:N0}h {1:N0}m" -f [Math]::Floor($remaining.TotalHours), $remaining.Minutes
+        } else {
+            "{0:N0}m" -f [Math]::Floor($remaining.TotalMinutes)
+        }
+        $parts += "Lease: $($leaseObtained.ToString('MMM d HH:mm')) - $($leaseExpires.ToString('MMM d HH:mm')) ($remainText)"
+    } elseif ($null -ne $leaseExpires) {
+        $parts += "Expires: $($leaseExpires.ToString('MMM d HH:mm'))"
+    }
+
+    $serverText = $parts -join "`n"
+    $leaseText = if ($parts.Count -gt 1) { $parts[1] } else { $null }
+
+    return [pscustomobject]@{ ServerText = $serverText; LeaseText = $leaseText }
+}
+
 function Update-AdapterDetails {
     $adapter = Get-SelectedAdapter
     if ($null -eq $adapter) { return }
@@ -4994,8 +5039,9 @@ function Update-AdapterDetails {
         $ipInterface = Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
         $script:txtInfoDHCP.Text = if ($ipInterface.Dhcp -eq "Enabled") { "Yes" } else { "No" }
 
-        $dhcpServer = (Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.InterfaceIndex -eq $adapter.ifIndex }).DHCPServer
-        $script:txtInfoDHCPServer.Text = if ($dhcpServer) { $dhcpServer } else { "--" }
+        $cimConfig = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.InterfaceIndex -eq $adapter.ifIndex }
+        $dhcpInfo = Format-DhcpLeaseInfo -CimConfig $cimConfig
+        $script:txtInfoDHCPServer.Text = $dhcpInfo.ServerText
 
         $dnsServers = (Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
         $script:txtInfoDNS.Text = if ($dnsServers) { $dnsServers -join ", " } else { "--" }
