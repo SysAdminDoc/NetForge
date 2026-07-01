@@ -3486,6 +3486,15 @@ function Test-ValidIPv6PrefixLength {
     return ($PrefixLength -ge 1 -and $PrefixLength -le 128)
 }
 
+function Test-ValidDiagnosticTarget {
+    param([string]$Target)
+
+    $text = ([string]$Target).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return $false }
+    if ($text.Length -gt 253) { return $false }
+    return ($text -match '^[A-Za-z0-9._:\-\[\]/]+$')
+}
+
 function Get-ApplyValidationResult {
     param(
         [bool]$IsValid,
@@ -13201,6 +13210,10 @@ function Invoke-Ping {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
         return
     }
+    if (-not (Test-ValidDiagnosticTarget -Target $target)) {
+        Show-MessageBox -Message "Target contains invalid characters. Use only letters, digits, dots, colons, hyphens, or brackets." -Title "Invalid Target" -Icon Warning
+        return
+    }
 
     Update-Status "Pinging $target..."
     $script:txtDiagOutput.Text = "Pinging $target...`n"
@@ -13228,6 +13241,10 @@ function Invoke-Traceroute {
     $target = $script:txtPingTarget.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($target)) {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
+        return
+    }
+    if (-not (Test-ValidDiagnosticTarget -Target $target)) {
+        Show-MessageBox -Message "Target contains invalid characters. Use only letters, digits, dots, colons, hyphens, or brackets." -Title "Invalid Target" -Icon Warning
         return
     }
 
@@ -13955,6 +13972,10 @@ function Invoke-PortScan {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
         return
     }
+    if (-not (Test-ValidDiagnosticTarget -Target $target)) {
+        Show-MessageBox -Message "Target contains invalid characters. Use only letters, digits, dots, colons, hyphens, or brackets." -Title "Invalid Target" -Icon Warning
+        return
+    }
 
     try {
         $targets = @(Get-PortScanTargetList -Target $target)
@@ -14569,6 +14590,10 @@ function Invoke-Nslookup {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
         return
     }
+    if (-not (Test-ValidDiagnosticTarget -Target $target)) {
+        Show-MessageBox -Message "Target contains invalid characters. Use only letters, digits, dots, colons, hyphens, or brackets." -Title "Invalid Target" -Icon Warning
+        return
+    }
 
     Update-Status "Running NSLookup for $target..."
     try {
@@ -14584,6 +14609,10 @@ function Invoke-RdapLookup {
     $target = $script:txtPingTarget.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($target)) {
         Show-MessageBox -Message "Please enter an IP address for RDAP lookup." -Title "No Target" -Icon Warning
+        return
+    }
+    if (-not (Test-ValidDiagnosticTarget -Target $target)) {
+        Show-MessageBox -Message "Target contains invalid characters. Use only letters, digits, dots, colons, hyphens, or brackets." -Title "Invalid Target" -Icon Warning
         return
     }
 

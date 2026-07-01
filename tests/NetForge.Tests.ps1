@@ -2572,6 +2572,44 @@ Describe 'DoQ proxy trust and session helpers' {
     }
 }
 
+Describe 'Diagnostic target validation' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Test-ValidDiagnosticTarget')
+    }
+
+    It 'accepts valid IPv4 addresses' {
+        Test-ValidDiagnosticTarget -Target '8.8.8.8' | Should -BeTrue
+        Test-ValidDiagnosticTarget -Target '192.168.1.0/24' | Should -BeTrue
+    }
+
+    It 'accepts valid IPv6 addresses' {
+        Test-ValidDiagnosticTarget -Target '2001:4860:4860::8888' | Should -BeTrue
+        Test-ValidDiagnosticTarget -Target '[::1]' | Should -BeTrue
+    }
+
+    It 'accepts valid hostnames' {
+        Test-ValidDiagnosticTarget -Target 'example.com' | Should -BeTrue
+        Test-ValidDiagnosticTarget -Target 'server-01.local' | Should -BeTrue
+    }
+
+    It 'rejects empty and whitespace targets' {
+        Test-ValidDiagnosticTarget -Target '' | Should -BeFalse
+        Test-ValidDiagnosticTarget -Target '   ' | Should -BeFalse
+    }
+
+    It 'rejects targets with shell-dangerous characters' {
+        Test-ValidDiagnosticTarget -Target '8.8.8.8 & calc' | Should -BeFalse
+        Test-ValidDiagnosticTarget -Target '8.8.8.8; whoami' | Should -BeFalse
+        Test-ValidDiagnosticTarget -Target '$(calc)' | Should -BeFalse
+        Test-ValidDiagnosticTarget -Target 'host|pipe' | Should -BeFalse
+        Test-ValidDiagnosticTarget -Target 'host`cmd' | Should -BeFalse
+    }
+
+    It 'rejects excessively long targets' {
+        Test-ValidDiagnosticTarget -Target ('a' * 254) | Should -BeFalse
+    }
+}
+
 Describe 'Accessibility metadata' {
     It 'lists automation names for primary workflows' {
         $source = Get-Content -Raw $script:NetForgePath
