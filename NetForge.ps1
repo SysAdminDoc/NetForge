@@ -569,7 +569,15 @@ if (Test-Path -LiteralPath $script:SettingsFile) {
         if ($settings.ProfileStorePath) {
             $candidatePath = [Environment]::ExpandEnvironmentVariables(([string]$settings.ProfileStorePath).Trim())
             if ([System.IO.Path]::IsPathRooted($candidatePath)) {
-                $script:ProfilesPath = [System.IO.Path]::GetFullPath($candidatePath)
+                $fullPath = [System.IO.Path]::GetFullPath($candidatePath)
+                $systemDir = [System.IO.Path]::GetFullPath($env:WinDir)
+                $programDir = [System.IO.Path]::GetFullPath($env:ProgramFiles)
+                if ($fullPath.StartsWith($systemDir, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    $fullPath.StartsWith($programDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $script:ProfileStoreLoadWarning = "ProfileStorePath cannot target a system directory; using local profile storage."
+                } else {
+                    $script:ProfilesPath = $fullPath
+                }
             } else {
                 $script:ProfileStoreLoadWarning = "ProfileStorePath is not rooted; using local profile storage."
             }
@@ -6089,6 +6097,10 @@ function Invoke-DiagPingTest {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
         return
     }
+    if (-not (Test-ValidDiagnosticTarget -Target $target)) {
+        Show-MessageBox -Message "Target contains invalid characters. Use only letters, digits, dots, colons, hyphens, or brackets." -Title "Invalid Target" -Icon Warning
+        return
+    }
 
     $script:btnDiagPing.IsEnabled = $false
     $script:txtPingLog.Text = "Pinging $target with 10 requests...`n"
@@ -6502,6 +6514,10 @@ function Toggle-ContinuousPing {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
         return
     }
+    if (-not (Test-ValidDiagnosticTarget -Target $target)) {
+        Show-MessageBox -Message "Target contains invalid characters. Use only letters, digits, dots, colons, hyphens, or brackets." -Title "Invalid Target" -Icon Warning
+        return
+    }
 
     $script:ContinuousPingRunning = $true
     $script:btnContinuousPing.Content = Get-UiString -Key "button.continuousPing.stop" -DefaultValue "Stop Continuous Ping"
@@ -6720,6 +6736,10 @@ function Invoke-DnsLookup {
     $domain = $script:txtDnsLookupDomain.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($domain)) {
         Show-MessageBox -Message "Please enter a domain name." -Title "No Domain" -Icon Warning
+        return
+    }
+    if (-not (Test-ValidDiagnosticTarget -Target $domain)) {
+        Show-MessageBox -Message "Domain contains invalid characters." -Title "Invalid Domain" -Icon Warning
         return
     }
 
@@ -9333,6 +9353,11 @@ function Get-ProfileImportRecords {
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "Import file was not found: $Path"
+    }
+
+    $fileInfo = Get-Item -LiteralPath $Path
+    if ($fileInfo.Length -gt 10MB) {
+        throw "Import file exceeds 10 MB size limit."
     }
 
     $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
