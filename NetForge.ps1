@@ -263,6 +263,8 @@ $script:AccessibilityNames = @{
     btnExportDiagnostics = "Export diagnostics"
     btnCheckRelease = "Check latest GitHub release"
     btnRefreshAutoApply = "Refresh auto-apply inspector"
+    cmbLocaleSelector = "UI language selector"
+    btnSaveLocale = "Save locale setting"
     txtAutoApplyInspector = "Auto-apply match status"
     txtReleaseCheckOutput = "Release check results"
     txtRdpTarget = "Remote Desktop host or RDP file"
@@ -329,7 +331,7 @@ $script:AccessibilityTabOrder = @(
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile", "btnRefreshAutoApply",
-    "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "btnCheckRelease", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
+    "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "btnCheckRelease", "cmbLocaleSelector", "btnSaveLocale", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
     "txtAppRoutingProgram", "btnBrowseAppRoutingProgram", "cmbAppRoutingInterface", "btnApplyAppRouting", "btnRemoveAppRouting", "btnRefreshAppRouting", "lstAppRoutingRules",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
@@ -2811,6 +2813,25 @@ function Apply-Localization {
 
                                         <TextBlock x:Name="txtDiscordWebhookStatus" Grid.Row="4" Text="Discord webhook notifications are disabled." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
                                     </Grid>
+                                </Border>
+
+                                <!-- Locale -->
+                                <TextBlock Text="LOCALE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="UI language" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <ComboBox x:Name="cmbLocaleSelector" Grid.Column="1" Style="{StaticResource ModernComboBox}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnSaveLocale" Grid.Column="2" Content="Save Locale" Style="{StaticResource PrimaryButton}" Padding="16,8"/>
+                                        </Grid>
+                                        <TextBlock x:Name="txtLocaleStatus" Text="Current locale loaded from settings." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                    </StackPanel>
                                 </Border>
 
                                 <!-- Ping Test -->
@@ -9711,6 +9732,61 @@ function Complete-PendingProtectedSettingMigrations {
 
 Complete-PendingProtectedSettingMigrations
 
+function Get-AvailableLocales {
+    $locales = @()
+    if (-not (Test-Path -LiteralPath $script:StringsPath)) { return $locales }
+
+    $files = @(Get-ChildItem -LiteralPath $script:StringsPath -Filter '*.json' -File -ErrorAction SilentlyContinue)
+    foreach ($file in $files) {
+        $locale = [System.IO.Path]::GetFileNameWithoutExtension($file.Name)
+        if ($locale -match '^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$') {
+            $locales += $locale
+        }
+    }
+    return @($locales | Sort-Object)
+}
+
+function Initialize-LocaleSelector {
+    if (-not $script:cmbLocaleSelector) { return }
+
+    $script:cmbLocaleSelector.Items.Clear()
+    $available = Get-AvailableLocales
+
+    foreach ($locale in $available) {
+        $item = New-Object System.Windows.Controls.ComboBoxItem
+        $item.Content = $locale
+        $item.Tag = $locale
+        [void]$script:cmbLocaleSelector.Items.Add($item)
+        if ($locale -eq $script:UiLocale) {
+            $script:cmbLocaleSelector.SelectedItem = $item
+        }
+    }
+
+    $script:txtLocaleStatus.Text = "Current locale: $($script:UiLocale). $($script:LocalizationStatus)"
+}
+
+function Save-LocaleSelection {
+    $selected = $null
+    if ($script:cmbLocaleSelector -and $script:cmbLocaleSelector.SelectedItem) {
+        $selected = [string]$script:cmbLocaleSelector.SelectedItem.Tag
+    }
+
+    if ([string]::IsNullOrWhiteSpace($selected)) {
+        $script:txtLocaleStatus.Text = "Select a locale before saving."
+        Update-Status "No locale selected" -Type Warning
+        return
+    }
+
+    try {
+        Save-AppSetting -Name 'UiLocale' -Value $selected
+        $script:txtLocaleStatus.Text = "Locale set to $selected. Restart NetForge to apply the new language."
+        Update-Status "Locale saved: $selected (restart required)" -Type Success
+    } catch {
+        $script:txtLocaleStatus.Text = "Failed to save locale: $($_.Exception.Message)"
+        Update-Status "Locale save failed" -Type Error
+    }
+}
+
 function Set-EndpointPolicyStatus {
     param([string]$Message)
 
@@ -14688,6 +14764,7 @@ $btnDnsLookup.Add_Click({ Invoke-DnsLookup })
 $btnSaveEndpointPolicy.Add_Click({ Save-EndpointPolicySettings })
 $btnSaveDiscordWebhook.Add_Click({ Save-DiscordWebhookSettings })
 $btnCheckRelease.Add_Click({ Invoke-CheckRelease })
+$btnSaveLocale.Add_Click({ Save-LocaleSelection })
 $script:txtReleaseCheckVersion.Text = "Current version: $script:AppVersion"
 
 # ============================================================================
@@ -14784,6 +14861,7 @@ Initialize-ThemeSelector
 Initialize-CompactModeControl
 Initialize-SystemTray
 Initialize-EndpointPolicyControls
+Initialize-LocaleSelector
 Initialize-DiscordWebhookControls
 Initialize-AppRoutingControls
 Show-RestoreSnapshotButtonState
