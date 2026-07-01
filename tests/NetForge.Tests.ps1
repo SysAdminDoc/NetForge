@@ -2798,6 +2798,84 @@ Describe 'QR decompression limit' {
     }
 }
 
+Describe 'MAC address validation' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('ConvertTo-CleanMacAddress', 'Test-ValidMacAddress')
+    }
+
+    It 'accepts valid colon-separated unicast MAC' {
+        Test-ValidMacAddress -MacAddress '00:1A:2B:3C:4D:5E' | Should -BeTrue
+    }
+
+    It 'accepts valid dash-separated unicast MAC' {
+        Test-ValidMacAddress -MacAddress '00-1A-2B-3C-4D-5E' | Should -BeTrue
+    }
+
+    It 'accepts valid raw hex MAC' {
+        Test-ValidMacAddress -MacAddress '001A2B3C4D5E' | Should -BeTrue
+    }
+
+    It 'rejects all-zeros MAC' {
+        Test-ValidMacAddress -MacAddress '00:00:00:00:00:00' | Should -BeFalse
+    }
+
+    It 'rejects all-FFs broadcast MAC' {
+        Test-ValidMacAddress -MacAddress 'FF:FF:FF:FF:FF:FF' | Should -BeFalse
+    }
+
+    It 'rejects multicast MACs (odd first octet)' {
+        Test-ValidMacAddress -MacAddress '01:00:00:00:00:00' | Should -BeFalse
+    }
+
+    It 'rejects short MAC' {
+        Test-ValidMacAddress -MacAddress '001A2B3C4D' | Should -BeFalse
+    }
+
+    It 'rejects empty and null MAC' {
+        Test-ValidMacAddress -MacAddress '' | Should -BeFalse
+        Test-ValidMacAddress -MacAddress $null | Should -BeFalse
+    }
+
+    It 'normalizes lowercase to uppercase' {
+        ConvertTo-CleanMacAddress -MacAddress 'aa:bb:cc:dd:ee:ff' | Should -Be 'AABBCCDDEEFF'
+    }
+}
+
+Describe 'Adapter connection kind classification' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Get-AdapterSearchText', 'Get-AdapterConnectionKind')
+    }
+
+    It 'classifies WiFi adapters' {
+        $adapter = [pscustomobject]@{ Name = "Wi-Fi"; InterfaceDescription = "Intel(R) Wi-Fi 6 AX201"; InterfaceAlias = "Wi-Fi"; MediaType = ""; InterfaceType = 71 }
+        Get-AdapterConnectionKind -Adapter $adapter | Should -Be 'WiFi'
+    }
+
+    It 'classifies Ethernet adapters' {
+        $adapter = [pscustomobject]@{ Name = "Ethernet"; InterfaceDescription = "Realtek PCIe GbE Controller"; InterfaceAlias = "Ethernet"; MediaType = "802.3"; InterfaceType = 6 }
+        Get-AdapterConnectionKind -Adapter $adapter | Should -Be 'Ethernet'
+    }
+
+    It 'classifies VPN adapters' {
+        $adapter = [pscustomobject]@{ Name = "WireGuard Tunnel"; InterfaceDescription = "WireGuard Tunnel"; InterfaceAlias = "wg0"; MediaType = ""; InterfaceType = 0 }
+        Get-AdapterConnectionKind -Adapter $adapter | Should -Be 'VPN'
+    }
+
+    It 'classifies Hyper-V adapters' {
+        $adapter = [pscustomobject]@{ Name = "vEthernet (Default Switch)"; InterfaceDescription = "Hyper-V Virtual Ethernet Adapter"; InterfaceAlias = "vEthernet"; MediaType = ""; InterfaceType = 6 }
+        Get-AdapterConnectionKind -Adapter $adapter | Should -Be 'Hyper-V'
+    }
+
+    It 'classifies Bluetooth PAN adapters' {
+        $adapter = [pscustomobject]@{ Name = "Bluetooth Network Connection"; InterfaceDescription = "Bluetooth PAN"; InterfaceAlias = ""; MediaType = ""; InterfaceType = 0 }
+        Get-AdapterConnectionKind -Adapter $adapter | Should -Be 'Bluetooth PAN'
+    }
+
+    It 'returns Unknown for null adapter' {
+        Get-AdapterConnectionKind -Adapter $null | Should -Be 'Unknown'
+    }
+}
+
 Describe 'Accessibility metadata' {
     It 'lists automation names for primary workflows' {
         $source = Get-Content -Raw $script:NetForgePath

@@ -4881,7 +4881,7 @@ function Get-AdapterConnectionKind {
     if ($text -match "Bluetooth|Personal Area Network|\bPAN\b|BthPan") {
         return "Bluetooth PAN"
     }
-    if ($text -match "Cellular|WWAN|Mobile Broadband|LTE|5G|4G|MBIM|Modem|Broadband") {
+    if ($text -match "Cellular|WWAN|Mobile Broadband|\bLTE\b|\b5G\b|\b4G\b|MBIM|Modem|Broadband") {
         return "Cellular"
     }
     if ($text -match "Wi-Fi|WiFi|Wireless|802\.11|WLAN") {
