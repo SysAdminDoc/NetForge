@@ -10646,7 +10646,11 @@ function Initialize-DiscordWebhookControls {
         $script:chkDiscordWebhook.IsChecked = [bool]$script:DiscordWebhookEnabled
     }
     if ($script:txtDiscordWebhookUrl) {
-        $script:txtDiscordWebhookUrl.Text = [string]$script:DiscordWebhookUrl
+        if (-not [string]::IsNullOrWhiteSpace($script:DiscordWebhookUrl)) {
+            $script:txtDiscordWebhookUrl.Text = Get-DiscordWebhookRedactedUrl -Url $script:DiscordWebhookUrl
+        } else {
+            $script:txtDiscordWebhookUrl.Text = ""
+        }
     }
 
     if (-not $script:DiscordWebhookEnabled) {
@@ -10665,6 +10669,10 @@ function Save-DiscordWebhookSettings {
     $url = ""
     if ($script:txtDiscordWebhookUrl) {
         $url = ([string]$script:txtDiscordWebhookUrl.Text).Trim()
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($url) -and $url -match '/\[redacted\]$') {
+        $url = [string]$script:DiscordWebhookUrl
     }
 
     if (-not [string]::IsNullOrWhiteSpace($url) -and -not (Test-DiscordWebhookUrl -Url $url)) {
@@ -10702,6 +10710,10 @@ function Save-DiscordWebhookSettings {
     } else {
         Set-DiscordWebhookStatus -Message "Discord webhook notifications are disabled."
         Write-OperationLog -Action "Discord profile webhook" -Result "Saved" -Detail "Enabled=False"
+    }
+
+    if ($script:txtDiscordWebhookUrl -and -not [string]::IsNullOrWhiteSpace($url)) {
+        $script:txtDiscordWebhookUrl.Text = Get-DiscordWebhookRedactedUrl -Url $url
     }
 
     Update-Status "Discord webhook settings saved" -Type Success
