@@ -141,6 +141,7 @@ $script:SettingsSchemaVersion = 1
 $script:ProtectedSettingNames = @("DiscordWebhookUrl")
 $script:PendingProtectedSettingMigrations = [ordered]@{}
 $script:SecretSettingLoadWarning = ""
+$script:SettingsLoadWarning = ""
 $script:SpeedTestRunning = $false
 $script:WifiScanRunning = $false
 $script:WifiNetworks = @()
@@ -608,6 +609,7 @@ if (Test-Path -LiteralPath $script:SettingsFile) {
         }
     } catch {
         $script:ProfileStoreLoadWarning = "Could not read settings.json; using local profile storage. $($_.Exception.Message)"
+        $script:SettingsLoadWarning = "Settings file could not be read and was reset to defaults. $($_.Exception.Message)"
     }
 }
 
@@ -4971,6 +4973,16 @@ function Refresh-AdapterList {
         $script:lstAdapters.Items.Add($item) | Out-Null
     }
 
+    if ($adapters.Count -eq 0) {
+        $emptyItem = New-Object System.Windows.Controls.TextBlock
+        $emptyItem.Text = "No network adapters found. Check Advanced to show hidden adapters."
+        $emptyItem.FontSize = 12
+        $emptyItem.Foreground = $window.Resources["TextMutedBrush"]
+        $emptyItem.Margin = "8,12"
+        $emptyItem.TextWrapping = "Wrap"
+        $script:lstAdapters.Items.Add($emptyItem) | Out-Null
+    }
+
     Update-Status "Found $($adapters.Count) network adapter(s)"
     if ($script:CompactModeEnabled) {
         Apply-CompactMode -Enabled $true
@@ -4998,7 +5010,7 @@ function Set-IPv6ConfigurationControlState {
 function Update-AdapterDisplay {
     $adapter = Get-SelectedAdapter
     if ($null -eq $adapter) {
-        $script:txtAdapterName.Text = "Select an adapter"
+        $script:txtAdapterName.Text = Get-UiString -Key "status.selectAdapter" -DefaultValue "Select an adapter"
         $script:txtCurrentIP.Text = "--"
         $script:txtMAC.Text = "--"
         $script:txtStatus.Text = "--"
@@ -5032,7 +5044,7 @@ function Update-AdapterDisplay {
             $script:txtPrefix.Text = $ipConfig.PrefixLength.ToString()
             $script:txtSubnet.Text = Get-SubnetFromPrefix -Prefix $ipConfig.PrefixLength
         } else {
-            $script:txtCurrentIP.Text = "Not configured"
+            $script:txtCurrentIP.Text = Get-UiString -Key "status.notConfigured" -DefaultValue "Not configured"
         }
 
         # Get gateway
@@ -5134,7 +5146,7 @@ function Update-AdapterDetails {
         $speed = $adapter.LinkSpeed
         $script:txtInfoSpeed.Text = $speed
 
-        $script:txtInfoMedia.Text = if ($adapter.MediaConnectionState -eq "Connected") { "Connected" } else { "Disconnected" }
+        $script:txtInfoMedia.Text = if ($adapter.MediaConnectionState -eq "Connected") { Get-UiString -Key "status.connected" -DefaultValue "Connected" } else { Get-UiString -Key "status.disconnected" -DefaultValue "Disconnected" }
 
         $ipInterface = Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
         $script:txtInfoDHCP.Text = if ($ipInterface.Dhcp -eq "Enabled") { "Yes" } else { "No" }
@@ -5169,7 +5181,7 @@ function Update-ConnectionStatus {
 
         if ($null -eq $activeAdapter) {
             $script:connStatusDot.Background = $window.Resources["AccentRedBrush"]
-            $script:txtConnStatus.Text = "Disconnected"
+            $script:txtConnStatus.Text = Get-UiString -Key "status.disconnected" -DefaultValue "Disconnected"
             $script:txtConnLocalIP.Text = "--"
             $script:txtConnGateway.Text = "--"
             $script:txtConnType.Text = "--"
@@ -5178,7 +5190,7 @@ function Update-ConnectionStatus {
         }
 
         $script:connStatusDot.Background = $window.Resources["AccentGreenBrush"]
-        $script:txtConnStatus.Text = "Connected"
+        $script:txtConnStatus.Text = Get-UiString -Key "status.connected" -DefaultValue "Connected"
 
         # Local IP
         $localIP = Get-NetIPAddress -InterfaceIndex $activeAdapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -5418,7 +5430,7 @@ function Get-WifiNetworkListItem {
 
     $authThemeKey = if ($Network.Authentication -match "Open") { "AccentOrange" } else { "AccentBlue" }
     $profileThemeKey = if ($Network.HasProfile) { "AccentGreen" } else { "TextMuted" }
-    $profileText = if ($Network.HasProfile) { "Saved" } else { "New" }
+    $profileText = if ($Network.HasProfile) { Get-UiString -Key "badge.saved" -DefaultValue "Saved" } else { Get-UiString -Key "badge.new" -DefaultValue "New" }
 
     $headerPanel.Children.Add($signalText) | Out-Null
     $headerPanel.Children.Add($ssidText) | Out-Null
@@ -6467,11 +6479,15 @@ function Toggle-ContinuousPing {
     $pingTimer.Interval = [TimeSpan]::FromSeconds(2)
     $pingTimer.Tag = $target
 
+    $script:ContinuousPingProbeInFlight = $false
+
     $pingTimer.Add_Tick({
         if (-not $script:ContinuousPingRunning) {
             $pingTimer.Stop()
             return
         }
+        if ($script:ContinuousPingProbeInFlight) { return }
+        $script:ContinuousPingProbeInFlight = $true
 
         $t = $pingTimer.Tag
         $ps = [PowerShell]::Create()
@@ -6534,6 +6550,7 @@ function Toggle-ContinuousPing {
                     Write-OperationLog -Action "Continuous ping result" -Result "Warning" -Detail $_.Exception.Message
                 } finally {
                     $ps.Dispose()
+                    $script:ContinuousPingProbeInFlight = $false
                 }
                 $resultTimer.Stop()
             }
@@ -11089,6 +11106,16 @@ function Refresh-ProfileList {
         $script:lstProfiles.Items.Add($item) | Out-Null
     }
 
+    if ($profiles.Count -eq 0) {
+        $emptyItem = New-Object System.Windows.Controls.TextBlock
+        $emptyItem.Text = "No profiles saved. Enter a name above and click Save Profile to create one."
+        $emptyItem.FontSize = 12
+        $emptyItem.Foreground = $window.Resources["TextMutedBrush"]
+        $emptyItem.Margin = "8,12"
+        $emptyItem.TextWrapping = "Wrap"
+        $script:lstProfiles.Items.Add($emptyItem) | Out-Null
+    }
+
     if ($script:LastProfileLoadWarnings.Count -gt 0) {
         Write-ProfileImportLog -Lines (@("Profile load skipped $($script:LastProfileLoadWarnings.Count) invalid file(s):") + $script:LastProfileLoadWarnings)
         Update-Status "Skipped $($script:LastProfileLoadWarnings.Count) invalid profile file(s); see diagnostics output" -Type Warning
@@ -11399,7 +11426,11 @@ function Get-CurrentNetworkSignature {
     if (Test-ValidIP -IP $gatewayIp) {
         $neighbor = Get-NetNeighbor -InterfaceIndex $activeAdapter.ifIndex -IPAddress $gatewayIp -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $neighbor -or [string]::IsNullOrWhiteSpace($neighbor.LinkLayerAddress)) {
-            [void](Test-Connection -ComputerName $gatewayIp -Count 1 -Quiet -ErrorAction SilentlyContinue)
+            try {
+                $arpPing = New-Object System.Net.NetworkInformation.Ping
+                [void]$arpPing.Send($gatewayIp, 500)
+                $arpPing.Dispose()
+            } catch { }
             $neighbor = Get-NetNeighbor -InterfaceIndex $activeAdapter.ifIndex -IPAddress $gatewayIp -ErrorAction SilentlyContinue | Select-Object -First 1
         }
         if ($neighbor -and $neighbor.LinkLayerAddress) {
@@ -13253,15 +13284,22 @@ function Invoke-Ping {
         ping -n 4 $t 2>&1
     } -ArgumentList $target
 
+    $pingStartTime = Get-Date
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(500)
     $timer.Add_Tick({
-        if ($job.State -eq "Completed") {
-            $result = Receive-Job $job
-            $script:txtDiagOutput.Text = $result | Out-String
+        if ($job.State -in @("Completed", "Failed", "Stopped")) {
+            $result = Receive-Job $job -ErrorAction SilentlyContinue
+            $script:txtDiagOutput.Text = if ($result) { $result | Out-String } else { "Ping returned no output." }
             Update-Status "Ping complete"
             $timer.Stop()
-            Remove-Job $job
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+        } elseif (((Get-Date) - $pingStartTime).TotalSeconds -gt 60) {
+            Stop-Job $job -ErrorAction SilentlyContinue
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            $script:txtDiagOutput.Text = "Ping timed out after 60 seconds."
+            Update-Status "Ping timed out" -Type Warning
+            $timer.Stop()
         }
     })
     $timer.Start()
@@ -13286,15 +13324,22 @@ function Invoke-Traceroute {
         tracert -d -h 15 $t 2>&1
     } -ArgumentList $target
 
+    $traceStartTime = Get-Date
     $timer = New-Object System.Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromMilliseconds(500)
     $timer.Add_Tick({
-        if ($job.State -eq "Completed") {
-            $result = Receive-Job $job
-            $script:txtDiagOutput.Text = $result | Out-String
+        if ($job.State -in @("Completed", "Failed", "Stopped")) {
+            $result = Receive-Job $job -ErrorAction SilentlyContinue
+            $script:txtDiagOutput.Text = if ($result) { $result | Out-String } else { "Traceroute returned no output." }
             Update-Status "Traceroute complete"
             $timer.Stop()
-            Remove-Job $job
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+        } elseif (((Get-Date) - $traceStartTime).TotalSeconds -gt 120) {
+            Stop-Job $job -ErrorAction SilentlyContinue
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            $script:txtDiagOutput.Text = "Traceroute timed out after 120 seconds."
+            Update-Status "Traceroute timed out" -Type Warning
+            $timer.Stop()
         }
     })
     $timer.Start()
@@ -14336,7 +14381,22 @@ function Save-HostsGroups {
         }
 
         $newText = Update-HostsManagedSection -CurrentText $currentText -Groups @($script:HostsGroups)
-        Set-Content -LiteralPath $path -Value $newText -Encoding ASCII
+        $hostsDir = Split-Path -Parent $path
+        $tempHostsPath = Join-Path $hostsDir "hosts.netforge.$([guid]::NewGuid().ToString('N')).tmp"
+        try {
+            Set-Content -LiteralPath $tempHostsPath -Value $newText -Encoding ASCII
+            [System.IO.File]::Copy($tempHostsPath, $path, $true)
+        } finally {
+            if (Test-Path -LiteralPath $tempHostsPath) {
+                Remove-Item -LiteralPath $tempHostsPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        $backupFiles = @(Get-ChildItem -LiteralPath $backupDir -Filter "hosts-*.bak" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
+        if ($backupFiles.Count -gt 20) {
+            $backupFiles | Select-Object -Skip 20 | Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+
         ipconfig /flushdns | Out-Null
         Refresh-HostsGroups
         Update-Status "Hosts groups applied" -Type Success
@@ -15620,6 +15680,10 @@ Invoke-ScheduledProfileSwitch -Trigger "Startup"
 # Select first adapter if available
 if ($lstAdapters.Items.Count -gt 0) {
     $lstAdapters.SelectedIndex = 0
+}
+
+if (-not [string]::IsNullOrWhiteSpace($script:SettingsLoadWarning)) {
+    Update-Status $script:SettingsLoadWarning -Type Warning
 }
 
 # ============================================================================

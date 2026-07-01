@@ -288,6 +288,12 @@
     "tab.ipConfiguration": "IP Configuration",
     "tab.networkTools": "Network Tools",
     "tab.profiles": "Profiles",
-    "tab.wifi": "WiFi"
+    "tab.wifi": "WiFi",
+    "status.connected": "Connected",
+    "status.disconnected": "Disconnected",
+    "status.selectAdapter": "Select an adapter",
+    "status.notConfigured": "Not configured",
+    "badge.saved": "Saved",
+    "badge.new": "New"
   }
 }
