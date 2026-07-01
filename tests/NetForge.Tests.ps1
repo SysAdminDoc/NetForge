@@ -1896,6 +1896,37 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'Capability matrix' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-CapabilityAvailable',
+            'Format-CapabilityMatrixReport'
+        )
+    }
+
+    It 'detects available and missing cmdlets' {
+        $available = Test-CapabilityAvailable -Name 'Get-Date' -Type 'Cmdlet'
+        $missing = Test-CapabilityAvailable -Name 'NoSuchCmdlet-12345' -Type 'Cmdlet'
+
+        $available.Available | Should -BeTrue
+        $missing.Available | Should -BeFalse
+        $missing.Detail | Should -Be 'Not found'
+    }
+
+    It 'formats a capability matrix report' {
+        $checks = @(
+            [pscustomobject]@{ Name = 'Admin'; Type = 'Admin'; Available = $true; Detail = 'Elevated' },
+            [pscustomobject]@{ Name = 'pktmon'; Type = 'Executable'; Available = $false; Detail = 'Not found' }
+        )
+
+        $report = Format-CapabilityMatrixReport -Checks $checks
+
+        $report | Should -Match '\[OK\] Admin'
+        $report | Should -Match '\[UNAVAILABLE\] pktmon'
+        $report | Should -Match '1 capability'
+    }
+}
+
 Describe 'Auto-apply inspector' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

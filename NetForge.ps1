@@ -265,6 +265,8 @@ $script:AccessibilityNames = @{
     btnRefreshAutoApply = "Refresh auto-apply inspector"
     cmbLocaleSelector = "UI language selector"
     btnSaveLocale = "Save locale setting"
+    btnRefreshCapabilities = "Scan host capabilities"
+    txtCapabilityMatrix = "Host capability scan results"
     txtAutoApplyInspector = "Auto-apply match status"
     txtReleaseCheckOutput = "Release check results"
     txtRdpTarget = "Remote Desktop host or RDP file"
@@ -331,7 +333,7 @@ $script:AccessibilityTabOrder = @(
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile", "btnRefreshAutoApply",
-    "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "btnCheckRelease", "cmbLocaleSelector", "btnSaveLocale", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
+    "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "btnCheckRelease", "cmbLocaleSelector", "btnSaveLocale", "btnRefreshCapabilities", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
     "txtAppRoutingProgram", "btnBrowseAppRoutingProgram", "cmbAppRoutingInterface", "btnApplyAppRouting", "btnRemoveAppRouting", "btnRefreshAppRouting", "lstAppRoutingRules",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
@@ -2970,6 +2972,28 @@ function Apply-Localization {
                                         <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="200">
                                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                 <TextBlock x:Name="txtReleaseCheckOutput" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Check Release to query the latest GitHub release."/>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Capability Matrix -->
+                                <TextBlock Text="CAPABILITY MATRIX" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,20,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Host capabilities for NetForge features" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <Button x:Name="btnRefreshCapabilities" Grid.Column="1" Content="Scan" Style="{StaticResource PrimaryButton}"/>
+                                        </Grid>
+
+                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="280">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <TextBlock x:Name="txtCapabilityMatrix" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Scan to check host capabilities."/>
                                             </ScrollViewer>
                                         </Border>
                                     </StackPanel>
@@ -9732,6 +9756,72 @@ function Complete-PendingProtectedSettingMigrations {
 
 Complete-PendingProtectedSettingMigrations
 
+function Test-CapabilityAvailable {
+    param(
+        [string]$Name,
+        [string]$Type = "Cmdlet"
+    )
+
+    switch ($Type) {
+        "Cmdlet" {
+            $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+            return [pscustomobject]@{ Name = $Name; Type = $Type; Available = ($null -ne $cmd); Detail = if ($cmd) { "Available" } else { "Not found" } }
+        }
+        "Module" {
+            $mod = Get-Module -ListAvailable -Name $Name -ErrorAction SilentlyContinue | Select-Object -First 1
+            return [pscustomobject]@{ Name = $Name; Type = $Type; Available = ($null -ne $mod); Detail = if ($mod) { "v$($mod.Version)" } else { "Not installed" } }
+        }
+        "Executable" {
+            $exe = Get-Command $Name -ErrorAction SilentlyContinue
+            return [pscustomobject]@{ Name = $Name; Type = $Type; Available = ($null -ne $exe); Detail = if ($exe) { $exe.Source } else { "Not found" } }
+        }
+        "Admin" {
+            $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            return [pscustomobject]@{ Name = $Name; Type = $Type; Available = $isAdmin; Detail = if ($isAdmin) { "Elevated" } else { "Standard user" } }
+        }
+        default {
+            return [pscustomobject]@{ Name = $Name; Type = $Type; Available = $false; Detail = "Unknown check type" }
+        }
+    }
+}
+
+function Get-CapabilityMatrix {
+    $checks = @(
+        Test-CapabilityAvailable -Name "Administrator" -Type "Admin"
+        Test-CapabilityAvailable -Name "NetTCPIP" -Type "Module"
+        Test-CapabilityAvailable -Name "DnsClient" -Type "Module"
+        Test-CapabilityAvailable -Name "NetSecurity" -Type "Module"
+        Test-CapabilityAvailable -Name "DhcpServer" -Type "Module"
+        Test-CapabilityAvailable -Name "Get-FileHash" -Type "Cmdlet"
+        Test-CapabilityAvailable -Name "Get-AuthenticodeSignature" -Type "Cmdlet"
+        Test-CapabilityAvailable -Name "pktmon" -Type "Executable"
+        Test-CapabilityAvailable -Name "netsh" -Type "Executable"
+    )
+
+    return $checks
+}
+
+function Format-CapabilityMatrixReport {
+    param([pscustomobject[]]$Checks)
+
+    $lines = @()
+    $lines += "Capability matrix:"
+    foreach ($check in $Checks) {
+        $label = if ($check.Available) { "OK" } else { "UNAVAILABLE" }
+        $lines += "  [$label] $($check.Name) ($($check.Type)): $($check.Detail)"
+    }
+
+    $unavailable = @($Checks | Where-Object { -not $_.Available })
+    $lines += ""
+    if ($unavailable.Count -eq 0) {
+        $lines += "All capabilities available."
+    } else {
+        $lines += "$($unavailable.Count) capability(ies) unavailable. Some features may be limited."
+    }
+
+    return ($lines -join "`n")
+}
+
 function Get-AvailableLocales {
     $locales = @()
     if (-not (Test-Path -LiteralPath $script:StringsPath)) { return $locales }
@@ -14765,6 +14855,14 @@ $btnSaveEndpointPolicy.Add_Click({ Save-EndpointPolicySettings })
 $btnSaveDiscordWebhook.Add_Click({ Save-DiscordWebhookSettings })
 $btnCheckRelease.Add_Click({ Invoke-CheckRelease })
 $btnSaveLocale.Add_Click({ Save-LocaleSelection })
+$btnRefreshCapabilities.Add_Click({
+    $script:txtCapabilityMatrix.Text = "Scanning capabilities..."
+    $checks = Get-CapabilityMatrix
+    $report = Format-CapabilityMatrixReport -Checks $checks
+    $script:txtCapabilityMatrix.Text = $report
+    Write-OperationLog -Action "CapabilityMatrix" -Result "Info" -Detail "$($checks.Count) checks, $(@($checks | Where-Object { -not $_.Available }).Count) unavailable"
+    Update-Status "Capability matrix scanned" -Type Success
+})
 $script:txtReleaseCheckVersion.Text = "Current version: $script:AppVersion"
 
 # ============================================================================
