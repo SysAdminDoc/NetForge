@@ -3495,6 +3495,24 @@ function Test-ValidDiagnosticTarget {
     return ($text -match '^[A-Za-z0-9._:\-\[\]/]+$')
 }
 
+function Test-ValidProxyServer {
+    param([string]$Server)
+
+    $text = ([string]$Server).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return $false }
+    if ($text.Length -gt 260) { return $false }
+    return ($text -match '^[A-Za-z0-9._:\-;=]+$')
+}
+
+function Test-ValidProxyBypass {
+    param([string]$Bypass)
+
+    $text = ([string]$Bypass).Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return $true }
+    if ($text.Length -gt 2000) { return $false }
+    return ($text -match '^[A-Za-z0-9._;\-*<>\s]+$')
+}
+
 function Get-ApplyValidationResult {
     param(
         [bool]$IsValid,
@@ -9503,6 +9521,13 @@ function Set-SystemProxyState {
         [string]$Bypass = ""
     )
 
+    if ($Enabled -and -not [string]::IsNullOrWhiteSpace($Server) -and -not (Test-ValidProxyServer -Server $Server)) {
+        throw "Proxy server value contains invalid characters."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Bypass) -and -not (Test-ValidProxyBypass -Bypass $Bypass)) {
+        throw "Proxy bypass list contains invalid characters."
+    }
+
     $path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
     Set-ItemProperty -LiteralPath $path -Name ProxyEnable -Value ($(if ($Enabled) { 1 } else { 0 })) -ErrorAction Stop
     Set-ItemProperty -LiteralPath $path -Name ProxyServer -Value $Server -ErrorAction Stop
@@ -9683,8 +9708,13 @@ function Get-ProfileValidationResult {
     if ($configureProxy -and $proxyEnabled) {
         if ([string]::IsNullOrWhiteSpace($proxyServer)) {
             $errors += "Enabled proxy profiles need a proxy server."
-        } elseif ($proxyServer -match '\s') {
-            $errors += "Proxy server cannot contain whitespace."
+        } elseif (-not (Test-ValidProxyServer -Server $proxyServer)) {
+            $errors += "Proxy server must be a host:port value using only letters, digits, dots, colons, and hyphens."
+        }
+    }
+    if ($configureProxy -and -not [string]::IsNullOrWhiteSpace($proxyBypass)) {
+        if (-not (Test-ValidProxyBypass -Bypass $proxyBypass)) {
+            $errors += "Proxy bypass list contains invalid characters."
         }
     }
 

@@ -59,6 +59,8 @@ Describe 'Profile validation' {
             'ConvertFrom-MappedDriveText',
             'ConvertTo-MappedDriveText',
             'Normalize-MappedDriveList',
+            'Test-ValidProxyServer',
+            'Test-ValidProxyBypass',
             'Get-ProfileValidationResult',
             'Write-ProfileFileAtomic'
         )
@@ -2569,6 +2571,34 @@ Describe 'DoQ proxy trust and session helpers' {
         $state.State | Should -Be 'Exited'
         $state.Message | Should -Match 'exit code 1'
         $state.Message | Should -Match 'PID was 54321'
+    }
+}
+
+Describe 'Proxy format validation' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Test-ValidProxyServer', 'Test-ValidProxyBypass')
+    }
+
+    It 'accepts valid proxy server values' {
+        Test-ValidProxyServer -Server 'proxy.corp.local:8080' | Should -BeTrue
+        Test-ValidProxyServer -Server '10.0.0.1:3128' | Should -BeTrue
+        Test-ValidProxyServer -Server 'http=proxy:80' | Should -BeTrue
+    }
+
+    It 'rejects proxy server with dangerous characters' {
+        Test-ValidProxyServer -Server 'proxy.local; whoami' | Should -BeFalse
+        Test-ValidProxyServer -Server 'proxy&calc' | Should -BeFalse
+        Test-ValidProxyServer -Server '' | Should -BeFalse
+    }
+
+    It 'accepts valid proxy bypass patterns' {
+        Test-ValidProxyBypass -Bypass '*.local;10.*;192.168.*;<local>' | Should -BeTrue
+        Test-ValidProxyBypass -Bypass '' | Should -BeTrue
+    }
+
+    It 'rejects proxy bypass with dangerous characters' {
+        Test-ValidProxyBypass -Bypass 'local;$(calc)' | Should -BeFalse
+        Test-ValidProxyBypass -Bypass ('a' * 2001) | Should -BeFalse
     }
 }
 
