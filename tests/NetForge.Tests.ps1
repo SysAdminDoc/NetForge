@@ -1896,6 +1896,60 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'Auto-apply inspector' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'ConvertTo-CleanMacAddress',
+            'Format-AutoApplyInspectorLine',
+            'Format-AutoApplyInspectorReport'
+        )
+    }
+
+    It 'reports matched status when SSID matches' {
+        $profile = [pscustomobject]@{ Name = 'Work'; AutoApply = $true; MatchSSID = 'CorpWiFi'; MatchGatewayMac = '' }
+        $signature = [pscustomobject]@{ SSID = 'CorpWiFi'; Gateway = '10.0.0.1'; GatewayMac = '00-11-22-33-44-55' }
+
+        $line = Format-AutoApplyInspectorLine -ProfileData $profile -Signature $signature
+
+        $line.Status | Should -Be 'Matched'
+        $line.Reason | Should -Match 'SSID'
+    }
+
+    It 'reports no-match when rules do not match current network' {
+        $profile = [pscustomobject]@{ Name = 'Home'; AutoApply = $true; MatchSSID = 'HomeNet'; MatchGatewayMac = '' }
+        $signature = [pscustomobject]@{ SSID = 'CoffeeShop'; Gateway = '192.168.1.1'; GatewayMac = 'AA-BB-CC-DD-EE-FF' }
+
+        $line = Format-AutoApplyInspectorLine -ProfileData $profile -Signature $signature
+
+        $line.Status | Should -Be 'NoMatch'
+        $line.Reason | Should -Match 'SSID=HomeNet'
+    }
+
+    It 'reports disabled for profiles with auto-apply off' {
+        $profile = [pscustomobject]@{ Name = 'Manual'; AutoApply = $false; MatchSSID = ''; MatchGatewayMac = '' }
+        $signature = [pscustomobject]@{ SSID = 'Any'; Gateway = '10.0.0.1'; GatewayMac = '' }
+
+        $line = Format-AutoApplyInspectorLine -ProfileData $profile -Signature $signature
+
+        $line.Status | Should -Be 'Disabled'
+    }
+
+    It 'formats a complete inspector report with network signature' {
+        $lines = @(
+            [pscustomobject]@{ Name = 'Work'; Status = 'Active'; Reason = 'Matched by SSID.' },
+            [pscustomobject]@{ Name = 'Home'; Status = 'NoMatch'; Reason = 'Rules: SSID=HomeNet' }
+        )
+        $signature = [pscustomobject]@{ SSID = 'CorpWiFi'; Gateway = '10.0.0.1'; GatewayMac = '00-11-22-33-44-55' }
+
+        $report = Format-AutoApplyInspectorReport -Lines $lines -Signature $signature -LastAppliedName 'Work'
+
+        $report | Should -Match 'SSID: CorpWiFi'
+        $report | Should -Match 'Last applied: Work'
+        $report | Should -Match '\[ACTIVE\] Work'
+        $report | Should -Match '\[--\] Home'
+    }
+}
+
 Describe 'DHCP lease diagnostics' {
     BeforeAll {
         Import-NetForgeFunction -Name @('Format-DhcpLeaseInfo')

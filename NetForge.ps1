@@ -262,6 +262,8 @@ $script:AccessibilityNames = @{
     chkDiagnosticsPrivacyMode = "Redact diagnostics export"
     btnExportDiagnostics = "Export diagnostics"
     btnCheckRelease = "Check latest GitHub release"
+    btnRefreshAutoApply = "Refresh auto-apply inspector"
+    txtAutoApplyInspector = "Auto-apply match status"
     txtReleaseCheckOutput = "Release check results"
     txtRdpTarget = "Remote Desktop host or RDP file"
     txtRdpProfileName = "Remote Desktop profile name"
@@ -326,7 +328,7 @@ $script:AccessibilityTabOrder = @(
     "lstProfiles", "btnNewProfile", "btnDeleteProfile", "btnExportProfileQr", "btnImportProfileQr", "btnChooseProfileStore", "btnUseOneDriveProfileStore", "btnRevertProfileStore", "btnProfileStoreHealth",
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
-    "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
+    "btnSaveProfile", "btnProfileDiff", "btnApplyProfile", "btnRefreshAutoApply",
     "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "btnCheckRelease", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
     "txtAppRoutingProgram", "btnBrowseAppRoutingProgram", "cmbAppRoutingInterface", "btnApplyAppRouting", "btnRemoveAppRouting", "btnRefreshAppRouting", "lstAppRoutingRules",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
@@ -2453,6 +2455,20 @@ function Apply-Localization {
                                             <StackPanel>
                                                 <TextBlock Text="Profile Diff" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,10"/>
                                                 <TextBlock x:Name="txtProfileDiffOutput" Text="Click Preview Diff to compare this profile against the selected adapter." FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,16,0,0">
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,10">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="Auto-Apply Inspector" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                    <Button x:Name="btnRefreshAutoApply" Grid.Column="1" Content="Refresh" Style="{StaticResource ModernButton}" Padding="12,6"/>
+                                                </Grid>
+                                                <TextBlock x:Name="txtAutoApplyInspector" Text="Click Refresh to inspect auto-apply match status." FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -10929,6 +10945,124 @@ function Invoke-ScheduledProfileSwitch {
     }
 }
 
+function Format-AutoApplyInspectorLine {
+    param(
+        [pscustomobject]$ProfileData,
+        [pscustomobject]$Signature,
+        [string]$LastAppliedName = ""
+    )
+
+    $name = [string]$ProfileData.Name
+    $autoApply = [bool]$ProfileData.AutoApply
+    $matchSsid = if ($ProfileData.MatchSSID) { $ProfileData.MatchSSID.Trim() } else { "" }
+    $matchGateway = if ($ProfileData.MatchGatewayMac) { ConvertTo-CleanMacAddress -MacAddress $ProfileData.MatchGatewayMac } else { "" }
+
+    if (-not $autoApply) {
+        return [pscustomobject]@{ Name = $name; Status = "Disabled"; Reason = "Auto-apply not enabled." }
+    }
+
+    if ($null -eq $Signature) {
+        return [pscustomobject]@{ Name = $name; Status = "NoNetwork"; Reason = "No active network signature." }
+    }
+
+    $ssidMatch = (-not [string]::IsNullOrWhiteSpace($matchSsid)) -and ($Signature.SSID -ieq $matchSsid)
+    $gatewayMatch = (-not [string]::IsNullOrWhiteSpace($matchGateway)) -and ($Signature.GatewayMac -eq $matchGateway)
+    $matched = $ssidMatch -or $gatewayMatch
+
+    if (-not $matched) {
+        $ruleParts = @()
+        if (-not [string]::IsNullOrWhiteSpace($matchSsid)) { $ruleParts += "SSID=$matchSsid" }
+        if (-not [string]::IsNullOrWhiteSpace($matchGateway)) { $ruleParts += "GW=$matchGateway" }
+        $ruleText = if ($ruleParts.Count -gt 0) { $ruleParts -join ", " } else { "No match rules" }
+        return [pscustomobject]@{ Name = $name; Status = "NoMatch"; Reason = "Rules: $ruleText" }
+    }
+
+    $matchParts = @()
+    if ($ssidMatch) { $matchParts += "SSID" }
+    if ($gatewayMatch) { $matchParts += "Gateway MAC" }
+    $matchText = $matchParts -join " + "
+
+    $isLast = ($name -eq $LastAppliedName)
+    $status = if ($isLast) { "Active" } else { "Matched" }
+    return [pscustomobject]@{ Name = $name; Status = $status; Reason = "Matched by $matchText." }
+}
+
+function Format-AutoApplyInspectorReport {
+    param(
+        [pscustomobject[]]$Lines,
+        [pscustomobject]$Signature,
+        [string]$LastAppliedName = "",
+        [pscustomobject]$NextScheduled = $null
+    )
+
+    $parts = @()
+
+    if ($null -ne $Signature) {
+        $sigParts = @()
+        if ($Signature.SSID) { $sigParts += "SSID: $($Signature.SSID)" }
+        if ($Signature.Gateway) { $sigParts += "GW: $($Signature.Gateway)" }
+        if ($Signature.GatewayMac) { $sigParts += "GW MAC: $($Signature.GatewayMac)" }
+        $parts += "Network: " + ($sigParts -join " | ")
+    } else {
+        $parts += "Network: No active connection."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($LastAppliedName)) {
+        $parts += "Last applied: $LastAppliedName"
+    }
+
+    if ($null -ne $NextScheduled) {
+        $parts += "Next scheduled: $($NextScheduled.Name) at $($NextScheduled.ScheduleDescription)"
+    }
+
+    $parts += ""
+
+    foreach ($line in $Lines) {
+        $label = switch ($line.Status) {
+            "Active"    { "[ACTIVE]" }
+            "Matched"   { "[MATCH]" }
+            "NoMatch"   { "[--]" }
+            "Disabled"  { "[OFF]" }
+            "NoNetwork" { "[--]" }
+            default     { "[--]" }
+        }
+        $parts += "$label $($line.Name): $($line.Reason)"
+    }
+
+    return ($parts -join "`n")
+}
+
+function Invoke-RefreshAutoApplyInspector {
+    try {
+        $signature = Get-CurrentNetworkSignature
+        $profiles = Get-Profiles
+        $lastApplied = $script:LastAutoAppliedProfile
+
+        $lines = @()
+        foreach ($profile in $profiles) {
+            $lines += Format-AutoApplyInspectorLine -ProfileData $profile -Signature $signature -LastAppliedName $lastApplied
+        }
+
+        $nextScheduled = $null
+        foreach ($candidate in $profiles) {
+            if (Test-ProfileScheduleDue -ProfileData $candidate -Now (Get-Date)) {
+                $nextScheduled = [pscustomobject]@{
+                    Name = $candidate.Name
+                    ScheduleDescription = Get-ProfileScheduleDescription -ProfileData $candidate
+                }
+                break
+            }
+        }
+
+        $report = Format-AutoApplyInspectorReport -Lines $lines -Signature $signature -LastAppliedName $lastApplied -NextScheduled $nextScheduled
+        $script:txtAutoApplyInspector.Text = $report
+        Update-Status "Auto-apply inspector refreshed" -Type Success
+    } catch {
+        $script:txtAutoApplyInspector.Text = "Inspector refresh failed: $($_.Exception.Message)"
+        Update-Status "Auto-apply inspector failed" -Type Error
+    }
+}
+
 function Register-NetworkChangeAutoApply {
     if ($script:NetworkChangeSubscribed) { return }
 
@@ -14509,6 +14643,7 @@ $btnSaveProfile.Add_Click({ Save-Profile })
 $btnProfileDiff.Add_Click({ Show-ProfileDiff })
 $btnApplyProfile.Add_Click({ Apply-Profile })
 $btnCaptureProfileMatch.Add_Click({ Invoke-CaptureProfileMatch })
+$btnRefreshAutoApply.Add_Click({ Invoke-RefreshAutoApplyInspector })
 $btnFlushDns.Add_Click({ Invoke-FlushDns })
 $btnReleaseIP.Add_Click({ Invoke-ReleaseIP })
 $btnRenewIP.Add_Click({ Invoke-RenewIP })
