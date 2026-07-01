@@ -10997,6 +10997,64 @@ function Import-ProfileQrCode {
     }
 }
 
+function Get-NetworkListManagerIdentity {
+    try {
+        $nlm = [Activator]::CreateInstance([Type]::GetTypeFromCLSID([guid]'DCB00C01-570F-4A9B-8D69-199FDBA5723B'))
+        $networks = $nlm.GetNetworks(1)
+
+        $results = @()
+        foreach ($network in $networks) {
+            $name = try { [string]$network.GetName() } catch { "" }
+            $networkId = try { [string]$network.GetNetworkId() } catch { "" }
+            $category = try {
+                switch ([int]$network.GetCategory()) {
+                    0 { "Public" }
+                    1 { "Private" }
+                    2 { "DomainAuthenticated" }
+                    default { "Unknown" }
+                }
+            } catch { "Unknown" }
+
+            $results += [pscustomobject]@{
+                Name = $name
+                NetworkId = $networkId
+                Category = $category
+            }
+        }
+        return [pscustomobject]@{ Available = $true; Networks = $results; Error = $null }
+    } catch {
+        return [pscustomobject]@{ Available = $false; Networks = @(); Error = $_.Exception.Message }
+    }
+}
+
+function Test-NetworkListManagerMatch {
+    param(
+        [pscustomobject]$ProfileData,
+        [pscustomobject[]]$NlmNetworks
+    )
+
+    $matchNetworkName = if ($ProfileData.PSObject.Properties['MatchNetworkName']) { ([string]$ProfileData.MatchNetworkName).Trim() } else { "" }
+    $matchNetworkId = if ($ProfileData.PSObject.Properties['MatchNetworkId']) { ([string]$ProfileData.MatchNetworkId).Trim() } else { "" }
+
+    if ([string]::IsNullOrWhiteSpace($matchNetworkName) -and [string]::IsNullOrWhiteSpace($matchNetworkId)) {
+        return [pscustomobject]@{ Matched = $false; MatchedBy = $null; MatchedNetwork = $null }
+    }
+
+    foreach ($network in $NlmNetworks) {
+        $nameMatch = (-not [string]::IsNullOrWhiteSpace($matchNetworkName)) -and ($network.Name -ieq $matchNetworkName)
+        $idMatch = (-not [string]::IsNullOrWhiteSpace($matchNetworkId)) -and ($network.NetworkId -ieq $matchNetworkId)
+
+        if ($nameMatch -or $idMatch) {
+            $matchedBy = @()
+            if ($nameMatch) { $matchedBy += "NetworkName" }
+            if ($idMatch) { $matchedBy += "NetworkId" }
+            return [pscustomobject]@{ Matched = $true; MatchedBy = ($matchedBy -join "+"); MatchedNetwork = $network }
+        }
+    }
+
+    return [pscustomobject]@{ Matched = $false; MatchedBy = $null; MatchedNetwork = $null }
+}
+
 function Get-CurrentNetworkSignature {
     $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
     if ($null -eq $activeAdapter) { return $null }
@@ -11250,7 +11308,8 @@ function Format-AutoApplyInspectorReport {
         [pscustomobject[]]$Lines,
         [pscustomobject]$Signature,
         [string]$LastAppliedName = "",
-        [pscustomobject]$NextScheduled = $null
+        [pscustomobject]$NextScheduled = $null,
+        [pscustomobject]$NlmIdentity = $null
     )
 
     $parts = @()
@@ -11263,6 +11322,14 @@ function Format-AutoApplyInspectorReport {
         $parts += "Network: " + ($sigParts -join " | ")
     } else {
         $parts += "Network: No active connection."
+    }
+
+    if ($null -ne $NlmIdentity -and $NlmIdentity.Available -and $NlmIdentity.Networks.Count -gt 0) {
+        foreach ($nlmNet in $NlmIdentity.Networks) {
+            $parts += "NLM: $($nlmNet.Name) [$($nlmNet.Category)]"
+        }
+    } elseif ($null -ne $NlmIdentity -and -not $NlmIdentity.Available) {
+        $parts += "NLM: unavailable"
     }
 
     if (-not [string]::IsNullOrWhiteSpace($LastAppliedName)) {
@@ -11312,7 +11379,8 @@ function Invoke-RefreshAutoApplyInspector {
             }
         }
 
-        $report = Format-AutoApplyInspectorReport -Lines $lines -Signature $signature -LastAppliedName $lastApplied -NextScheduled $nextScheduled
+        $nlmIdentity = Get-NetworkListManagerIdentity
+        $report = Format-AutoApplyInspectorReport -Lines $lines -Signature $signature -LastAppliedName $lastApplied -NextScheduled $nextScheduled -NlmIdentity $nlmIdentity
         $script:txtAutoApplyInspector.Text = $report
         Update-Status "Auto-apply inspector refreshed" -Type Success
     } catch {

@@ -1992,6 +1992,40 @@ Describe 'Capability matrix' {
     }
 }
 
+Describe 'Network List Manager match' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Test-NetworkListManagerMatch')
+    }
+
+    It 'matches a profile by network name' {
+        $profile = [pscustomobject]@{ MatchNetworkName = 'Corporate LAN'; MatchNetworkId = '' }
+        $networks = @([pscustomobject]@{ Name = 'Corporate LAN'; NetworkId = 'abc-123'; Category = 'DomainAuthenticated' })
+
+        $result = Test-NetworkListManagerMatch -ProfileData $profile -NlmNetworks $networks
+
+        $result.Matched | Should -BeTrue
+        $result.MatchedBy | Should -Match 'NetworkName'
+    }
+
+    It 'does not match when no NLM rules are set' {
+        $profile = [pscustomobject]@{ Name = 'Basic' }
+        $networks = @([pscustomobject]@{ Name = 'Office'; NetworkId = 'abc'; Category = 'Private' })
+
+        $result = Test-NetworkListManagerMatch -ProfileData $profile -NlmNetworks $networks
+
+        $result.Matched | Should -BeFalse
+    }
+
+    It 'reports no match when networks do not align' {
+        $profile = [pscustomobject]@{ MatchNetworkName = 'Home WiFi'; MatchNetworkId = '' }
+        $networks = @([pscustomobject]@{ Name = 'Office LAN'; NetworkId = 'xyz'; Category = 'Private' })
+
+        $result = Test-NetworkListManagerMatch -ProfileData $profile -NlmNetworks $networks
+
+        $result.Matched | Should -BeFalse
+    }
+}
+
 Describe 'Auto-apply inspector' {
     BeforeAll {
         Import-NetForgeFunction -Name @(
