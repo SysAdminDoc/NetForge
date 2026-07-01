@@ -6480,6 +6480,10 @@ function Toggle-ContinuousPing {
         # Stop continuous ping
         $script:ContinuousPingRunning = $false
         $script:btnContinuousPing.Content = Get-UiString -Key "button.continuousPing.start" -DefaultValue "Start Continuous Ping"
+        if ($script:ContinuousPingTimer) {
+            $script:ContinuousPingTimer.Stop()
+            $script:ContinuousPingTimer = $null
+        }
         if ($script:ContinuousPingPS) {
             try {
                 $script:ContinuousPingPS.Stop()
@@ -11588,8 +11592,10 @@ function Invoke-ApplyProfileObject {
         Update-Status "Profile '$($ProfileData.Name)' applied successfully" -Type Success
         Send-DiscordProfileWebhook -ProfileData $ProfileData -Adapter $Adapter -Source $Source -Synchronous:($Source -eq "Cli")
         if ($Source -ne "Cli" -and $script:txtAdapterName) {
-            Start-Sleep -Milliseconds 500
-            Update-AdapterDisplay
+            $applyRefreshTimer = New-Object System.Windows.Threading.DispatcherTimer
+            $applyRefreshTimer.Interval = [TimeSpan]::FromMilliseconds(500)
+            $applyRefreshTimer.Add_Tick({ $applyRefreshTimer.Stop(); Update-AdapterDisplay })
+            $applyRefreshTimer.Start()
         }
         return $true
     }
@@ -11983,8 +11989,10 @@ function Apply-IPConfiguration {
 
     if ($success) {
         Update-Status "$($target.StatusMessage) on $($adapter.Name)" -Type Success
-        Start-Sleep -Milliseconds 500
-        Update-AdapterDisplay
+        $ipRefreshTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $ipRefreshTimer.Interval = [TimeSpan]::FromMilliseconds(500)
+        $ipRefreshTimer.Add_Tick({ $ipRefreshTimer.Stop(); Update-AdapterDisplay })
+        $ipRefreshTimer.Start()
     }
 }
 
@@ -13367,7 +13375,7 @@ function Invoke-Ping {
             Update-Status "Ping timed out" -Type Warning
             $timer.Stop()
         }
-    })
+    }.GetNewClosure())
     $timer.Start()
 }
 
@@ -13407,7 +13415,7 @@ function Invoke-Traceroute {
             Update-Status "Traceroute timed out" -Type Warning
             $timer.Stop()
         }
-    })
+    }.GetNewClosure())
     $timer.Start()
 }
 
@@ -13633,6 +13641,10 @@ function Toggle-MtrTrace {
     $target = $script:txtPingTarget.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($target)) {
         Show-MessageBox -Message "Please enter a target address." -Title "No Target" -Icon Warning
+        return
+    }
+    if (-not (Test-ValidDiagnosticTarget -Target $target)) {
+        Show-MessageBox -Message "Target contains invalid characters. Use only letters, digits, dots, colons, hyphens, or brackets." -Title "Invalid Target" -Icon Warning
         return
     }
 
@@ -14858,7 +14870,7 @@ function Invoke-RdapLookup {
                 return [pscustomobject]@{ Success = $false; Error = "No RDAP endpoint found for $Address."; Data = $null }
             }
 
-            $rdapUrl = "$($rdapEndpoint.TrimEnd('/'))ip/$Address"
+            $rdapUrl = "$($rdapEndpoint.TrimEnd('/'))/ip/$Address"
             $rdapData = Invoke-RestMethod -Uri $rdapUrl -Headers $headers -TimeoutSec 15 -ErrorAction Stop
 
             return [pscustomobject]@{ Success = $true; Error = $null; Data = $rdapData }
