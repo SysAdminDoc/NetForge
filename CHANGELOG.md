@@ -4,6 +4,20 @@ All notable changes to NetForge will be documented in this file.
 
 ## [v1.53.0] - 2026-07-01
 
+- Fixed: RDAP CIDR prefix matching used float division; non-byte-aligned prefixes could select wrong endpoints.
+- Fixed: Inline RDAP lookup missing partial-byte bit comparison and HTTPS endpoint validation.
+- Fixed: 11 async timer callbacks leaked PowerShell runspaces on exception paths (Dispose moved to finally).
+- Fixed: Window close now disposes ContinuousPingPS, PortScanPowerShell, and ReachabilityWizardPowerShell.
+- Fixed: ~30 hardcoded GitHub Dark hex colors in adapter, WiFi, DNS preset, and profile list items now use theme brushes.
+- Fixed: Status bar, RDP status, and profile store status used system named Brushes instead of theme colors.
+- Fixed: Connection status dot, adapter status indicator, MAC override, WiFi signal, and continuous ping colors now theme-aware.
+- Fixed: ipconfig release/renew adapter name quoting for names with spaces.
+- Fixed: Wireshark pcapng path quoting for paths with spaces.
+- Fixed: Profile filename length capped at 200 to prevent MAX_PATH failures.
+- Fixed: DNS lookup error message now includes exception detail instead of vague text.
+- Fixed: Win32_NetworkAdapterConfiguration query uses WQL filter instead of full enumeration.
+- Fixed: Spanish locale placeholder.releaseVersion was untranslated.
+- Removed: Dead code Get-PrefixFromSubnet (never called).
 - Added: PSScriptAnalyzer exclusions now documented with per-rule justification.
 - Added: Configuration export privacy modes (full backup vs shareable/redacted) with import preview showing accepted/conflicting/rejected counts.
 - Added: Network List Manager identity as an auto-apply match source (network name/GUID/category via COM).
