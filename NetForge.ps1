@@ -163,6 +163,8 @@ $script:AutoProfileTimer = $null
 $script:ScheduleProfileTimer = $null
 $script:NetworkChangeHandlers = @{}
 $script:NetworkChangeSubscribed = $false
+$script:CachedAdapterList = $null
+$script:CachedAdapterListTimestamp = [datetime]::MinValue
 $script:TrayIcon = $null
 $script:TrayContextMenu = $null
 $script:AppRoutingRuleGroup = "NetForge App Routing"
@@ -4922,9 +4924,31 @@ function Test-NetForgeAdapter {
     return $false
 }
 
+function Get-CachedNetAdapterList {
+    param([int]$MaxAgeSec = 10)
+
+    $now = Get-Date
+    if ($null -ne $script:CachedAdapterList -and ($now - $script:CachedAdapterListTimestamp).TotalSeconds -lt $MaxAgeSec) {
+        return $script:CachedAdapterList
+    }
+
+    try {
+        $script:CachedAdapterList = @(Get-NetAdapter | Sort-Object Name)
+    } catch {
+        $script:CachedAdapterList = @()
+    }
+    $script:CachedAdapterListTimestamp = $now
+    return $script:CachedAdapterList
+}
+
+function Clear-CachedNetAdapterList {
+    $script:CachedAdapterList = $null
+    $script:CachedAdapterListTimestamp = [datetime]::MinValue
+}
+
 function Get-NetworkAdapters {
     try {
-        $adapters = Get-NetAdapter | Where-Object { Test-NetForgeAdapter -Adapter $_ } | Sort-Object Name
+        $adapters = Get-CachedNetAdapterList | Where-Object { Test-NetForgeAdapter -Adapter $_ }
         return $adapters
     } catch {
         return @()
@@ -4932,6 +4956,7 @@ function Get-NetworkAdapters {
 }
 
 function Refresh-AdapterList {
+    Clear-CachedNetAdapterList
     $script:lstAdapters.Items.Clear()
     $adapters = Get-NetworkAdapters
 
@@ -5180,7 +5205,7 @@ function Update-AdapterDetails {
 function Update-ConnectionStatus {
     try {
         # Determine connection type and status
-        $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
+        $activeAdapter = Get-CachedNetAdapterList | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
 
         if ($null -eq $activeAdapter) {
             $script:connStatusDot.Background = $window.Resources["AccentRedBrush"]
@@ -11436,7 +11461,7 @@ function Test-NetworkListManagerMatch {
 }
 
 function Get-CurrentNetworkSignature {
-    $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
+    $activeAdapter = Get-CachedNetAdapterList | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
     if ($null -eq $activeAdapter) { return $null }
 
     $gateway = Get-NetRoute -InterfaceIndex $activeAdapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -11601,7 +11626,7 @@ function Get-ScheduledProfileAdapter {
     $selected = Get-SelectedAdapter
     if ($selected) { return $selected }
 
-    return (Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1)
+    return (Get-CachedNetAdapterList | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1)
 }
 
 function Invoke-ScheduledProfileSwitch {
@@ -11779,6 +11804,7 @@ function Register-NetworkChangeAutoApply {
     try {
         $addressHandler = [System.Net.NetworkInformation.NetworkAddressChangedEventHandler]{
             $window.Dispatcher.BeginInvoke([action]{
+                Clear-CachedNetAdapterList
                 Invoke-AutoApplyProfile -Trigger "NetworkAddressChanged"
                 [void](Invoke-AppRoutingPolicyRepair -Trigger "NetworkAddressChanged")
             }) | Out-Null
@@ -11793,6 +11819,7 @@ function Register-NetworkChangeAutoApply {
             }
             $triggerText = $availabilityTrigger
             $window.Dispatcher.BeginInvoke(([action]{
+                Clear-CachedNetAdapterList
                 Invoke-AutoApplyProfile -Trigger $triggerText
                 [void](Invoke-AppRoutingPolicyRepair -Trigger $triggerText)
             }).GetNewClosure()) | Out-Null
@@ -12048,7 +12075,7 @@ function Resolve-CliAdapter {
         if ([string]::IsNullOrWhiteSpace($selector)) {
             $Adapters = @(Get-NetworkAdapters)
         } else {
-            $Adapters = @(Get-NetAdapter | Sort-Object Name)
+            $Adapters = @(Get-CachedNetAdapterList)
         }
     }
 
@@ -12409,7 +12436,7 @@ function Get-AppRoutingPolicyPlan {
     $adapterList = @($Adapters | Where-Object { $_ -and $_.PSObject.Properties["Name"] })
     if ($adapterList.Count -eq 0) {
         try {
-            $adapterList = @(Get-NetAdapter -ErrorAction Stop | Sort-Object Name)
+            $adapterList = @(Get-CachedNetAdapterList)
         } catch {
             $messages.Add("Could not enumerate network adapters: $($_.Exception.Message)")
         }
@@ -12781,7 +12808,7 @@ function Refresh-AppRoutingInterfaceList {
 
     $script:cmbAppRoutingInterface.Items.Clear()
     try {
-        foreach ($adapter in @(Get-NetAdapter -ErrorAction Stop | Sort-Object Name)) {
+        foreach ($adapter in @(Get-CachedNetAdapterList)) {
             $item = New-Object System.Windows.Controls.ComboBoxItem
             $item.Content = "$($adapter.Name) ($($adapter.Status))"
             $item.Tag = [string]$adapter.Name
