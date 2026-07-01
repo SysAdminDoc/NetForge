@@ -2,6 +2,17 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.57.0] - 2026-07-01
+
+- Security: Add 10 MB file size limit to profile/configuration import to prevent memory exhaustion.
+- Security: Block ProfileStorePath from targeting system directories (Windows, Program Files) when app runs elevated.
+- Security: Add consistent Test-ValidDiagnosticTarget to DiagPing, DnsLookup, ContinuousPing, and MTR entry points.
+- Fixed: RDAP URL construction missing / separator between endpoint path and ip/ query.
+- Fixed: Continuous ping double-timer race on rapid stop-then-start (timer not stopped in stop path).
+- Fixed: Missing .GetNewClosure() on Invoke-Ping and Invoke-Traceroute timer callbacks (variable shadowing on re-invocation).
+- Fixed: Replace Start-Sleep 500ms UI thread blocks with non-blocking DispatcherTimers in Invoke-ApplyProfileObject and Apply-IPConfiguration.
+- Added: 11 tests covering hosts section replacement, DNS catalog edge cases, settings schema validation, RDP launch plan edge cases.
+
 ## [v1.56.0] - 2026-07-01
 
 - Performance: Cache Get-NetAdapter results with 10-second TTL to avoid 6+ redundant WMI calls per 30-second cycle.
