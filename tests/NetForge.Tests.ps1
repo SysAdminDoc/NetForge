@@ -1896,6 +1896,80 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'RDAP lookup helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Select-RdapBootstrapEndpoint',
+            'Format-RdapLookupReport'
+        )
+    }
+
+    It 'selects the correct RDAP endpoint from bootstrap data' {
+        $bootstrap = [pscustomobject]@{
+            services = @(
+                @(
+                    @("1.0.0.0/8"),
+                    @("https://rdap.arin.net/registry/")
+                ),
+                @(
+                    @("8.0.0.0/8"),
+                    @("https://rdap.arin.net/registry/")
+                )
+            )
+        }
+
+        $endpoint = Select-RdapBootstrapEndpoint -IpAddress '8.8.8.8' -BootstrapData $bootstrap
+
+        $endpoint | Should -Be 'https://rdap.arin.net/registry/'
+    }
+
+    It 'returns null for unmatched IP addresses' {
+        $bootstrap = [pscustomobject]@{
+            services = @(
+                @(
+                    @("10.0.0.0/8"),
+                    @("https://rdap.example.com/")
+                )
+            )
+        }
+
+        $endpoint = Select-RdapBootstrapEndpoint -IpAddress '192.168.1.1' -BootstrapData $bootstrap
+
+        $endpoint | Should -BeNullOrEmpty
+    }
+
+    It 'formats an RDAP response with entity and CIDR data' {
+        $rdapResponse = [pscustomobject]@{
+            name = 'GOOGLE'
+            handle = 'NET-8-8-8-0-1'
+            type = 'DIRECT ALLOCATION'
+            country = 'US'
+            cidr0_cidrs = @([pscustomobject]@{ v4prefix = '8.8.8.0'; length = 24 })
+            entities = @(
+                [pscustomobject]@{
+                    roles = @('registrant')
+                    vcardArray = @('vcard', @(
+                        @('fn', @{}, 'text', 'Google LLC')
+                    ))
+                }
+            )
+        }
+
+        $report = Format-RdapLookupReport -QueryAddress '8.8.8.8' -RdapResponse $rdapResponse
+
+        $report | Should -Match 'RDAP lookup: 8.8.8.8'
+        $report | Should -Match 'Network: GOOGLE'
+        $report | Should -Match 'Country: US'
+        $report | Should -Match '8.8.8.0/24'
+    }
+
+    It 'handles null RDAP response gracefully' {
+        $report = Format-RdapLookupReport -QueryAddress '10.0.0.1' -RdapResponse $null
+
+        $report | Should -Match 'No RDAP data'
+    }
+}
+
 Describe 'DNS resolver benchmark' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

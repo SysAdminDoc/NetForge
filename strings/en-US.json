@@ -57,6 +57,7 @@
     "button.refreshAdapters": "Refresh Adapters",
     "button.refreshAutoApply": "Refresh",
     "button.saveLocale": "Save Locale",
+    "button.rdapLookup": "RDAP Lookup",
     "button.runBenchmark": "Run Benchmark",
     "button.scanCapabilities": "Scan",
     "button.refreshAppRouting": "Refresh Guards",

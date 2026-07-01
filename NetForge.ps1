@@ -266,6 +266,7 @@ $script:AccessibilityNames = @{
     cmbLocaleSelector = "UI language selector"
     btnSaveLocale = "Save locale setting"
     btnDnsBenchmark = "Run DNS resolver benchmark"
+    btnRdapLookup = "RDAP IP ownership lookup"
     txtDnsBenchmarkOutput = "DNS benchmark results"
     btnRefreshCapabilities = "Scan host capabilities"
     txtCapabilityMatrix = "Host capability scan results"
@@ -337,7 +338,7 @@ $script:AccessibilityTabOrder = @(
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile", "btnRefreshAutoApply",
     "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "btnCheckRelease", "cmbLocaleSelector", "btnSaveLocale", "btnRefreshCapabilities", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
     "txtAppRoutingProgram", "btnBrowseAppRoutingProgram", "cmbAppRoutingInterface", "btnApplyAppRouting", "btnRemoveAppRouting", "btnRefreshAppRouting", "lstAppRoutingRules",
-    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
+    "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup", "btnRdapLookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
     "txtHostsGroupName", "txtHostsAddress", "txtHostsNames", "btnHostsAddEntry", "btnHostsToggleGroup", "btnHostsRemoveGroup", "btnHostsRefresh", "btnHostsApply", "lstHostsGroups",
     "chkPublicIpLookup", "chkExternalSpeedTest", "cmbSpeedTestEndpoint", "btnSaveEndpointPolicy", "chkDiscordWebhook", "txtDiscordWebhookUrl", "btnSaveDiscordWebhook",
@@ -2625,7 +2626,8 @@ function Apply-Localization {
                                             <Button x:Name="btnReachabilityWizard" Content="Why Can't I Reach X?" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPacketCapture" Content="Start Capture" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnCableDiagnostics" Content="Cable Diag" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
-                                            <Button x:Name="btnNslookup" Content="NSLookup" Style="{StaticResource ModernButton}"/>
+                                            <Button x:Name="btnNslookup" Content="NSLookup" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnRdapLookup" Content="RDAP Lookup" Style="{StaticResource ModernButton}"/>
                                         </WrapPanel>
 
                                         <Border Grid.Row="1" Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="250">
@@ -6717,6 +6719,111 @@ function Invoke-DnsLookup {
         }
     }.GetNewClosure())
     $timer.Start()
+}
+
+# ============================================================================
+# RDAP LOOKUP FUNCTIONS
+# ============================================================================
+function Select-RdapBootstrapEndpoint {
+    param(
+        [string]$IpAddress,
+        [pscustomobject]$BootstrapData
+    )
+
+    if ($null -eq $BootstrapData -or $null -eq $BootstrapData.services) {
+        return $null
+    }
+
+    $parsed = $null
+    if (-not [System.Net.IPAddress]::TryParse($IpAddress, [ref]$parsed)) {
+        return $null
+    }
+
+    $ipBytes = $parsed.GetAddressBytes()
+    $bestMatch = $null
+    $bestPrefix = -1
+
+    foreach ($service in $BootstrapData.services) {
+        $prefixes = @($service[0])
+        $urls = @($service[1])
+
+        foreach ($cidr in $prefixes) {
+            $parts = $cidr -split '/'
+            if ($parts.Count -ne 2) { continue }
+            $netAddr = $null
+            $prefixLen = 0
+            if (-not [System.Net.IPAddress]::TryParse($parts[0], [ref]$netAddr)) { continue }
+            if (-not [int]::TryParse($parts[1], [ref]$prefixLen)) { continue }
+            if ($netAddr.AddressFamily -ne $parsed.AddressFamily) { continue }
+
+            $netBytes = $netAddr.GetAddressBytes()
+            $fullBytes = $prefixLen / 8
+            $remainBits = $prefixLen % 8
+            $match = $true
+
+            for ($i = 0; $i -lt $fullBytes -and $i -lt $netBytes.Count; $i++) {
+                if ($ipBytes[$i] -ne $netBytes[$i]) { $match = $false; break }
+            }
+            if ($match -and $remainBits -gt 0 -and $fullBytes -lt $netBytes.Count) {
+                $mask = [byte](0xFF -shl (8 - $remainBits))
+                if (($ipBytes[$fullBytes] -band $mask) -ne ($netBytes[$fullBytes] -band $mask)) { $match = $false }
+            }
+
+            if ($match -and $prefixLen -gt $bestPrefix) {
+                $bestPrefix = $prefixLen
+                $bestMatch = $urls | Select-Object -First 1
+            }
+        }
+    }
+
+    return $bestMatch
+}
+
+function Format-RdapLookupReport {
+    param(
+        [string]$QueryAddress,
+        [pscustomobject]$RdapResponse
+    )
+
+    $lines = @()
+    $lines += "RDAP lookup: $QueryAddress"
+    $lines += ""
+
+    if ($null -eq $RdapResponse) {
+        $lines += "No RDAP data returned."
+        return ($lines -join "`n")
+    }
+
+    if ($RdapResponse.name) { $lines += "Network: $($RdapResponse.name)" }
+    if ($RdapResponse.handle) { $lines += "Handle: $($RdapResponse.handle)" }
+    if ($RdapResponse.type) { $lines += "Type: $($RdapResponse.type)" }
+    if ($RdapResponse.country) { $lines += "Country: $($RdapResponse.country)" }
+
+    $cidrs = @()
+    if ($RdapResponse.cidr0_cidrs) {
+        foreach ($cidr in $RdapResponse.cidr0_cidrs) {
+            if ($cidr.v4prefix) { $cidrs += "$($cidr.v4prefix)/$($cidr.length)" }
+            if ($cidr.v6prefix) { $cidrs += "$($cidr.v6prefix)/$($cidr.length)" }
+        }
+    }
+    if ($cidrs.Count -gt 0) { $lines += "CIDR: $($cidrs -join ', ')" }
+
+    if ($RdapResponse.entities) {
+        foreach ($entity in $RdapResponse.entities) {
+            $roles = if ($entity.roles) { ($entity.roles -join ", ") } else { "" }
+            $entityName = ""
+            if ($entity.vcardArray -and $entity.vcardArray.Count -ge 2) {
+                foreach ($field in $entity.vcardArray[1]) {
+                    if ($field[0] -eq "fn") { $entityName = [string]$field[3] }
+                }
+            }
+            if ($entityName -or $roles) {
+                $lines += "Entity: $entityName [$roles]"
+            }
+        }
+    }
+
+    return ($lines -join "`n")
 }
 
 # ============================================================================
@@ -14487,6 +14594,123 @@ function Invoke-Nslookup {
     }
 }
 
+function Invoke-RdapLookup {
+    $target = $script:txtPingTarget.Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        Show-MessageBox -Message "Please enter an IP address for RDAP lookup." -Title "No Target" -Icon Warning
+        return
+    }
+
+    if (-not $script:PublicIpLookupEnabled) {
+        $script:txtDiagOutput.Text = "RDAP lookup is unavailable when endpoint policy is disabled."
+        Update-Status "RDAP lookup skipped: endpoint policy disabled" -Type Warning
+        return
+    }
+
+    $ipAddress = $null
+    if ([System.Net.IPAddress]::TryParse($target, [ref]$ipAddress)) {
+        $lookupAddress = $target
+    } else {
+        try {
+            $resolved = [System.Net.Dns]::GetHostAddresses($target) | Select-Object -First 1
+            $lookupAddress = $resolved.ToString()
+        } catch {
+            $script:txtDiagOutput.Text = "Could not resolve '$target' to an IP address."
+            Update-Status "RDAP lookup: DNS resolution failed" -Type Error
+            return
+        }
+    }
+
+    $script:txtDiagOutput.Text = "Looking up RDAP data for $lookupAddress..."
+    Update-Status "RDAP lookup for $lookupAddress..."
+
+    $ps = [PowerShell]::Create()
+    [void]$ps.AddScript({
+        param($Address, $AppVersion)
+        try {
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            $headers = @{ "User-Agent" = "NetForge/$AppVersion" }
+
+            $bootstrapUrl = if ($Address -match ':') {
+                "https://data.iana.org/rdap/ipv6.json"
+            } else {
+                "https://data.iana.org/rdap/ipv4.json"
+            }
+            $bootstrap = Invoke-RestMethod -Uri $bootstrapUrl -Headers $headers -TimeoutSec 10 -ErrorAction Stop
+
+            $rdapEndpoint = $null
+            foreach ($service in $bootstrap.services) {
+                foreach ($cidr in $service[0]) {
+                    $parts = $cidr -split '/'
+                    if ($parts.Count -ne 2) { continue }
+                    $netAddr = $null
+                    $prefixLen = 0
+                    if (-not [System.Net.IPAddress]::TryParse($parts[0], [ref]$netAddr)) { continue }
+                    if (-not [int]::TryParse($parts[1], [ref]$prefixLen)) { continue }
+                    $parsed = [System.Net.IPAddress]::Parse($Address)
+                    if ($netAddr.AddressFamily -ne $parsed.AddressFamily) { continue }
+
+                    $ipBytes = $parsed.GetAddressBytes()
+                    $netBytes = $netAddr.GetAddressBytes()
+                    $fullBytes = $prefixLen / 8
+                    $match = $true
+                    for ($i = 0; $i -lt $fullBytes -and $i -lt $netBytes.Count; $i++) {
+                        if ($ipBytes[$i] -ne $netBytes[$i]) { $match = $false; break }
+                    }
+
+                    if ($match) {
+                        $rdapEndpoint = $service[1] | Select-Object -First 1
+                        break
+                    }
+                }
+                if ($rdapEndpoint) { break }
+            }
+
+            if (-not $rdapEndpoint) {
+                return [pscustomobject]@{ Success = $false; Error = "No RDAP endpoint found for $Address."; Data = $null }
+            }
+
+            $rdapUrl = "$($rdapEndpoint.TrimEnd('/'))ip/$Address"
+            $rdapData = Invoke-RestMethod -Uri $rdapUrl -Headers $headers -TimeoutSec 15 -ErrorAction Stop
+
+            return [pscustomobject]@{ Success = $true; Error = $null; Data = $rdapData }
+        } catch {
+            return [pscustomobject]@{ Success = $false; Error = $_.Exception.Message; Data = $null }
+        }
+    }).AddArgument($lookupAddress).AddArgument($script:AppVersion)
+
+    $handle = $ps.BeginInvoke()
+
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $timer.Add_Tick({
+        if (-not $handle.IsCompleted) { return }
+        $timer.Stop()
+
+        try {
+            $result = $ps.EndInvoke($handle)
+            $ps.Dispose()
+
+            if (-not $result -or -not $result.Success) {
+                $errorMsg = if ($result -and $result.Error) { $result.Error } else { "No response." }
+                $script:txtDiagOutput.Text = "RDAP lookup failed: $errorMsg"
+                Write-OperationLog -Action "RdapLookup" -Result "Error" -Detail $errorMsg
+                Update-Status "RDAP lookup failed" -Type Error
+                return
+            }
+
+            $report = Format-RdapLookupReport -QueryAddress $lookupAddress -RdapResponse $result.Data
+            $script:txtDiagOutput.Text = $report
+            Write-OperationLog -Action "RdapLookup" -Result "Info" -Detail "address=$lookupAddress"
+            Update-Status "RDAP lookup complete" -Type Success
+        } catch {
+            $script:txtDiagOutput.Text = "RDAP lookup error: $($_.Exception.Message)"
+            Update-Status "RDAP lookup failed" -Type Error
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
 # ============================================================================
 # ADAPTER ENABLE/DISABLE
 # ============================================================================
@@ -15198,6 +15422,7 @@ $btnReachabilityWizard.Add_Click({ Invoke-ReachabilityWizard })
 $btnPacketCapture.Add_Click({ Toggle-PacketCapture })
 $btnCableDiagnostics.Add_Click({ Invoke-CableDiagnostics })
 $btnNslookup.Add_Click({ Invoke-Nslookup })
+$btnRdapLookup.Add_Click({ Invoke-RdapLookup })
 $btnAddStaticRoute.Add_Click({ Add-StaticRoute })
 $btnRemoveStaticRoute.Add_Click({ Remove-SelectedStaticRoute })
 $btnRefreshStaticRoutes.Add_Click({ Refresh-StaticRouteList })
