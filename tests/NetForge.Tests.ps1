@@ -828,7 +828,7 @@ Describe 'Localization resources' {
         $result = Initialize-StringResources -Locale 'es-ES'
 
         $result.IsValid | Should -BeTrue
-        Get-UiString -Key 'app.title' -DefaultValue 'fallback' | Should -Be 'NetForge - Administracion de red'
+        Get-UiString -Key 'app.title' -DefaultValue 'fallback' | Should -Be "NetForge - Administraci$([char]0xf3)n de red"
         Get-UiString -Key 'missing.key' -DefaultValue 'fallback' | Should -Be 'fallback'
         $script:LocalizationMissingKeys.Count | Should -Be 0
     }
