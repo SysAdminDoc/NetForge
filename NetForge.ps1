@@ -3788,8 +3788,10 @@ function Invoke-RestoreLastNetworkState {
     $result = Restore-NetworkSnapshot -Snapshot $script:LastNetworkSnapshot
     if ($result.Restored) {
         Update-Status $result.Message -Type Success
-        Start-Sleep -Milliseconds 500
-        Update-AdapterDisplay
+        $refreshTimer = New-Object System.Windows.Threading.DispatcherTimer
+        $refreshTimer.Interval = [TimeSpan]::FromMilliseconds(500)
+        $refreshTimer.Add_Tick({ $refreshTimer.Stop(); Update-AdapterDisplay })
+        $refreshTimer.Start()
     } else {
         Update-Status "Restore failed: $($result.Message)" -Type Error
         Show-MessageBox -Message "Failed to restore the last network state:`n$($result.Message)" -Title "Restore Failed" -Icon Error
@@ -7613,6 +7615,16 @@ function Refresh-DnsPresets {
         $script:lstDnsPresets.Items.Add($item) | Out-Null
     }
 
+    if ($script:lstDnsPresets.Items.Count -eq 0) {
+        $emptyItem = New-Object System.Windows.Controls.TextBlock
+        $emptyItem.Text = "No DNS presets match the current filter."
+        $emptyItem.FontSize = 12
+        $emptyItem.Foreground = $window.Resources["TextMutedBrush"]
+        $emptyItem.Margin = "8,12"
+        $emptyItem.TextWrapping = "Wrap"
+        $script:lstDnsPresets.Items.Add($emptyItem) | Out-Null
+    }
+
     if ($script:TrayIcon) {
         Update-TrayMenu
     }
@@ -11151,7 +11163,7 @@ function Load-ProfileToEditor {
     $script:chkProfileSchedule.IsChecked = [bool]$profile.ScheduleEnabled
     $script:txtProfileScheduleTime.Text = if ($profile.ScheduleTime) { $profile.ScheduleTime } else { "08:00" }
     $scheduleDaysText = ConvertTo-ProfileScheduleDaysText -Days $profile.ScheduleDays
-    $script:txtProfileScheduleDays.Text = if ([string]::IsNullOrWhiteSpace($scheduleDaysText)) { "Every day" } else { $scheduleDaysText }
+    $script:txtProfileScheduleDays.Text = if ([string]::IsNullOrWhiteSpace($scheduleDaysText)) { Get-UiString -Key "message.everyDay" -DefaultValue "Every day" } else { $scheduleDaysText }
     $script:chkProfileDHCP.IsChecked = $profile.UseDHCP
     $script:txtProfileIP.Text = $profile.IPAddress
     $script:txtProfileSubnet.Text = $profile.SubnetMask
@@ -12896,6 +12908,9 @@ function Remove-SelectedAppRoutingPolicy {
         return
     }
 
+    $confirm = Show-MessageBox -Message "Remove app interface guard rules for $([System.IO.Path]::GetFileName($programPath))?" -Title "Confirm Guard Removal" -Buttons YesNo -Icon Question
+    if ($confirm -ne [System.Windows.MessageBoxResult]::Yes) { return }
+
     try {
         $storedRemoved = Remove-AppRoutingStoredPolicy -ProgramPath $programPath
         $removed = Remove-AppRoutingPolicyByProgram -ProgramPath $programPath
@@ -13555,9 +13570,11 @@ function Stop-MtrTrace {
     if ($script:MtrPowerShell) {
         try {
             $script:MtrPowerShell.Stop()
+            $script:MtrPowerShell.Dispose()
         } catch {
             Write-OperationLog -Action "MTR trace stop" -Result "Warning" -Detail $_.Exception.Message
         }
+        $script:MtrPowerShell = $null
     }
 
     $script:btnMtrTrace.Content = Get-UiString -Key "button.mtr.start" -DefaultValue "Start MTR"
@@ -14194,7 +14211,7 @@ function Refresh-StaticRouteList {
     if ($script:lstStaticRoutes) { $script:lstStaticRoutes.Items.Clear() }
 
     if ($null -eq $adapter) {
-        if ($script:txtStaticRouteStatus) { $script:txtStaticRouteStatus.Text = "Select an adapter to view manual static routes." }
+        if ($script:txtStaticRouteStatus) { $script:txtStaticRouteStatus.Text = Get-UiString -Key "message.selectAdapterRoutes" -DefaultValue "Select an adapter to view manual static routes." }
         return
     }
 
@@ -14266,6 +14283,9 @@ function Remove-SelectedStaticRoute {
     }
 
     $route = $script:lstStaticRoutes.SelectedItem.Tag
+    $confirm = Show-MessageBox -Message "Remove static route '$($route.DestinationPrefix) via $($route.NextHop)'?" -Title "Confirm Route Removal" -Buttons YesNo -Icon Question
+    if ($confirm -ne [System.Windows.MessageBoxResult]::Yes) { return }
+
     $success = Invoke-NetworkMutation -Adapter $adapter -ActionName "Remove static route" -ScriptBlock {
         Remove-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix $route.DestinationPrefix -NextHop $route.NextHop -Confirm:$false -ErrorAction Stop
     } -Quiet
