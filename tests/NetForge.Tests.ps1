@@ -1883,6 +1883,91 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'DoQ proxy trust and session helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Format-DoqProxyTrustLines',
+            'Get-DoqProxyLogPaths',
+            'Format-DoqProxyHealthState'
+        )
+    }
+
+    It 'formats trust lines with all fields populated' {
+        $report = [pscustomobject]@{
+            FullPath = 'C:\tools\dnsproxy.exe'
+            Version = 'dnsproxy version 0.73.5'
+            SHA256 = 'A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2'
+            Authenticode = 'Valid'
+            ModifiedTime = '2026-06-15T10:00:00.0000000-04:00'
+        }
+
+        $lines = Format-DoqProxyTrustLines -Report $report
+
+        $lines.Count | Should -Be 5
+        ($lines -join "`n") | Should -Match 'Path: C:\\tools\\dnsproxy.exe'
+        ($lines -join "`n") | Should -Match 'Version: dnsproxy version 0.73.5'
+        ($lines -join "`n") | Should -Match 'SHA256: A1B2C3D4'
+        ($lines -join "`n") | Should -Match 'Authenticode: Valid'
+        ($lines -join "`n") | Should -Match 'Modified:'
+    }
+
+    It 'formats trust lines with no fields populated' {
+        $report = [pscustomobject]@{
+            FullPath = $null
+            Version = $null
+            SHA256 = $null
+            Authenticode = $null
+            ModifiedTime = $null
+        }
+
+        $lines = @(Format-DoqProxyTrustLines -Report $report)
+
+        $lines.Count | Should -Be 1
+        $lines[0] | Should -Be 'No binary trust information available.'
+    }
+
+    It 'builds timestamped stdout and stderr log paths' {
+        $logPaths = Get-DoqProxyLogPaths -LogsDirectory 'C:\AppData\NetForge\Logs' -Timestamp ([datetime]'2026-06-29T09:30:45')
+
+        $logPaths.StdoutPath | Should -Be 'C:\AppData\NetForge\Logs\doqproxy-stdout-20260629-093045.log'
+        $logPaths.StderrPath | Should -Be 'C:\AppData\NetForge\Logs\doqproxy-stderr-20260629-093045.log'
+    }
+
+    It 'reports stopped state when no process exists' {
+        $state = Format-DoqProxyHealthState -Process $null
+
+        $state.State | Should -Be 'Stopped'
+        $state.Message | Should -Match 'No NetForge-managed DoQ proxy session'
+        $state.LastError | Should -BeNullOrEmpty
+    }
+
+    It 'reports running state for a live process' {
+        $mockProcess = [pscustomobject]@{
+            Id = 12345
+            HasExited = $false
+        }
+
+        $state = Format-DoqProxyHealthState -Process $mockProcess
+
+        $state.State | Should -Be 'Running'
+        $state.Message | Should -Match 'PID 12345'
+    }
+
+    It 'reports exited state with exit code for a terminated process' {
+        $mockProcess = [pscustomobject]@{
+            Id = 54321
+            HasExited = $true
+            ExitCode = 1
+        }
+
+        $state = Format-DoqProxyHealthState -Process $mockProcess
+
+        $state.State | Should -Be 'Exited'
+        $state.Message | Should -Match 'exit code 1'
+        $state.Message | Should -Match 'PID was 54321'
+    }
+}
+
 Describe 'Accessibility metadata' {
     It 'lists automation names for primary workflows' {
         $source = Get-Content -Raw $script:NetForgePath

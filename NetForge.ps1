@@ -149,6 +149,7 @@ $script:EncryptedDnsHealthRunning = $false
 $script:EncryptedDnsHealthJob = $null
 $script:EncryptedDnsHealthTimer = $null
 $script:DoqProxyProcess = $null
+$script:DoqProxyStderrPath = $null
 $script:LastAutoAppliedProfile = ""
 $script:LastAutoApplySignature = ""
 $script:LastAutoApplyAttemptKey = ""
@@ -7439,8 +7440,9 @@ function Invoke-EncryptedDnsHealthTest {
     $doqConfig = Get-DoqProxyConfiguration
     $doqListenAddress = if (Test-ValidIP -IP $doqConfig.ListenAddress) { $doqConfig.ListenAddress } else { "" }
     $doqListenPort = if ($doqConfig.ListenPort -ge 1 -and $doqConfig.ListenPort -le 65535) { $doqConfig.ListenPort } else { 0 }
-    $doqProcessRunning = ($script:DoqProxyProcess -and -not $script:DoqProxyProcess.HasExited)
-    $doqProcessId = if ($doqProcessRunning) { $script:DoqProxyProcess.Id } else { $null }
+    $doqHealthState = Format-DoqProxyHealthState -Process $script:DoqProxyProcess -StderrPath $script:DoqProxyStderrPath
+    $doqProcessRunning = ($doqHealthState.State -eq "Running")
+    $doqProcessId = if ($doqProcessRunning -and $script:DoqProxyProcess) { $script:DoqProxyProcess.Id } else { $null }
     $localProxyCompareAddress = if ($doqListenPort -eq 53) { $doqListenAddress } else { "" }
     $leakResult = Get-DnsConfigLeakResult -AdapterServers $adapterDns -TargetServers $targetServers -LocalProxyAddress $localProxyCompareAddress
 
@@ -7468,6 +7470,9 @@ function Invoke-EncryptedDnsHealthTest {
         DoqListenPort = $doqListenPort
         DoqProcessRunning = [bool]$doqProcessRunning
         DoqProcessId = $doqProcessId
+        DoqProcessState = $doqHealthState.State
+        DoqProcessStateMessage = $doqHealthState.Message
+        DoqLastError = $doqHealthState.LastError
     }
 
     $healthScript = {
@@ -7761,8 +7766,9 @@ function Invoke-EncryptedDnsHealthTest {
 
         if (-not [string]::IsNullOrWhiteSpace($Context.DoqListenAddress) -and $Context.DoqListenPort -gt 0) {
             $proxyProbe = Invoke-UdpDnsProbe -Server $Context.DoqListenAddress -Port $Context.DoqListenPort -TimeoutMs 1200
-            $processState = if ($Context.DoqProcessRunning) { "NetForge process running (PID $($Context.DoqProcessId))" } else { "NetForge process not running" }
-            $results += New-HealthResult -Sort 80 -Section "Local proxy listener" -Name "$($Context.DoqListenAddress):$($Context.DoqListenPort)" -Success $proxyProbe.Success -Message "$processState; $($proxyProbe.Message)" -LatencyMs $proxyProbe.LatencyMs
+            $stateLabel = "$($Context.DoqProcessState): $($Context.DoqProcessStateMessage)"
+            $errorSuffix = if ($Context.DoqLastError) { " Last error: $($Context.DoqLastError)" } else { "" }
+            $results += New-HealthResult -Sort 80 -Section "Local proxy listener" -Name "$($Context.DoqListenAddress):$($Context.DoqListenPort)" -Success $proxyProbe.Success -Message "$stateLabel$errorSuffix; $($proxyProbe.Message)" -LatencyMs $proxyProbe.LatencyMs
         } else {
             $results += New-HealthResult -Sort 80 -Section "Local proxy listener" -Name "DoQ proxy" -Success $null -Message "No valid listen address and port configured."
         }
@@ -7893,6 +7899,126 @@ function Test-DoqProxyConfiguration {
     return $errors
 }
 
+function Get-DoqProxyTrustReport {
+    param([string]$ProxyPath)
+
+    $report = [pscustomobject]@{
+        FullPath = $ProxyPath
+        Version = $null
+        SHA256 = $null
+        Authenticode = $null
+        ModifiedTime = $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ProxyPath) -or -not (Test-Path -LiteralPath $ProxyPath -PathType Leaf)) {
+        return $report
+    }
+
+    try {
+        $item = Get-Item -LiteralPath $ProxyPath -ErrorAction Stop
+        $report.ModifiedTime = $item.LastWriteTime.ToString('o')
+    } catch { }
+
+    try {
+        if (Get-Command 'Get-FileHash' -ErrorAction SilentlyContinue) {
+            $hash = Get-FileHash -LiteralPath $ProxyPath -Algorithm SHA256 -ErrorAction Stop
+            $report.SHA256 = $hash.Hash
+        }
+    } catch { }
+
+    try {
+        if (Get-Command 'Get-AuthenticodeSignature' -ErrorAction SilentlyContinue) {
+            $sig = Get-AuthenticodeSignature -LiteralPath $ProxyPath -ErrorAction Stop
+            $report.Authenticode = $sig.Status.ToString()
+        }
+    } catch { }
+
+    try {
+        $versionOutput = & $ProxyPath --version 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($versionOutput.Trim())) {
+            $report.Version = $versionOutput.Trim()
+        }
+    } catch { }
+
+    return $report
+}
+
+function Format-DoqProxyTrustLines {
+    param([pscustomobject]$Report)
+
+    $lines = @()
+    if ($Report.FullPath) { $lines += "Path: $($Report.FullPath)" }
+    if ($Report.Version) { $lines += "Version: $($Report.Version)" }
+    if ($Report.SHA256) { $lines += "SHA256: $($Report.SHA256)" }
+    if ($Report.Authenticode) { $lines += "Authenticode: $($Report.Authenticode)" }
+    if ($Report.ModifiedTime) { $lines += "Modified: $($Report.ModifiedTime)" }
+    if ($lines.Count -eq 0) { $lines += "No binary trust information available." }
+    return $lines
+}
+
+function Get-DoqProxyLogPaths {
+    param(
+        [string]$LogsDirectory,
+        [datetime]$Timestamp = (Get-Date)
+    )
+
+    $stamp = $Timestamp.ToString('yyyyMMdd-HHmmss')
+    return [pscustomobject]@{
+        StdoutPath = Join-Path $LogsDirectory "doqproxy-stdout-$stamp.log"
+        StderrPath = Join-Path $LogsDirectory "doqproxy-stderr-$stamp.log"
+    }
+}
+
+function Format-DoqProxyHealthState {
+    param(
+        [pscustomobject]$Process,
+        [string]$StderrPath = $null
+    )
+
+    if ($null -eq $Process) {
+        return [pscustomobject]@{
+            State = "Stopped"
+            Message = "No NetForge-managed DoQ proxy session."
+            LastError = $null
+        }
+    }
+
+    $lastError = $null
+    if (-not [string]::IsNullOrWhiteSpace($StderrPath) -and (Test-Path -LiteralPath $StderrPath -PathType Leaf)) {
+        try {
+            $stderrLines = @(Get-Content -LiteralPath $StderrPath -Tail 3 -ErrorAction Stop | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if ($stderrLines.Count -gt 0) {
+                $lastError = ($stderrLines -join " ").Substring(0, [Math]::Min(($stderrLines -join " ").Length, 300))
+            }
+        } catch { }
+    }
+
+    if ($Process.HasExited) {
+        $exitCode = try { $Process.ExitCode } catch { $null }
+        $exitText = if ($null -ne $exitCode) { "exit code $exitCode" } else { "exit code unknown" }
+        return [pscustomobject]@{
+            State = "Exited"
+            Message = "DoQ proxy exited ($exitText). PID was $($Process.Id)."
+            LastError = $lastError
+        }
+    }
+
+    $responding = try { -not $Process.HasExited } catch { $false }
+    if (-not $responding) {
+        return [pscustomobject]@{
+            State = "Stale"
+            Message = "DoQ proxy process state is indeterminate. PID $($Process.Id)."
+            LastError = $lastError
+        }
+    }
+
+    return [pscustomobject]@{
+        State = "Running"
+        Message = "DoQ proxy running. PID $($Process.Id)."
+        LastError = $lastError
+    }
+}
+
 function Invoke-ValidateDoqProxy {
     $config = Get-DoqProxyConfiguration
     $errors = Test-DoqProxyConfiguration -Config $config
@@ -7904,13 +8030,17 @@ function Invoke-ValidateDoqProxy {
     }
 
     try {
-        $versionOutput = & $config.ProxyPath --version 2>&1 | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            throw $versionOutput.Trim()
+        $trustReport = Get-DoqProxyTrustReport -ProxyPath $config.ProxyPath
+        $trustLines = Format-DoqProxyTrustLines -Report $trustReport
+
+        if ($null -eq $trustReport.Version) {
+            $script:txtDoqProxyStatus.Text = "dnsproxy found but --version failed.`n" + ($trustLines -join "`n")
+            Update-Status "DoQ proxy validation: version check failed" -Type Warning
+            return $false
         }
 
-        $summary = if ([string]::IsNullOrWhiteSpace($versionOutput.Trim())) { "dnsproxy found." } else { $versionOutput.Trim() }
-        $script:txtDoqProxyStatus.Text = "Ready: $summary"
+        $script:txtDoqProxyStatus.Text = "Ready.`n" + ($trustLines -join "`n")
+        Write-OperationLog -Action "DoQ proxy validated" -Result "Info" -Detail ($trustLines -join " | ")
         Update-Status "DoQ proxy configuration validated" -Type Success
         return $true
     } catch {
@@ -7945,16 +8075,39 @@ function Invoke-StartDoqProxy {
     }
 
     try {
-        $script:DoqProxyProcess = Start-Process -FilePath $config.ProxyPath -ArgumentList $arguments -WindowStyle Hidden -PassThru
+        if (-not (Test-Path -LiteralPath $script:LogsPath)) {
+            New-Item -Path $script:LogsPath -ItemType Directory -Force | Out-Null
+        }
+
+        $logPaths = Get-DoqProxyLogPaths -LogsDirectory $script:LogsPath
+        $script:DoqProxyStderrPath = $logPaths.StderrPath
+
+        $startParams = @{
+            FilePath = $config.ProxyPath
+            ArgumentList = $arguments
+            WindowStyle = 'Hidden'
+            PassThru = $true
+            RedirectStandardOutput = $logPaths.StdoutPath
+            RedirectStandardError = $logPaths.StderrPath
+        }
+        $script:DoqProxyProcess = Start-Process @startParams
         Start-Sleep -Milliseconds 600
 
         if ($script:DoqProxyProcess.HasExited) {
             $exitCode = $script:DoqProxyProcess.ExitCode
+            $stderrSnippet = ""
+            if (Test-Path -LiteralPath $logPaths.StderrPath) {
+                $stderrSnippet = (Get-Content -LiteralPath $logPaths.StderrPath -Raw -ErrorAction SilentlyContinue)
+                if ($stderrSnippet) { $stderrSnippet = " stderr: $($stderrSnippet.Trim().Substring(0, [Math]::Min($stderrSnippet.Trim().Length, 200)))" }
+            }
             $script:DoqProxyProcess = $null
-            throw "dnsproxy exited immediately with code $exitCode."
+            throw "dnsproxy exited immediately with code $exitCode.$stderrSnippet"
         }
 
-        $script:txtDoqProxyStatus.Text = "DoQ proxy running on $($config.ListenAddress):$($config.ListenPort). PID $($script:DoqProxyProcess.Id)."
+        $trustReport = Get-DoqProxyTrustReport -ProxyPath $config.ProxyPath
+        Write-OperationLog -Action "DoQ proxy started" -Result "Info" -Detail "PID $($script:DoqProxyProcess.Id) path=$($config.ProxyPath) SHA256=$($trustReport.SHA256) stdout=$($logPaths.StdoutPath)"
+
+        $script:txtDoqProxyStatus.Text = "DoQ proxy running on $($config.ListenAddress):$($config.ListenPort). PID $($script:DoqProxyProcess.Id).`nLogs: $($logPaths.StdoutPath)"
         Update-Status "DoQ proxy started" -Type Success
     } catch {
         $script:txtDoqProxyStatus.Text = "Failed to start DoQ proxy: $($_.Exception.Message)"
