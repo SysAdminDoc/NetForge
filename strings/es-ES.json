@@ -275,7 +275,7 @@
     "placeholder.benchmarkOutput": "Pulse Ejecutar benchmark para probar la latencia de resolvers.",
     "placeholder.capabilityMatrix": "Pulse Escanear para verificar las capacidades del host.",
     "placeholder.localeStatus": "Idioma actual cargado desde la configuracion.",
-    "placeholder.releaseVersion": "Current version: --",
+    "placeholder.releaseVersion": "Version actual: --",
     "placeholder.hostnamesExample": "intranet.local archivos.local",
     "placeholder.hostsGroupExample": "Trabajo",
     "placeholder.rdpTargetExample": "server.example.com",
