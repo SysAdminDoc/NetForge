@@ -2759,6 +2759,45 @@ Describe 'Diagnostic target validation' {
     }
 }
 
+Describe 'Hosts group name security' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Test-HostsGroupName')
+    }
+
+    It 'rejects group names with newlines' {
+        Test-HostsGroupName -Name "Legit`nEvil" | Should -BeFalse
+        Test-HostsGroupName -Name "Legit`r`nEvil" | Should -BeFalse
+    }
+
+    It 'rejects group names with hash or pipe' {
+        Test-HostsGroupName -Name "group#test" | Should -BeFalse
+        Test-HostsGroupName -Name "group|test" | Should -BeFalse
+    }
+
+    It 'accepts valid group names' {
+        Test-HostsGroupName -Name "Work servers" | Should -BeTrue
+        Test-HostsGroupName -Name "home-lab" | Should -BeTrue
+    }
+}
+
+Describe 'QR decompression limit' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'ConvertTo-Base64Url',
+            'ConvertFrom-Base64Url',
+            'ConvertTo-GzipBase64Url',
+            'ConvertFrom-GzipBase64Url'
+        )
+    }
+
+    It 'round-trips a normal payload' {
+        $input = '{"Name":"Test","SchemaVersion":3}'
+        $compressed = ConvertTo-GzipBase64Url -Text $input
+        $result = ConvertFrom-GzipBase64Url -Text $compressed
+        $result | Should -Be $input
+    }
+}
+
 Describe 'Accessibility metadata' {
     It 'lists automation names for primary workflows' {
         $source = Get-Content -Raw $script:NetForgePath

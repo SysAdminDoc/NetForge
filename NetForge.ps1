@@ -32,7 +32,8 @@ if (-not $isAdmin) {
 
             $text = [string]$Value
             if ($text -match '[\s"]') {
-                return '"' + ($text -replace '"', '\"') + '"'
+                $escaped = $text -replace '(\\+)$', '$1$1'
+                return '"' + ($escaped -replace '"', '\"') + '"'
             }
             return $text
         }
@@ -4305,7 +4306,7 @@ function Test-HostsGroupName {
     param([string]$Name)
 
     $value = ([string]$Name).Trim()
-    return (-not [string]::IsNullOrWhiteSpace($value) -and $value.Length -le 64 -and $value -notmatch '[|#]')
+    return (-not [string]::IsNullOrWhiteSpace($value) -and $value.Length -le 64 -and $value -notmatch '[|#\r\n]')
 }
 
 function Test-HostsEntryHostName {
@@ -4416,7 +4417,7 @@ function ConvertTo-HostsManagedSection {
 
     $lines = @((Get-HostsSectionBeginMarker))
     foreach ($group in @($Groups)) {
-        $name = ([string]$group.Name).Trim()
+        $name = ([string]$group.Name).Trim() -replace '[\r\n]', ' '
         if ([string]::IsNullOrWhiteSpace($name)) { continue }
         $state = if ([bool]$group.Enabled) { "enabled" } else { "disabled" }
         $lines += "# NetForge group: $name | $state"
@@ -9912,7 +9913,11 @@ function ConvertFrom-GzipBase64Url {
     try {
         $gzip = New-Object System.IO.Compression.GzipStream -ArgumentList $inputStream, ([System.IO.Compression.CompressionMode]::Decompress)
         $buffer = New-Object byte[] 4096
+        $maxDecompressed = 1 * 1024 * 1024
+        $totalRead = 0
         while (($read = $gzip.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $totalRead += $read
+            if ($totalRead -gt $maxDecompressed) { throw "Decompressed payload exceeds 1 MB limit." }
             $outputStream.Write($buffer, 0, $read)
         }
         return [System.Text.Encoding]::UTF8.GetString($outputStream.ToArray())
@@ -10143,6 +10148,7 @@ function Save-AppSetting {
     }
 
     $settings = Get-AppSettings
+    [void]$settings.Remove('SettingsReadWarning')
     if (Test-ProtectedAppSettingName -Name $Name) {
         $protectedName = Get-ProtectedAppSettingName -Name $Name
         if ([string]::IsNullOrWhiteSpace([string]$Value)) {
@@ -12128,7 +12134,7 @@ function Get-RdpLaunchPlan {
             IsValid = $true
             Message = ""
             FilePath = "mstsc.exe"
-            ArgumentList = '"' + ($fullPath -replace '"', '\"') + '"'
+            ArgumentList = '"' + (($fullPath -replace '(\\+)$', '$1$1') -replace '"', '\"') + '"'
             DisplayTarget = $fullPath
         }
     }
