@@ -1896,6 +1896,71 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'Configuration export and import preview' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-ConfigExportManifest',
+            'Get-ProfileImportPreview',
+            'Format-ImportPreviewReport'
+        )
+    }
+
+    It 'builds a full export manifest with no suppressed fields' {
+        $profiles = @(
+            [pscustomobject]@{ Name = 'Work'; AutoApply = $true },
+            [pscustomobject]@{ Name = 'Home'; AutoApply = $false }
+        )
+
+        $manifest = Get-ConfigExportManifest -Profiles $profiles -Mode 'full'
+
+        $manifest.Mode | Should -Be 'full'
+        $manifest.ProfileCount | Should -Be 2
+        $manifest.SuppressedFields.Count | Should -Be 0
+    }
+
+    It 'builds a shareable export manifest with suppressed privacy fields' {
+        $profiles = @([pscustomobject]@{ Name = 'Work'; AutoApply = $true })
+
+        $manifest = Get-ConfigExportManifest -Profiles $profiles -Mode 'shareable'
+
+        $manifest.Mode | Should -Be 'shareable'
+        $manifest.SuppressedFields | Should -Contain 'MatchGatewayMac'
+        $manifest.SuppressedFields | Should -Contain 'ProxyServer'
+    }
+
+    It 'previews import with accepted, conflicting, and rejected profiles' {
+        $incoming = @(
+            [pscustomobject]@{ Name = 'NewProfile' },
+            [pscustomobject]@{ Name = 'Work' },
+            [pscustomobject]@{ Name = '' }
+        )
+
+        $preview = Get-ProfileImportPreview -IncomingProfiles $incoming -ExistingProfileNames @('Work', 'Home')
+
+        $preview.AcceptedCount | Should -Be 1
+        $preview.ConflictingCount | Should -Be 1
+        $preview.RejectedCount | Should -Be 1
+        $preview.Conflicting[0].Name | Should -Be 'Work'
+    }
+
+    It 'formats an import preview report' {
+        $preview = [pscustomobject]@{
+            AcceptedCount = 2
+            ConflictingCount = 1
+            RejectedCount = 0
+            Accepted = @([pscustomobject]@{ Name = 'A' }, [pscustomobject]@{ Name = 'B' })
+            Conflicting = @([pscustomobject]@{ Name = 'C'; Reason = 'Profile already exists.' })
+            Rejected = @()
+        }
+
+        $report = Format-ImportPreviewReport -Preview $preview
+
+        $report | Should -Match 'Accept: 2'
+        $report | Should -Match 'Conflict: 1'
+        $report | Should -Match 'already exist'
+    }
+}
+
 Describe 'Capability matrix' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

@@ -8983,6 +8983,98 @@ function Get-ProfileImportRecords {
     }
 }
 
+function Get-ConfigExportManifest {
+    param(
+        [pscustomobject[]]$Profiles,
+        [string]$Mode = "full"
+    )
+
+    $redactedFields = @('MatchGatewayMac', 'ProxyServer', 'ProxyBypassList', 'MappedDrives')
+    $included = @()
+    $suppressed = @()
+
+    foreach ($profile in $Profiles) {
+        $entry = [pscustomobject]@{
+            Name = [string]$profile.Name
+            HasAutoApply = [bool]$profile.AutoApply
+        }
+        $included += $entry
+    }
+
+    if ($Mode -eq "shareable") {
+        $suppressed = $redactedFields
+    }
+
+    return [pscustomobject]@{
+        Mode = $Mode
+        ProfileCount = $Profiles.Count
+        IncludedProfiles = $included
+        SuppressedFields = $suppressed
+    }
+}
+
+function Get-ProfileImportPreview {
+    param(
+        [pscustomobject[]]$IncomingProfiles,
+        [string[]]$ExistingProfileNames
+    )
+
+    $accepted = @()
+    $conflicting = @()
+    $rejected = @()
+
+    foreach ($profile in $IncomingProfiles) {
+        $name = [string]$profile.Name
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            $rejected += [pscustomobject]@{ Name = "(unnamed)"; Reason = "Missing profile name." }
+            continue
+        }
+
+        if ($ExistingProfileNames -contains $name) {
+            $conflicting += [pscustomobject]@{ Name = $name; Reason = "Profile already exists." }
+        } else {
+            $accepted += [pscustomobject]@{ Name = $name }
+        }
+    }
+
+    return [pscustomobject]@{
+        AcceptedCount = $accepted.Count
+        ConflictingCount = $conflicting.Count
+        RejectedCount = $rejected.Count
+        Accepted = $accepted
+        Conflicting = $conflicting
+        Rejected = $rejected
+    }
+}
+
+function Format-ImportPreviewReport {
+    param([pscustomobject]$Preview)
+
+    $lines = @()
+    $lines += "Import preview:"
+    $lines += "  Accept: $($Preview.AcceptedCount) profile(s)"
+    $lines += "  Conflict: $($Preview.ConflictingCount) profile(s) already exist"
+    $lines += "  Rejected: $($Preview.RejectedCount) profile(s) invalid"
+
+    if ($Preview.ConflictingCount -gt 0) {
+        $lines += ""
+        $lines += "Conflicting profiles (will be skipped):"
+        foreach ($c in $Preview.Conflicting) {
+            $lines += "  - $($c.Name): $($c.Reason)"
+        }
+    }
+
+    if ($Preview.RejectedCount -gt 0) {
+        $lines += ""
+        $lines += "Rejected profiles:"
+        foreach ($r in $Preview.Rejected) {
+            $lines += "  - $($r.Name): $($r.Reason)"
+        }
+    }
+
+    return ($lines -join "`n")
+}
+
 function Get-SafeProfileFileName {
     param([string]$Name)
 
