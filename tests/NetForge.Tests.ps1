@@ -2574,6 +2574,125 @@ Describe 'DoQ proxy trust and session helpers' {
     }
 }
 
+Describe 'Profile apply target validation' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIP',
+            'Test-ValidIPv4Address',
+            'Test-ValidIPv4PrefixLength',
+            'Test-ValidIPv6Address',
+            'Test-ValidIPv6PrefixLength',
+            'Get-ApplyValidationResult',
+            'Get-IPv6ApplyTarget',
+            'Test-ValidProxyServer',
+            'Test-ValidProxyBypass',
+            'ConvertFrom-MappedDriveText',
+            'ConvertTo-MappedDriveText',
+            'Normalize-MappedDriveList',
+            'Get-ProfileApplyTarget'
+        )
+    }
+
+    It 'builds a valid DHCP apply target from a DHCP profile' {
+        $profile = [pscustomobject]@{
+            Name = 'Test DHCP'
+            UseDHCP = $true
+            UseDHCPForDNS = $true
+            ConfigureNetworkCategory = $false
+            ConfigureProxy = $false
+            ConfigureDefaultPrinter = $false
+            ConfigureMappedDrives = $false
+        }
+
+        $target = Get-ProfileApplyTarget -ProfileData $profile
+
+        $target.IsValid | Should -BeTrue
+        $target.UseDHCP | Should -BeTrue
+        $target.UseAutomatic | Should -BeTrue
+    }
+
+    It 'builds a valid static IP and DNS apply target' {
+        $profile = [pscustomobject]@{
+            Name = 'Test Static'
+            UseDHCP = $false
+            IPAddress = '192.168.1.50'
+            Gateway = '192.168.1.1'
+            PrefixLength = '24'
+            UseDHCPForDNS = $false
+            PrimaryDNS = '8.8.8.8'
+            SecondaryDNS = '8.8.4.4'
+            ConfigureNetworkCategory = $false
+            ConfigureProxy = $false
+            ConfigureDefaultPrinter = $false
+            ConfigureMappedDrives = $false
+        }
+
+        $target = Get-ProfileApplyTarget -ProfileData $profile
+
+        $target.IsValid | Should -BeTrue
+        $target.UseDHCP | Should -BeFalse
+        $target.IPAddress | Should -Be '192.168.1.50'
+        $target.PrefixLength | Should -Be 24
+        $target.Servers.Count | Should -Be 2
+    }
+
+    It 'rejects static profile with invalid IP address' {
+        $profile = [pscustomobject]@{
+            Name = 'Bad IP'
+            UseDHCP = $false
+            IPAddress = 'not-an-ip'
+            PrefixLength = '24'
+            UseDHCPForDNS = $true
+            ConfigureNetworkCategory = $false
+            ConfigureProxy = $false
+            ConfigureDefaultPrinter = $false
+            ConfigureMappedDrives = $false
+        }
+
+        $target = Get-ProfileApplyTarget -ProfileData $profile
+
+        $target.IsValid | Should -BeFalse
+        $target.Message | Should -Match 'invalid IPv4'
+    }
+
+    It 'rejects static DNS profile with invalid primary DNS' {
+        $profile = [pscustomobject]@{
+            Name = 'Bad DNS'
+            UseDHCP = $true
+            UseDHCPForDNS = $false
+            PrimaryDNS = 'not-valid'
+            ConfigureNetworkCategory = $false
+            ConfigureProxy = $false
+            ConfigureDefaultPrinter = $false
+            ConfigureMappedDrives = $false
+        }
+
+        $target = Get-ProfileApplyTarget -ProfileData $profile
+
+        $target.IsValid | Should -BeFalse
+        $target.Message | Should -Match 'invalid primary DNS'
+    }
+
+    It 'rejects proxy profile with empty proxy server' {
+        $profile = [pscustomobject]@{
+            Name = 'Bad Proxy'
+            UseDHCP = $true
+            UseDHCPForDNS = $true
+            ConfigureNetworkCategory = $false
+            ConfigureProxy = $true
+            ProxyEnabled = $true
+            ProxyServer = ''
+            ConfigureDefaultPrinter = $false
+            ConfigureMappedDrives = $false
+        }
+
+        $target = Get-ProfileApplyTarget -ProfileData $profile
+
+        $target.IsValid | Should -BeFalse
+        $target.Message | Should -Match 'no proxy server'
+    }
+}
+
 Describe 'Proxy format validation' {
     BeforeAll {
         Import-NetForgeFunction -Name @('Test-ValidProxyServer', 'Test-ValidProxyBypass')
