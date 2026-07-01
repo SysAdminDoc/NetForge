@@ -1811,7 +1811,7 @@ function Apply-Localization {
 
                                         <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Width="150">
                                             <Button x:Name="btnApplyMetric" Content="Apply Metric" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
-                                            <Button x:Name="btnAutoMetric" Content="Auto Metric" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
+                                            <Button x:Name="btnAutoMetric" Content="Auto Metric" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8" ToolTip="Restore automatic interface metric"/>
                                             <Button x:Name="btnIPv4FirstMetric" Content="IPv4 First" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
                                             <Button x:Name="btnIPv6FirstMetric" Content="IPv6 First" Style="{StaticResource ModernButton}" Padding="14,8"/>
                                         </StackPanel>
@@ -2287,8 +2287,8 @@ function Apply-Localization {
                                     <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12">
                                         <StackPanel>
                                             <Button x:Name="btnNewProfile" Content="Create New Profile" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8"/>
-                                            <Button x:Name="btnExportProfileQr" Content="Export QR" Style="{StaticResource ModernButton}" Margin="0,0,0,8"/>
-                                            <Button x:Name="btnImportProfileQr" Content="Import QR" Style="{StaticResource ModernButton}" Margin="0,0,0,8"/>
+                                            <Button x:Name="btnExportProfileQr" Content="Export QR" Style="{StaticResource ModernButton}" Margin="0,0,0,8" ToolTip="Export the selected profile as a QR code image"/>
+                                            <Button x:Name="btnImportProfileQr" Content="Import QR" Style="{StaticResource ModernButton}" Margin="0,0,0,8" ToolTip="Import a profile from a QR code image"/>
                                             <Button x:Name="btnDeleteProfile" Content="Delete Profile" Style="{StaticResource DangerButton}"/>
                                         </StackPanel>
                                     </Border>
@@ -2627,7 +2627,7 @@ function Apply-Localization {
                                             <Button x:Name="btnPortScan" Content="Port Scan" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnReachabilityWizard" Content="Why Can't I Reach X?" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnPacketCapture" Content="Start Capture" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
-                                            <Button x:Name="btnCableDiagnostics" Content="Cable Diag" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
+                                            <Button x:Name="btnCableDiagnostics" Content="Cable Diag" Style="{StaticResource ModernButton}" Margin="0,0,12,0" ToolTip="Run cable and transceiver diagnostics on the selected adapter"/>
                                             <Button x:Name="btnNslookup" Content="NSLookup" Style="{StaticResource ModernButton}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnRdapLookup" Content="RDAP Lookup" Style="{StaticResource ModernButton}"/>
                                         </WrapPanel>
@@ -8651,11 +8651,13 @@ function Resolve-DoqProxyPath {
     if ([string]::IsNullOrWhiteSpace($pathText)) { return $null }
 
     if (Test-Path -LiteralPath $pathText -PathType Leaf) {
-        return (Resolve-Path -LiteralPath $pathText).Path
+        $resolved = (Resolve-Path -LiteralPath $pathText).Path
+        if ($resolved -notmatch '\.exe$') { return $null }
+        return $resolved
     }
 
     $command = Get-Command $pathText -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
+    if ($command -and $command.Source -match '\.exe$') { return $command.Source }
 
     return $null
 }

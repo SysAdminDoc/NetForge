@@ -82,6 +82,20 @@ function Get-CodeSigningCertificate {
     return $null
 }
 
+$scriptPath = Join-Path $repoRoot 'NetForge.ps1'
+$scriptText = Get-Content -Raw -LiteralPath $scriptPath
+$escapedVersion = [regex]::Escape($version)
+if ($scriptText -notmatch "\`$script:AppVersion\s*=\s*`"$escapedVersion`"") {
+    throw "NetForge.ps1 AppVersion does not match version.json ($version). Run Set-NetForgeVersion.ps1 first."
+}
+$readmePath = Join-Path $repoRoot 'README.md'
+if (Test-Path -LiteralPath $readmePath) {
+    $readmeText = Get-Content -Raw -LiteralPath $readmePath
+    if ($readmeText -notmatch "Version-$escapedVersion-") {
+        throw "README.md version badge does not match version.json ($version). Run Set-NetForgeVersion.ps1 first."
+    }
+}
+
 $resolvedRepo = (Resolve-Path -LiteralPath $repoRoot).Path
 $resolvedOutputParent = [System.IO.Path]::GetFullPath((Split-Path -Parent $OutputDirectory))
 if (-not $resolvedOutputParent.StartsWith($resolvedRepo, [System.StringComparison]::OrdinalIgnoreCase)) {
