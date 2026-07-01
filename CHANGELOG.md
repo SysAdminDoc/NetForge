@@ -2,6 +2,18 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.52.0] - 2026-07-01
+
+- Added: DoQ proxy binary trust report (SHA256, Authenticode, version, modified time) and stdout/stderr session logging.
+- Added: In-app release and checksum verification in Diagnostics tab (GitHub API, version comparison, asset display).
+- Added: DNS provider catalog freshness tool (`tools\Test-DnsCatalogFreshness.ps1`) with capability/endpoint mismatch detection.
+- Added: Vendored DLL dependency manifest (`lib\dependencies.json`) with version drift and license file validation.
+- Added: Settings schema validation (SettingsSchemaVersion, known-key check, corrupt-file quarantine, migration backups).
+- Added: DHCP lease timing and server identity in adapter info panel (lease obtained/expires/remaining, expired flag).
+- Added: Auto-apply priority and match-status inspector in Profiles tab.
+- Added: GUI locale selector in Diagnostics tab (backed by shipped resource files, persists via settings, restart to apply).
+- Added: Capability preflight matrix in Diagnostics tab (admin, modules, cmdlets, executables).
+
 ## [v1.51.0] - 2026-06-29
 
 - Added: Diagnostics export privacy mode with a preview manifest and bundled `redaction-report.json`.
