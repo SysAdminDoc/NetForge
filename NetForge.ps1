@@ -3057,6 +3057,10 @@ function Apply-Localization {
 # ============================================================================
 [void](Initialize-StringResources -Locale $script:UiLocale)
 Invoke-XamlLocalization -XamlDocument $xaml
+$resolvedTheme = (Get-UiThemeCatalog)[(Resolve-UiThemeName -Name $script:UiTheme)]
+if ($resolvedTheme -and $resolvedTheme.BgPrimary) {
+    $xaml.Window.Background = $resolvedTheme.BgPrimary
+}
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
