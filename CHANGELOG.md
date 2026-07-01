@@ -2,6 +2,23 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.55.0] - 2026-07-01
+
+- Security: Hosts group names now reject newline characters; defense-in-depth strip in section builder.
+- Security: Elevation argument quoting escapes trailing backslashes to prevent argument boundary breakout.
+- Security: RDP file path quoting applies same trailing-backslash escape.
+- Security: QR payload decompression capped at 1 MB to prevent decompression bombs.
+- Fixed: SettingsReadWarning key no longer persisted to settings.json on next save.
+- Fixed: Stop-MtrTrace now Disposes the PowerShell runspace instead of only stopping it.
+- Fixed: Invoke-RestoreLastNetworkState uses non-blocking DispatcherTimer instead of Start-Sleep 500ms.
+- Fixed: Remove-SelectedStaticRoute and Remove-SelectedAppRoutingPolicy now require confirmation.
+- Fixed: DNS preset list shows empty-state message when filter yields zero results.
+- Fixed: Adapter classification regex for Cellular (LTE/5G/4G) used word boundaries to prevent false positive on "Controller".
+- Fixed: es-ES.json diacritical marks added throughout (~50 words missing accents/tildes).
+- Fixed: DoH/DoT status messages no longer expose internal netsh commands to users.
+- Added: 9 MAC address validation tests and 6 adapter classification tests.
+- Added: Hosts group name newline rejection test and QR round-trip test.
+
 ## [v1.54.0] - 2026-07-01
 
 - Fixed: Diagnostic targets (ping, traceroute, nslookup, port scan, RDAP) now validated for safe characters before use.
