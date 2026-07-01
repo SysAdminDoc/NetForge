@@ -1883,6 +1883,68 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'DNS catalog freshness helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-DnsProviderEntry',
+            'Format-DnsCatalogFreshnessReport'
+        )
+    }
+
+    It 'detects capability-endpoint mismatches in a provider entry' {
+        $provider = [pscustomobject]@{
+            Name = 'Test Provider'
+            Category = 'Public'
+            Description = 'Test'
+            IPv4 = @('1.2.3.4')
+            IPv6 = @()
+            DoH = 'https://dns.test/dns-query'
+            DoT = ''
+            DoQ = ''
+            Capabilities = @('ipv4', 'ipv6')
+        }
+
+        $issues = @(Test-DnsProviderEntry -Provider $provider)
+
+        $issues.Count | Should -BeGreaterThan 0
+        ($issues -join ' ') | Should -Match 'ipv6 capability but has no IPv6'
+        ($issues -join ' ') | Should -Match 'DoH template but missing doh capability'
+    }
+
+    It 'reports no issues for a well-formed provider entry' {
+        $provider = [pscustomobject]@{
+            Name = 'Good Provider'
+            Category = 'Public'
+            Description = 'Test'
+            IPv4 = @('1.1.1.1')
+            IPv6 = @('2606:4700::1111')
+            DoH = 'https://dns.test/dns-query'
+            DoT = 'dns.test:853'
+            DoQ = ''
+            Capabilities = @('ipv4', 'ipv6', 'doh', 'dot', 'public')
+        }
+
+        $issues = @(Test-DnsProviderEntry -Provider $provider)
+
+        $issues.Count | Should -Be 0
+    }
+
+    It 'formats a freshness report with issues' {
+        $report = Format-DnsCatalogFreshnessReport -TotalProviders 42 -Issues @('Test issue one', 'Test issue two') -CatalogHash 'abc123'
+
+        $report | Should -Match 'Providers: 42'
+        $report | Should -Match 'Hash: abc123'
+        $report | Should -Match 'Issues \(2\)'
+        $report | Should -Match 'Test issue one'
+    }
+
+    It 'formats a clean freshness report' {
+        $report = Format-DnsCatalogFreshnessReport -TotalProviders 42 -Issues @() -CatalogHash 'abc123'
+
+        $report | Should -Match 'No capability/endpoint mismatches'
+    }
+}
+
 Describe 'Release check helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

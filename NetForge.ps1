@@ -6910,6 +6910,76 @@ function ConvertFrom-DnsProviderCatalog {
     return [pscustomobject]@{ IsValid = $true; Message = "Loaded $($presets.Count) DNS providers."; Presets = $presets }
 }
 
+function Test-DnsProviderEntry {
+    param([pscustomobject]$Provider)
+
+    $issues = @()
+    $name = ([string]$Provider.Name).Trim()
+
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        return @("Provider entry is missing a name.")
+    }
+
+    $ipv4 = @($Provider.IPv4 | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    $ipv6 = @($Provider.IPv6 | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    $doh = ([string]$Provider.DoH).Trim()
+    $dot = ([string]$Provider.DoT).Trim()
+    $doq = ([string]$Provider.DoQ).Trim()
+    $capabilities = @($Provider.Capabilities | ForEach-Object { ([string]$_).Trim().ToLowerInvariant() } | Where-Object { $_ })
+
+    if ($capabilities -contains 'doh' -and [string]::IsNullOrWhiteSpace($doh)) {
+        $issues += "$name claims doh capability but has no DoH template."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($doh) -and $capabilities -notcontains 'doh') {
+        $issues += "$name has DoH template but missing doh capability."
+    }
+    if ($capabilities -contains 'dot' -and [string]::IsNullOrWhiteSpace($dot)) {
+        $issues += "$name claims dot capability but has no DoT host."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($dot) -and $capabilities -notcontains 'dot') {
+        $issues += "$name has DoT host but missing dot capability."
+    }
+    if ($capabilities -contains 'doq' -and [string]::IsNullOrWhiteSpace($doq)) {
+        $issues += "$name claims doq capability but has no DoQ upstream."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($doq) -and $capabilities -notcontains 'doq') {
+        $issues += "$name has DoQ upstream but missing doq capability."
+    }
+    if ($capabilities -contains 'ipv6' -and $ipv6.Count -eq 0) {
+        $issues += "$name claims ipv6 capability but has no IPv6 servers."
+    }
+    if ($ipv6.Count -gt 0 -and $capabilities -notcontains 'ipv6') {
+        $issues += "$name has IPv6 servers but missing ipv6 capability."
+    }
+
+    return $issues
+}
+
+function Format-DnsCatalogFreshnessReport {
+    param(
+        [int]$TotalProviders,
+        [string[]]$Issues,
+        [string]$CatalogHash
+    )
+
+    $lines = @()
+    $lines += "DNS provider catalog freshness report"
+    $lines += "Providers: $TotalProviders"
+    $lines += "Hash: $CatalogHash"
+    $lines += ""
+
+    if ($Issues.Count -eq 0) {
+        $lines += "No capability/endpoint mismatches found."
+    } else {
+        $lines += "Issues ($($Issues.Count)):"
+        foreach ($issue in $Issues) {
+            $lines += "  - $issue"
+        }
+    }
+
+    return ($lines -join "`n")
+}
+
 function Import-DnsPresetCatalog {
     param(
         [string]$CatalogPath = $script:DnsCatalogPath,
