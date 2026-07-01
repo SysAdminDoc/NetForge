@@ -2,6 +2,14 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.53.0] - 2026-07-01
+
+- Added: PSScriptAnalyzer exclusions now documented with per-rule justification.
+- Added: Configuration export privacy modes (full backup vs shareable/redacted) with import preview showing accepted/conflicting/rejected counts.
+- Added: Network List Manager identity as an auto-apply match source (network name/GUID/category via COM).
+- Added: DNS resolver benchmark in DNS tab (5-query latency test, sorted results, fastest resolver identification).
+- Added: RDAP IP ownership lookup in Network Tools (IANA bootstrap endpoint selection, netblock/name/country/entity display).
+
 ## [v1.52.0] - 2026-07-01
 
 - Added: DoQ proxy binary trust report (SHA256, Authenticode, version, modified time) and stdout/stderr session logging.
