@@ -1883,6 +1883,81 @@ Describe 'Profile storage migration' {
     }
 }
 
+Describe 'Release check helpers' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Compare-VersionStrings',
+            'Select-ReleaseAssets',
+            'Format-ReleaseCheckReport'
+        )
+    }
+
+    It 'detects update available when latest is newer' {
+        $result = Compare-VersionStrings -Current '1.50.0' -Latest 'v1.51.0'
+
+        $result.Result | Should -Be 'UpdateAvailable'
+        $result.Message | Should -Match '1\.50\.0 -> 1\.51\.0'
+    }
+
+    It 'reports current when versions match' {
+        $result = Compare-VersionStrings -Current '1.51.0' -Latest 'v1.51.0'
+
+        $result.Result | Should -Be 'Current'
+        $result.Message | Should -Match 'latest version'
+    }
+
+    It 'reports ahead when current exceeds latest' {
+        $result = Compare-VersionStrings -Current '1.52.0' -Latest 'v1.51.0'
+
+        $result.Result | Should -Be 'Ahead'
+        $result.Message | Should -Match 'ahead'
+    }
+
+    It 'handles missing version strings gracefully' {
+        $result = Compare-VersionStrings -Current '' -Latest 'v1.51.0'
+
+        $result.Result | Should -Be 'Unknown'
+    }
+
+    It 'selects zip and sha256 assets from a release' {
+        $assets = @(
+            [pscustomobject]@{ name = 'NetForge-v1.51.0.zip'; size = 2000000; browser_download_url = 'https://example.com/zip' },
+            [pscustomobject]@{ name = 'NetForge-v1.51.0.zip.sha256'; size = 128; browser_download_url = 'https://example.com/sha' }
+        )
+
+        $selected = Select-ReleaseAssets -Assets $assets
+
+        $selected.ZipAsset | Should -Not -BeNullOrEmpty
+        $selected.ZipAsset.Name | Should -Be 'NetForge-v1.51.0.zip'
+        $selected.ChecksumAsset | Should -Not -BeNullOrEmpty
+        $selected.ChecksumAsset.Name | Should -Be 'NetForge-v1.51.0.zip.sha256'
+    }
+
+    It 'returns null assets when release has no zip or checksum' {
+        $selected = Select-ReleaseAssets -Assets @()
+
+        $selected.ZipAsset | Should -BeNullOrEmpty
+        $selected.ChecksumAsset | Should -BeNullOrEmpty
+    }
+
+    It 'formats a complete release check report' {
+        $releaseData = [pscustomobject]@{ TagName = 'v1.51.0'; PublishedAt = '2026-06-29'; HtmlUrl = 'https://example.com' }
+        $comparison = [pscustomobject]@{ Result = 'Current'; Message = 'Running latest version (1.51.0).' }
+        $assets = [pscustomobject]@{
+            ZipAsset = [pscustomobject]@{ Name = 'NetForge-v1.51.0.zip'; Size = 2097152; DownloadUrl = 'https://example.com/zip' }
+            ChecksumAsset = [pscustomobject]@{ Name = 'NetForge-v1.51.0.zip.sha256'; Size = 128; DownloadUrl = 'https://example.com/sha' }
+        }
+
+        $report = Format-ReleaseCheckReport -CurrentVersion '1.51.0' -ReleaseData $releaseData -VersionComparison $comparison -Assets $assets
+
+        $report | Should -Match 'Current version: 1.51.0'
+        $report | Should -Match 'Latest release: v1.51.0'
+        $report | Should -Match 'Running latest version'
+        $report | Should -Match 'NetForge-v1.51.0.zip'
+        $report | Should -Match 'NetForge-v1.51.0.zip.sha256'
+    }
+}
+
 Describe 'DoQ proxy trust and session helpers' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

@@ -260,6 +260,8 @@ $script:AccessibilityNames = @{
     btnRestoreNetworkState = "Restore last network state"
     chkDiagnosticsPrivacyMode = "Redact diagnostics export"
     btnExportDiagnostics = "Export diagnostics"
+    btnCheckRelease = "Check latest GitHub release"
+    txtReleaseCheckOutput = "Release check results"
     txtRdpTarget = "Remote Desktop host or RDP file"
     txtRdpProfileName = "Remote Desktop profile name"
     txtRdpAdapterName = "Remote Desktop adapter name or interface index"
@@ -324,7 +326,7 @@ $script:AccessibilityTabOrder = @(
     "txtProfileName", "chkProfileAutoApply", "txtProfileMatchSsid", "txtProfileGatewayMac", "btnCaptureProfileMatch",
     "chkProfileSchedule", "txtProfileScheduleTime", "txtProfileScheduleDays", "chkProfileNetworkCategory", "cmbProfileNetworkCategory", "chkProfileProxy", "chkProfilePrinter", "chkProfileMappedDrives",
     "btnSaveProfile", "btnProfileDiff", "btnApplyProfile",
-    "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
+    "btnFlushDns", "btnRestoreNetworkState", "chkDiagnosticsPrivacyMode", "btnExportDiagnostics", "btnCheckRelease", "txtRdpTarget", "txtRdpProfileName", "txtRdpAdapterName", "btnLaunchRdpProfile", "btnRevertRdpProfile",
     "txtAppRoutingProgram", "btnBrowseAppRoutingProgram", "cmbAppRoutingInterface", "btnApplyAppRouting", "btnRemoveAppRouting", "btnRefreshAppRouting", "lstAppRoutingRules",
     "txtPingTarget", "btnPing", "btnTraceroute", "btnMtrTrace", "btnPortScan", "btnReachabilityWizard", "btnPacketCapture", "btnCableDiagnostics", "btnNslookup",
     "txtRouteDestination", "txtRouteNextHop", "txtRouteMetric", "btnAddStaticRoute", "btnRemoveStaticRoute", "btnRefreshStaticRoutes", "lstStaticRoutes",
@@ -2911,6 +2913,28 @@ function Apply-Localization {
                                             <TextBlock Text="sec" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
                                         </StackPanel>
                                     </Grid>
+                                </Border>
+
+                                <!-- Release Check -->
+                                <TextBlock Text="RELEASE CHECK" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,20,0,12"/>
+
+                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="txtReleaseCheckVersion" Grid.Column="0" Text="Current version: --" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <Button x:Name="btnCheckRelease" Content="Check Release" Style="{StaticResource PrimaryButton}" Grid.Column="1"/>
+                                        </Grid>
+
+                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="200">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <TextBlock x:Name="txtReleaseCheckOutput" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Check Release to query the latest GitHub release."/>
+                                            </ScrollViewer>
+                                        </Border>
+                                    </StackPanel>
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
@@ -6558,6 +6582,193 @@ function Invoke-DnsLookup {
             $script:btnDnsLookup.IsEnabled = $true
             Update-Status "DNS lookup complete"
             $timer.Stop()
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+# ============================================================================
+# RELEASE CHECK FUNCTIONS
+# ============================================================================
+function Compare-VersionStrings {
+    param(
+        [string]$Current,
+        [string]$Latest
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Current) -or [string]::IsNullOrWhiteSpace($Latest)) {
+        return [pscustomobject]@{ Result = "Unknown"; Message = "Version comparison requires both current and latest values." }
+    }
+
+    $cleanCurrent = $Current.TrimStart('v', 'V')
+    $cleanLatest = $Latest.TrimStart('v', 'V')
+
+    try {
+        $currentVersion = [version]$cleanCurrent
+        $latestVersion = [version]$cleanLatest
+    } catch {
+        if ($cleanCurrent -eq $cleanLatest) {
+            return [pscustomobject]@{ Result = "Current"; Message = "Running latest version ($cleanCurrent)." }
+        }
+        return [pscustomobject]@{ Result = "Unknown"; Message = "Could not parse version strings: $cleanCurrent vs $cleanLatest." }
+    }
+
+    if ($currentVersion -eq $latestVersion) {
+        return [pscustomobject]@{ Result = "Current"; Message = "Running latest version ($cleanCurrent)." }
+    } elseif ($currentVersion -lt $latestVersion) {
+        return [pscustomobject]@{ Result = "UpdateAvailable"; Message = "Update available: $cleanCurrent -> $cleanLatest." }
+    } else {
+        return [pscustomobject]@{ Result = "Ahead"; Message = "Running ahead of latest release ($cleanCurrent > $cleanLatest)." }
+    }
+}
+
+function Select-ReleaseAssets {
+    param([object[]]$Assets)
+
+    if ($null -eq $Assets -or $Assets.Count -eq 0) {
+        return [pscustomobject]@{ ZipAsset = $null; ChecksumAsset = $null }
+    }
+
+    $zipAsset = $Assets | Where-Object { $_.name -match '\.zip$' } | Select-Object -First 1
+    $checksumAsset = $Assets | Where-Object { $_.name -match '\.sha256$' } | Select-Object -First 1
+
+    return [pscustomobject]@{
+        ZipAsset = if ($zipAsset) { [pscustomobject]@{ Name = $zipAsset.name; Size = $zipAsset.size; DownloadUrl = $zipAsset.browser_download_url } } else { $null }
+        ChecksumAsset = if ($checksumAsset) { [pscustomobject]@{ Name = $checksumAsset.name; Size = $checksumAsset.size; DownloadUrl = $checksumAsset.browser_download_url } } else { $null }
+    }
+}
+
+function Format-ReleaseCheckReport {
+    param(
+        [string]$CurrentVersion,
+        [pscustomobject]$ReleaseData,
+        [pscustomobject]$VersionComparison,
+        [pscustomobject]$Assets
+    )
+
+    $lines = @()
+    $lines += "Release check at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    $lines += ""
+    $lines += "Current version: $CurrentVersion"
+
+    if ($null -ne $ReleaseData) {
+        $lines += "Latest release: $($ReleaseData.TagName)"
+        if ($ReleaseData.PublishedAt) { $lines += "Published: $($ReleaseData.PublishedAt)" }
+    }
+
+    $lines += ""
+    $lines += "Status: $($VersionComparison.Message)"
+
+    if ($null -ne $Assets) {
+        $lines += ""
+        if ($Assets.ZipAsset) {
+            $sizeMb = if ($Assets.ZipAsset.Size -gt 0) { " ({0:N1} MB)" -f ($Assets.ZipAsset.Size / 1MB) } else { "" }
+            $lines += "Package: $($Assets.ZipAsset.Name)$sizeMb"
+        } else {
+            $lines += "Package: No zip asset found in release."
+        }
+        if ($Assets.ChecksumAsset) {
+            $lines += "Checksum: $($Assets.ChecksumAsset.Name)"
+        } else {
+            $lines += "Checksum: No .sha256 asset found in release."
+        }
+    }
+
+    return ($lines -join "`n")
+}
+
+function Invoke-CheckRelease {
+    $script:txtReleaseCheckVersion.Text = "Current version: $script:AppVersion"
+
+    if (-not $script:PublicIpLookupEnabled) {
+        $script:txtReleaseCheckOutput.Text = "Release check is unavailable when public IP / external endpoint policy is disabled."
+        Update-Status "Release check skipped: endpoint policy disabled" -Type Warning
+        return
+    }
+
+    $script:btnCheckRelease.IsEnabled = $false
+    $script:txtReleaseCheckOutput.Text = "Checking latest release..."
+    Update-Status "Checking latest GitHub release..."
+
+    $currentVersion = $script:AppVersion
+
+    $ps = [PowerShell]::Create()
+    [void]$ps.AddScript({
+        param($AppVersion)
+        try {
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            $url = "https://api.github.com/repos/SysAdminDoc/NetForge/releases/latest"
+            $headers = @{ "User-Agent" = "NetForge/$AppVersion" }
+            $response = Invoke-RestMethod -Uri $url -Headers $headers -TimeoutSec 15 -ErrorAction Stop
+
+            return [pscustomobject]@{
+                Success = $true
+                TagName = [string]$response.tag_name
+                PublishedAt = [string]$response.published_at
+                HtmlUrl = [string]$response.html_url
+                Assets = @($response.assets | ForEach-Object {
+                    [pscustomobject]@{
+                        name = [string]$_.name
+                        size = [long]$_.size
+                        browser_download_url = [string]$_.browser_download_url
+                    }
+                })
+                Error = $null
+            }
+        } catch {
+            return [pscustomobject]@{
+                Success = $false
+                TagName = $null
+                PublishedAt = $null
+                HtmlUrl = $null
+                Assets = @()
+                Error = $_.Exception.Message
+            }
+        }
+    }).AddArgument($currentVersion)
+
+    $handle = $ps.BeginInvoke()
+
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $timer.Add_Tick({
+        if (-not $handle.IsCompleted) { return }
+        $timer.Stop()
+
+        try {
+            $result = $ps.EndInvoke($handle)
+            $ps.Dispose()
+
+            if (-not $result -or -not $result.Success) {
+                $errorMsg = if ($result -and $result.Error) { $result.Error } else { "No response from GitHub API." }
+                $script:txtReleaseCheckOutput.Text = "Release check failed: $errorMsg"
+                Write-OperationLog -Action "ReleaseCheck" -Result "Error" -Detail $errorMsg
+                Update-Status "Release check failed" -Type Error
+                return
+            }
+
+            $releaseData = [pscustomobject]@{
+                TagName = $result.TagName
+                PublishedAt = $result.PublishedAt
+                HtmlUrl = $result.HtmlUrl
+            }
+            $versionComparison = Compare-VersionStrings -Current $currentVersion -Latest $result.TagName
+            $assets = Select-ReleaseAssets -Assets $result.Assets
+            $report = Format-ReleaseCheckReport -CurrentVersion $currentVersion -ReleaseData $releaseData -VersionComparison $versionComparison -Assets $assets
+
+            $script:txtReleaseCheckOutput.Text = $report
+            Write-OperationLog -Action "ReleaseCheck" -Result "Info" -Detail "$($versionComparison.Result): current=$currentVersion latest=$($result.TagName)"
+
+            if ($versionComparison.Result -eq "UpdateAvailable") {
+                Update-Status "Update available: $($result.TagName)" -Type Warning
+            } else {
+                Update-Status "Release check complete: $($versionComparison.Message)" -Type Success
+            }
+        } catch {
+            $script:txtReleaseCheckOutput.Text = "Release check error: $($_.Exception.Message)"
+            Update-Status "Release check failed" -Type Error
+        } finally {
+            $script:btnCheckRelease.IsEnabled = $true
         }
     }.GetNewClosure())
     $timer.Start()
@@ -14064,6 +14275,8 @@ $btnSpeedTest.Add_Click({ Invoke-SpeedTest })
 $btnDnsLookup.Add_Click({ Invoke-DnsLookup })
 $btnSaveEndpointPolicy.Add_Click({ Save-EndpointPolicySettings })
 $btnSaveDiscordWebhook.Add_Click({ Save-DiscordWebhookSettings })
+$btnCheckRelease.Add_Click({ Invoke-CheckRelease })
+$script:txtReleaseCheckVersion.Text = "Current version: $script:AppVersion"
 
 # ============================================================================
 # CONNECTION STATUS TIMER (auto-refresh every 30 seconds)
