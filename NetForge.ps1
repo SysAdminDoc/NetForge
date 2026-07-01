@@ -137,6 +137,7 @@ $script:SpeedTestEndpoint = "https://speed.cloudflare.com/__down?bytes=1048576"
 $script:DiscordWebhookEnabled = $false
 $script:DiscordWebhookUrl = ""
 $script:DiscordWebhookLastStatus = "Discord webhook notifications are disabled."
+$script:SettingsSchemaVersion = 1
 $script:ProtectedSettingNames = @("DiscordWebhookUrl")
 $script:PendingProtectedSettingMigrations = [ordered]@{}
 $script:SecretSettingLoadWarning = ""
@@ -9479,17 +9480,99 @@ function Get-FileSha256 {
     }
 }
 
+function Get-KnownSettingNames {
+    return @(
+        'SettingsSchemaVersion',
+        'ProfileStorePath',
+        'UiLocale',
+        'UiTheme',
+        'CompactMode',
+        'PublicIpLookupEnabled',
+        'ExternalSpeedTestEnabled',
+        'SpeedTestEndpoint',
+        'DiscordWebhookEnabled',
+        'DiscordWebhookUrl',
+        'DiscordWebhookUrlProtected',
+        'AppRoutingPolicies',
+        'UpdatedAt'
+    )
+}
+
+function Test-SettingsSchema {
+    param($Settings)
+
+    $issues = @()
+    $known = Get-KnownSettingNames
+
+    foreach ($key in @($Settings.Keys)) {
+        if ($key -eq 'SettingsReadWarning') { continue }
+        if ($known -notcontains $key) {
+            $issues += "Unknown setting key: $key"
+        }
+    }
+
+    $schemaVersion = 0
+    if ($Settings.Contains('SettingsSchemaVersion')) {
+        [void][int]::TryParse([string]$Settings['SettingsSchemaVersion'], [ref]$schemaVersion)
+    }
+
+    if ($schemaVersion -gt $script:SettingsSchemaVersion) {
+        $issues += "Settings schema version $schemaVersion is newer than supported version $($script:SettingsSchemaVersion)."
+    }
+
+    return [pscustomobject]@{
+        IsValid = ($issues.Count -eq 0)
+        SchemaVersion = $schemaVersion
+        Issues = $issues
+    }
+}
+
+function Backup-SettingsFile {
+    param(
+        [string]$SettingsPath,
+        [string]$ConfigDirectory,
+        [string]$Reason = "migration"
+    )
+
+    if (-not (Test-Path -LiteralPath $SettingsPath -PathType Leaf)) { return $null }
+
+    $stamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
+    $backupName = "settings-backup-$stamp-$Reason.json"
+    $backupPath = Join-Path $ConfigDirectory $backupName
+
+    try {
+        Copy-Item -LiteralPath $SettingsPath -Destination $backupPath -Force -ErrorAction Stop
+        return $backupPath
+    } catch {
+        return $null
+    }
+}
+
 function Get-AppSettings {
     $settings = [ordered]@{}
     if (-not (Test-Path -LiteralPath $script:SettingsFile)) { return $settings }
 
     try {
-        $json = Get-Content -Raw -LiteralPath $script:SettingsFile | ConvertFrom-Json
+        $rawJson = Get-Content -Raw -LiteralPath $script:SettingsFile
+        if ([string]::IsNullOrWhiteSpace($rawJson)) { return $settings }
+
+        $json = $rawJson | ConvertFrom-Json
         foreach ($property in $json.PSObject.Properties) {
             $settings[$property.Name] = $property.Value
         }
     } catch {
-        $settings["SettingsReadWarning"] = $_.Exception.Message
+        $quarantinePath = Backup-SettingsFile -SettingsPath $script:SettingsFile -ConfigDirectory $script:ConfigPath -Reason "corrupt"
+        $quarantineNote = if ($quarantinePath) { " Quarantined to $([System.IO.Path]::GetFileName($quarantinePath))." } else { "" }
+        $settings["SettingsReadWarning"] = "Settings file is corrupt: $($_.Exception.Message).$quarantineNote"
+    }
+
+    if ($settings.Count -gt 0 -and -not $settings.Contains('SettingsReadWarning')) {
+        $validation = Test-SettingsSchema -Settings $settings
+        if (-not $validation.IsValid) {
+            foreach ($issue in $validation.Issues) {
+                Write-OperationLog -Action "SettingsValidation" -Result "Warning" -Detail $issue
+            }
+        }
     }
 
     return $settings
@@ -9521,6 +9604,11 @@ function Save-AppSetting {
     } else {
         $settings[$Name] = $Value
     }
+    $hasSchema = try { $settings.Contains('SettingsSchemaVersion') } catch { $false }
+    if (-not $hasSchema) {
+        Backup-SettingsFile -SettingsPath $script:SettingsFile -ConfigDirectory $script:ConfigPath -Reason "schema-upgrade" | Out-Null
+    }
+    $settings["SettingsSchemaVersion"] = $script:SettingsSchemaVersion
     $settings["UpdatedAt"] = (Get-Date).ToString("o")
 
     $tempPath = Join-Path $script:ConfigPath "settings.$([guid]::NewGuid().ToString('N')).tmp"

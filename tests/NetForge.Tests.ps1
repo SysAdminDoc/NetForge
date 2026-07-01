@@ -846,6 +846,9 @@ Describe 'Endpoint privacy policy' {
             'Protect-AppSettingSecret',
             'Unprotect-AppSettingSecret',
             'Get-AppSettingSecretValue',
+            'Get-KnownSettingNames',
+            'Test-SettingsSchema',
+            'Backup-SettingsFile',
             'Get-AppSettings',
             'Save-AppSetting',
             'Complete-PendingProtectedSettingMigrations',
@@ -857,6 +860,7 @@ Describe 'Endpoint privacy policy' {
         $versionMetadata = Get-Content -Raw -LiteralPath (Join-Path $script:RepoRoot 'version.json') | ConvertFrom-Json
         $script:AppVersion = [string]$versionMetadata.Version
         $script:ProtectedSettingNames = @('DiscordWebhookUrl')
+        $script:SettingsSchemaVersion = 1
     }
 
     It 'normalizes persisted endpoint policy booleans' {
@@ -1201,6 +1205,9 @@ Describe 'App interface guard helpers' {
             'Save-AppRoutingPolicies',
             'Save-AppRoutingPolicyRecord',
             'Save-AppSetting',
+            'Get-KnownSettingNames',
+            'Test-SettingsSchema',
+            'Backup-SettingsFile',
             'Test-AppRoutingFirewallRuleMatchesSpec',
             'Test-ProtectedAppSettingName',
             'Unprotect-AppSettingSecret',
@@ -1209,6 +1216,7 @@ Describe 'App interface guard helpers' {
         $script:AppRoutingRuleGroup = 'NetForge App Routing'
         $script:AppRoutingPolicySettingName = 'AppRoutingPolicies'
         $script:ProtectedSettingNames = @('DiscordWebhookUrl')
+        $script:SettingsSchemaVersion = 1
     }
 
     It 'plans outbound app blocks for every adapter except the allowed interface' {
@@ -1792,6 +1800,9 @@ Describe 'Profile storage migration' {
             'Resolve-ProfileStorePath',
             'Test-SamePath',
             'Get-FileSha256',
+            'Get-KnownSettingNames',
+            'Test-SettingsSchema',
+            'Backup-SettingsFile',
             'Get-AppSettings',
             'Save-AppSetting',
             'Test-ProfileStorePath',
@@ -1801,6 +1812,8 @@ Describe 'Profile storage migration' {
         $script:ProfileSchemaVersion = 3
         $versionMetadata = Get-Content -Raw -LiteralPath (Join-Path $script:RepoRoot 'version.json') | ConvertFrom-Json
         $script:AppVersion = [string]$versionMetadata.Version
+        $script:ProtectedSettingNames = @('DiscordWebhookUrl')
+        $script:SettingsSchemaVersion = 1
     }
 
     It 'normalizes equivalent profile store paths' {
@@ -1880,6 +1893,68 @@ Describe 'Profile storage migration' {
 
         $settings.ProfileStorePath | Should -Be $profileStore
         $settings.UpdatedAt | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'Settings schema validation' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-KnownSettingNames',
+            'Test-SettingsSchema'
+        )
+        $script:SettingsSchemaVersion = 1
+    }
+
+    It 'validates a well-formed settings hash' {
+        $settings = [ordered]@{
+            SettingsSchemaVersion = 1
+            UiTheme = 'GitHub Dark'
+            CompactMode = 'false'
+            PublicIpLookupEnabled = 'true'
+            UpdatedAt = '2026-06-30T12:00:00Z'
+        }
+
+        $result = Test-SettingsSchema -Settings $settings
+
+        $result.IsValid | Should -BeTrue
+        $result.SchemaVersion | Should -Be 1
+        $result.Issues.Count | Should -Be 0
+    }
+
+    It 'detects unknown setting keys' {
+        $settings = [ordered]@{
+            SettingsSchemaVersion = 1
+            UiTheme = 'GitHub Dark'
+            SomeUnknownKey = 'value'
+        }
+
+        $result = Test-SettingsSchema -Settings $settings
+
+        $result.IsValid | Should -BeFalse
+        ($result.Issues -join ' ') | Should -Match 'Unknown setting key'
+    }
+
+    It 'warns when schema version exceeds supported' {
+        $settings = [ordered]@{
+            SettingsSchemaVersion = 99
+        }
+
+        $result = Test-SettingsSchema -Settings $settings
+
+        $result.IsValid | Should -BeFalse
+        ($result.Issues -join ' ') | Should -Match 'newer than supported'
+    }
+
+    It 'handles legacy settings without schema version' {
+        $settings = [ordered]@{
+            UiTheme = 'Catppuccin Mocha'
+            CompactMode = 'true'
+        }
+
+        $result = Test-SettingsSchema -Settings $settings
+
+        $result.SchemaVersion | Should -Be 0
+        $result.IsValid | Should -BeTrue
     }
 }
 
