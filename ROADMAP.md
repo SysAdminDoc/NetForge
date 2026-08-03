@@ -49,17 +49,39 @@ PowerShell/WPF network adapter manager: IP/DHCP switching, 40+ DNS presets, prof
 - Modern Windows.Networking.NetworkInformation WinRT vs legacy netsh/WMI — NetForge is PowerShell WPF, consider WinRT cmdlets for faster enumeration
 - PS5.1 compatibility shim — none of these projects target PS5.1; NetForge's edge is working on LTSC without .NET updates
 
-## Research-Driven Additions
+## Audit Findings (2026-07-01)
 
 ### P1
 
+- [ ] P1 -- Move Update-ConnectionStatus networking calls to background runspace
+  Why: ConnStatusTimer fires every 30s and runs Get-NetIPAddress, Get-NetRoute, netsh wlan show interfaces synchronously on the UI thread.
+  Where: `NetForge.ps1` Update-ConnectionStatus, Update-WifiInfo
+
+- [ ] P1 -- Consolidate duplicate networking cmdlet calls in Update-AdapterDisplay / Update-AdapterDetails
+  Why: 10+ networking cmdlet calls with 3 duplicates (Get-NetIPInterface, Get-NetRoute, Get-NetIPAddress) every time adapter selection changes.
+  Where: `NetForge.ps1` Update-AdapterDisplay, Update-AdapterDetails
+
 ### P2
+
+- [ ] P2 -- Add test coverage for Restore-NetworkSnapshot / Invoke-NetworkMutation control flow
+  Why: Safety-critical rollback code has zero test coverage. Extract a testable planning step.
+  Where: `tests/NetForge.Tests.ps1`
+
+- [ ] P2 -- Add mapped drive UNC path external-server warning
+  Why: Profile QR code imports can map drives to attacker-controlled SMB servers, leaking NTLM hashes from the elevated process.
+  Where: `NetForge.ps1` Set-MappedDriveState
+
+- [ ] P2 -- Move Invoke-AdapterRestartForMac to background runspace
+  Why: 2.4 seconds of Start-Sleep blocking the UI thread during MAC override/revert.
+  Where: `NetForge.ps1` Invoke-AdapterRestartForMac
+
+- [ ] P2 -- Cache netsh wlan show interfaces output with TTL
+  Why: Called independently by Update-WifiInfo (every 30s) and Get-CurrentNetworkSignature (every 5m).
+  Where: `NetForge.ps1` Update-WifiInfo, Get-CurrentNetworkSignature
 
 ### P3
 
-## Research-Driven Additions
-
-### P2
-
-### P3
+- [ ] P3 -- Add maximum entry count per hosts group
+  Why: No limit on entries per group or total groups allows unbounded hosts file growth via crafted import.
+  Where: `NetForge.ps1` ConvertTo-HostsManagedSection
 
