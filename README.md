@@ -85,7 +85,7 @@
 - Event-driven auto-apply profiles when the current SSID or gateway MAC matches saved rules, with timer fallback
 - Scheduled profile switching by day and time through the same rollback-protected apply path
 - Preview profile differences against the selected adapter before applying
-- Optional profile actions for Windows Public/Private network category, system proxy, default printer, and mapped network drives
+- Optional profile actions for Windows Public/Private network category, system proxy, default printer, and mapped network drives, with confirmation before contacting remote SMB servers
 - Quick-apply profiles to any adapter
 - System tray profile switching against the selected or first active adapter
 - Import/export profiles as JSON or PNG QR codes, plus import Windows WLAN profile XML from `netsh wlan export profile`

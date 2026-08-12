@@ -3867,7 +3867,7 @@ function Restore-NetworkSnapshot {
                 Set-DefaultPrinterByName -Name $plan.Environment.DefaultPrinterName
             }
             if ($null -ne $plan.Environment.MappedDrives) {
-                Set-MappedDriveState -MappedDrives $plan.Environment.MappedDrives
+                Set-MappedDriveState -MappedDrives $plan.Environment.MappedDrives -SkipExternalServerWarning
             }
         }
 
@@ -4605,7 +4605,7 @@ function Invoke-ProfileEnvironmentTarget {
     }
 
     if ($Target.ConfigureMappedDrives) {
-        Set-MappedDriveState -MappedDrives $Target.MappedDrives
+        Set-MappedDriveState -MappedDrives $Target.MappedDrives -NonInteractive:$Silent
     }
 }
 
@@ -9922,8 +9922,40 @@ function Get-MappedDriveState {
     return @($drives)
 }
 
+function Get-ExternalMappedDriveServerList {
+    param(
+        $MappedDrives,
+        [string]$ComputerName = $env:COMPUTERNAME,
+        [string]$DnsDomain = $env:USERDNSDOMAIN
+    )
+
+    $localAliases = @(".", "localhost", "127.0.0.1", "::1")
+    if (-not [string]::IsNullOrWhiteSpace($ComputerName)) {
+        $localAliases += $ComputerName.Trim()
+        if (-not [string]::IsNullOrWhiteSpace($DnsDomain)) {
+            $localAliases += "$($ComputerName.Trim()).$($DnsDomain.Trim())"
+        }
+    }
+
+    $servers = @()
+    foreach ($drive in @($MappedDrives)) {
+        $remotePath = [string]$drive.RemotePath
+        if ($remotePath -notmatch '^\\\\([^\\]+)\\') { continue }
+        $server = $Matches[1].Trim()
+        if ([string]::IsNullOrWhiteSpace($server)) { continue }
+        if ($localAliases -icontains $server) { continue }
+        $servers += $server
+    }
+
+    return @($servers | Sort-Object -Unique)
+}
+
 function Set-MappedDriveState {
-    param($MappedDrives)
+    param(
+        $MappedDrives,
+        [switch]$SkipExternalServerWarning,
+        [switch]$NonInteractive
+    )
 
     $targetValidation = Normalize-MappedDriveList -MappedDrives $MappedDrives
     if (-not $targetValidation.IsValid) {
@@ -9933,6 +9965,28 @@ function Set-MappedDriveState {
     $targetDrives = @($targetValidation.MappedDrives)
     $currentDrives = @(Get-MappedDriveState)
     $targetLetters = @($targetDrives | ForEach-Object { $_.DriveLetter })
+    $pendingDrives = @($targetDrives | Where-Object {
+        $target = $_
+        $existing = $currentDrives | Where-Object { $_.DriveLetter -eq $target.DriveLetter } | Select-Object -First 1
+        $null -eq $existing -or $existing.RemotePath -ine $target.RemotePath
+    })
+
+    $externalServers = @(Get-ExternalMappedDriveServerList -MappedDrives $pendingDrives)
+    if (-not $SkipExternalServerWarning -and $externalServers.Count -gt 0) {
+        if ($NonInteractive) {
+            Write-OperationLog -Action "Mapped drive external server warning" -Result "Blocked" -Detail "Interactive confirmation required for $($externalServers.Count) remote SMB server(s)."
+            throw "Mapped drives target remote SMB servers and require interactive confirmation. Apply this profile without -Silent after verifying the servers."
+        }
+
+        $serverLines = @($externalServers | ForEach-Object { "  \\$_" }) -join "`n"
+        $message = "These mapped drives contact remote SMB servers and may send your Windows credentials, including NTLM authentication:`n`n$serverLines`n`nOnly continue if you trust every server. Continue?"
+        $decision = Show-MessageBox -Message $message -Title "Confirm Remote SMB Servers" -Buttons YesNo -Icon Warning
+        if ([string]$decision -ne "Yes") {
+            Write-OperationLog -Action "Mapped drive external server warning" -Result "Cancelled" -Detail "User declined $($externalServers.Count) remote SMB server(s)."
+            throw "Mapped drive changes were cancelled before contacting remote SMB servers."
+        }
+        Write-OperationLog -Action "Mapped drive external server warning" -Result "Confirmed" -Detail "User approved $($externalServers.Count) remote SMB server(s)."
+    }
 
     foreach ($current in $currentDrives) {
         if ($targetLetters -notcontains $current.DriveLetter) {
@@ -9942,6 +9996,7 @@ function Set-MappedDriveState {
 
     foreach ($drive in $targetDrives) {
         $existing = $currentDrives | Where-Object { $_.DriveLetter -eq $drive.DriveLetter } | Select-Object -First 1
+        if ($existing -and $existing.RemotePath -ieq $drive.RemotePath) { continue }
         if ($existing -and $existing.RemotePath -ne $drive.RemotePath) {
             & net.exe use "$($drive.DriveLetter):" /delete /y | Out-Null
         }

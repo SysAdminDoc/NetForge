@@ -8,6 +8,7 @@ All notable changes to NetForge will be documented in this file.
 - Performance: Cache `netsh wlan show interfaces` output for status and auto-apply consumers with a 60-second TTL.
 - Performance: Share one selected-adapter network snapshot between summary and detail views, eliminating duplicate cmdlet calls.
 - Reliability: Validate and normalize rollback snapshots before mutation, with branch coverage for restore and mutation failure control flow.
+- Security: Warn before contacting remote SMB servers from mapped-drive profile actions, and fail closed during silent applies.
 
 ## [v1.57.0] - 2026-07-01
 

@@ -3289,6 +3289,64 @@ Describe 'Network mutation control flow' {
     }
 }
 
+Describe 'Mapped drive external server guard' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-ProfileProperty',
+            'ConvertTo-ProfileBoolean',
+            'ConvertFrom-MappedDriveText',
+            'Normalize-MappedDriveList',
+            'Get-MappedDriveState',
+            'Get-ExternalMappedDriveServerList',
+            'Write-OperationLog',
+            'Set-MappedDriveState'
+        )
+
+        function global:Show-MessageBox {
+            param($Message, $Title, $Buttons, $Icon)
+            return 'No'
+        }
+    }
+
+    BeforeEach {
+        Mock Get-MappedDriveState { @() }
+        Mock Write-OperationLog {}
+        Mock Show-MessageBox { 'No' }
+    }
+
+    It 'lists unique remote servers while excluding local aliases' {
+        $drives = @(
+            [pscustomobject]@{ RemotePath = '\\fileserver\share' },
+            [pscustomobject]@{ RemotePath = '\\FILESERVER\other' },
+            [pscustomobject]@{ RemotePath = '\\WORKSTATION\local' },
+            [pscustomobject]@{ RemotePath = '\\localhost\local' },
+            [pscustomobject]@{ RemotePath = '\\203.0.113.10\drop' }
+        )
+
+        $servers = @(Get-ExternalMappedDriveServerList -MappedDrives $drives -ComputerName 'WORKSTATION' -DnsDomain 'example.test')
+
+        $servers.Count | Should -Be 2
+        $servers | Should -Contain 'fileserver'
+        $servers | Should -Contain '203.0.113.10'
+    }
+
+    It 'cancels before mapping when the user does not trust a remote server' {
+        $drives = @([pscustomobject]@{ DriveLetter = 'Z'; RemotePath = '\\untrusted.example\share'; Persistent = $true })
+
+        { Set-MappedDriveState -MappedDrives $drives } | Should -Throw '*cancelled before contacting*'
+
+        Should -Invoke Show-MessageBox -Times 1 -Exactly -ParameterFilter { $Message -match 'NTLM' -and $Message -match 'untrusted\.example' }
+    }
+
+    It 'fails closed without prompting during silent profile apply' {
+        $drives = @([pscustomobject]@{ DriveLetter = 'Z'; RemotePath = '\\untrusted.example\share'; Persistent = $true })
+
+        { Set-MappedDriveState -MappedDrives $drives -NonInteractive } | Should -Throw '*require interactive confirmation*'
+
+        Should -Invoke Show-MessageBox -Times 0 -Exactly
+    }
+}
+
 Describe 'Accessibility metadata' {
     It 'lists automation names for primary workflows' {
         $source = Get-Content -Raw $script:NetForgePath
