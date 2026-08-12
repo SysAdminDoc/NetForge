@@ -2,7 +2,7 @@
 
 All notable changes to NetForge will be documented in this file.
 
-## [Unreleased]
+## [v1.58.0] - 2026-08-12
 
 - Performance: Move connection-status adapter, address, route, and WLAN queries to a non-overlapping background runspace.
 - Performance: Cache `netsh wlan show interfaces` output for status and auto-apply consumers with a 60-second TTL.
@@ -11,6 +11,7 @@ All notable changes to NetForge will be documented in this file.
 - Security: Warn before contacting remote SMB servers from mapped-drive profile actions, and fail closed during silent applies.
 - Performance: Restart adapters for MAC override/revert in a guarded background runspace with re-enable recovery.
 - Security: Bound managed hosts data to 64 groups, 256 entries per group, 2,048 total entries, and 16 hostnames per entry.
+- Fixed: Use dynamic theme brush resources and replace frozen brushes so startup and runtime theme changes cannot fail on read-only WPF resources.
 
 ## [v1.57.0] - 2026-07-01
 

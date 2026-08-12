@@ -31,6 +31,17 @@ Describe 'NetForge script' {
     }
 }
 
+Describe 'Release version tooling' {
+    It 'reads tracked text files explicitly as UTF-8' {
+        $toolPath = Join-Path $script:RepoRoot 'tools\Set-NetForgeVersion.ps1'
+        $toolText = [System.IO.File]::ReadAllText($toolPath, [System.Text.Encoding]::UTF8)
+
+        $toolText | Should -Match 'function Get-Utf8Text'
+        $toolText | Should -Match '\[System\.IO\.File\]::ReadAllText'
+        $toolText | Should -Not -Match 'Get-Content\s+-Raw'
+    }
+}
+
 Describe 'Profile validation' {
     BeforeAll {
         Import-NetForgeFunction -Name @(
@@ -756,11 +767,17 @@ Describe 'DNS preset apply target helpers' {
 
 Describe 'Theme catalog helpers' {
     BeforeAll {
+        Add-Type -AssemblyName PresentationFramework
         Import-NetForgeFunction -Name @(
             'Get-UiThemeCatalog',
             'Get-UiThemeNames',
-            'Resolve-UiThemeName'
+            'Resolve-UiThemeName',
+            'Set-ThemeBrushColor'
         )
+    }
+
+    AfterAll {
+        Remove-Variable -Name window -Scope Global -ErrorAction SilentlyContinue
     }
 
     It 'ships the expected dark theme alternatives' {
@@ -783,6 +800,31 @@ Describe 'Theme catalog helpers' {
         Resolve-UiThemeName -Name 'nord' | Should -Be 'Nord'
         Resolve-UiThemeName -Name 'catppuccin mocha' | Should -Be 'Catppuccin Mocha'
         Resolve-UiThemeName -Name 'unknown' | Should -Be 'GitHub Dark'
+    }
+
+    It 'uses dynamic resources for mutable theme brushes' {
+        $source = [System.IO.File]::ReadAllText($script:NetForgePath, [System.Text.Encoding]::UTF8)
+
+        $source | Should -Not -Match '\{StaticResource [A-Za-z]+Brush\}'
+        $source | Should -Match '\{DynamicResource BgPrimaryBrush\}'
+        $source | Should -Match '\{DynamicResource TextPrimaryBrush\}'
+    }
+
+    It 'replaces a frozen theme brush instead of mutating it' {
+        [xml]$themeXaml = '<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Window.Resources><SolidColorBrush x:Key="TestBrush" Color="Black"/></Window.Resources><Border Background="{DynamicResource TestBrush}"/></Window>'
+        $reader = New-Object System.Xml.XmlNodeReader $themeXaml
+        $global:window = [System.Windows.Markup.XamlReader]::Load($reader)
+        $original = $global:window.Resources['TestBrush']
+        $original.Freeze()
+        $original.IsFrozen | Should -BeTrue
+
+        Set-ThemeBrushColor -BrushKey 'TestBrush' -Color '#112233'
+
+        $updated = $global:window.Resources['TestBrush']
+        [object]::ReferenceEquals($original, $updated) | Should -BeFalse
+        $updated.IsFrozen | Should -BeFalse
+        $updated.Color.ToString() | Should -Be '#FF112233'
+        $global:window.Content.Background.Color.ToString() | Should -Be '#FF112233'
     }
 }
 

@@ -7,7 +7,7 @@
     WiFi info, speed testing, DNS lookup, and extensive customization options.
 .NOTES
     Author: NetForge
-    Version: 1.57.0
+    Version: 1.58.0
     Requires: Windows PowerShell 5.1+ with Administrator privileges
 #>
 
@@ -91,7 +91,7 @@ Add-Type -AssemblyName System.Drawing
 # CONFIGURATION
 # ============================================================================
 $script:AppName = "NetForge"
-$script:AppVersion = "1.57.0"
+$script:AppVersion = "1.58.0"
 $script:ConfigPath = Join-Path $env:APPDATA "NetForge"
 $script:DefaultProfilesPath = Join-Path $script:ConfigPath "Profiles"
 $script:ProfilesPath = $script:DefaultProfilesPath
@@ -1245,9 +1245,9 @@ function Apply-Localization {
 
         <!-- Button Style -->
         <Style x:Key="ModernButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource BgTertiaryBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BgTertiaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="16,10"/>
             <Setter Property="FontSize" Value="13"/>
@@ -1264,11 +1264,11 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource ButtonHoverBrush}"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ButtonHoverBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBlueBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource ButtonPressedBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ButtonPressedBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5"/>
@@ -1281,8 +1281,8 @@ function Apply-Localization {
 
         <!-- Primary Button Style -->
         <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="{StaticResource SuccessButtonBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource SuccessButtonHoverBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource SuccessButtonBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SuccessButtonHoverBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -1293,10 +1293,10 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource SuccessButtonHoverBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource SuccessButtonHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource SuccessButtonBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource SuccessButtonBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5"/>
@@ -1309,9 +1309,9 @@ function Apply-Localization {
 
         <!-- Danger Button Style -->
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ModernButton}">
-            <Setter Property="Background" Value="{StaticResource DangerButtonBgBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource DangerButtonBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentRedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentRedBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -1322,10 +1322,10 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource DangerButtonHoverBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource DangerButtonHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource DangerButtonPressedBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource DangerButtonPressedBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5"/>
@@ -1338,13 +1338,13 @@ function Apply-Localization {
 
         <!-- TextBox Style -->
         <Style x:Key="ModernTextBox" TargetType="TextBox">
-            <Setter Property="Background" Value="{StaticResource BgPrimaryBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BgPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="CaretBrush" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
@@ -1356,7 +1356,7 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsFocused" Value="True">
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBlueBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -1366,13 +1366,13 @@ function Apply-Localization {
 
         <!-- PasswordBox Style -->
         <Style x:Key="ModernPasswordBox" TargetType="PasswordBox">
-            <Setter Property="Background" Value="{StaticResource BgPrimaryBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BgPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="CaretBrush" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="PasswordBox">
@@ -1384,7 +1384,7 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsFocused" Value="True">
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBlueBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -1394,9 +1394,9 @@ function Apply-Localization {
 
         <!-- ComboBox Style -->
         <Style x:Key="ModernComboBox" TargetType="ComboBox">
-            <Setter Property="Background" Value="{StaticResource BgPrimaryBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BgPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="FontSize" Value="13"/>
@@ -1404,16 +1404,16 @@ function Apply-Localization {
 
         <!-- ListBox Style -->
         <Style x:Key="ModernListBox" TargetType="ListBox">
-            <Setter Property="Background" Value="{StaticResource BgPrimaryBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BgPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
         <!-- ListBoxItem Style -->
         <Style TargetType="ListBoxItem">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="Padding" Value="12,10"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
@@ -1421,16 +1421,16 @@ function Apply-Localization {
                     <ControlTemplate TargetType="ListBoxItem">
                         <Border x:Name="border" Background="{TemplateBinding Background}"
                                 Padding="{TemplateBinding Padding}" BorderThickness="0,0,0,1"
-                                BorderBrush="{StaticResource BorderBrush}">
+                                BorderBrush="{DynamicResource BorderBrush}">
                             <ContentPresenter/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource ListItemHoverBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ListItemHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource ListItemSelectedBrush}"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ListItemSelectedBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentBlueBrush}"/>
                                 <Setter TargetName="border" Property="BorderThickness" Value="2,0,0,1"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -1441,17 +1441,17 @@ function Apply-Localization {
 
         <!-- CheckBox Style -->
         <Style x:Key="ModernCheckBox" TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
                         <StackPanel Orientation="Horizontal">
                             <Border x:Name="checkBorder" Width="18" Height="18" CornerRadius="4"
-                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                    Background="{StaticResource BgPrimaryBrush}" Margin="0,0,8,0">
+                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                    Background="{DynamicResource BgPrimaryBrush}" Margin="0,0,8,0">
                                 <TextBlock x:Name="checkMark" Text="*" FontFamily="Segoe MDL2 Assets"
-                                           FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"
+                                           FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}"
                                            HorizontalAlignment="Center" VerticalAlignment="Center"
                                            Visibility="Collapsed"/>
                             </Border>
@@ -1460,11 +1460,11 @@ function Apply-Localization {
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="checkMark" Property="Visibility" Value="Visible"/>
-                                <Setter TargetName="checkBorder" Property="Background" Value="{StaticResource AccentBlueBrush}"/>
-                                <Setter TargetName="checkBorder" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                                <Setter TargetName="checkBorder" Property="Background" Value="{DynamicResource AccentBlueBrush}"/>
+                                <Setter TargetName="checkBorder" Property="BorderBrush" Value="{DynamicResource AccentBlueBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="checkBorder" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                                <Setter TargetName="checkBorder" Property="BorderBrush" Value="{DynamicResource AccentBlueBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -1474,17 +1474,17 @@ function Apply-Localization {
 
         <!-- RadioButton Style -->
         <Style x:Key="ModernRadioButton" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <StackPanel Orientation="Horizontal">
                             <Border x:Name="radioBorder" Width="18" Height="18" CornerRadius="9"
-                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                    Background="{StaticResource BgPrimaryBrush}" Margin="0,0,8,0">
+                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                    Background="{DynamicResource BgPrimaryBrush}" Margin="0,0,8,0">
                                 <Ellipse x:Name="radioMark" Width="8" Height="8"
-                                         Fill="{StaticResource TextPrimaryBrush}"
+                                         Fill="{DynamicResource TextPrimaryBrush}"
                                          HorizontalAlignment="Center" VerticalAlignment="Center"
                                          Visibility="Collapsed"/>
                             </Border>
@@ -1493,11 +1493,11 @@ function Apply-Localization {
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="radioMark" Property="Visibility" Value="Visible"/>
-                                <Setter TargetName="radioBorder" Property="Background" Value="{StaticResource AccentBlueBrush}"/>
-                                <Setter TargetName="radioBorder" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                                <Setter TargetName="radioBorder" Property="Background" Value="{DynamicResource AccentBlueBrush}"/>
+                                <Setter TargetName="radioBorder" Property="BorderBrush" Value="{DynamicResource AccentBlueBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="radioBorder" Property="BorderBrush" Value="{StaticResource AccentBlueBrush}"/>
+                                <Setter TargetName="radioBorder" Property="BorderBrush" Value="{DynamicResource AccentBlueBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -1513,7 +1513,7 @@ function Apply-Localization {
 
         <Style TargetType="TabItem">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
             <Setter Property="Padding" Value="16,10"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="Medium"/>
@@ -1526,11 +1526,11 @@ function Apply-Localization {
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentOrangeBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource AccentOrangeBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -1554,7 +1554,7 @@ function Apply-Localization {
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Border Grid.Row="0" Background="{StaticResource BgSecondaryBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,16">
+        <Border Grid.Row="0" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -1563,16 +1563,16 @@ function Apply-Localization {
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" Margin="0,0,2,0"/>
-                    <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{StaticResource TextPrimaryBrush}"/>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.57.0" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                    <TextBlock Text="N" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource AccentOrangeBrush}" Margin="0,0,2,0"/>
+                    <TextBlock Text="etForge" FontSize="28" FontWeight="Light" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="4" Padding="8,4" Margin="16,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="v1.58.0" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
                     </Border>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
-                        <TextBlock Text="Theme" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="Theme" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox x:Name="cmbUiTheme" Width="160" Style="{StaticResource ModernComboBox}"/>
                     </StackPanel>
                     <CheckBox x:Name="chkCompactMode" Content="Compact" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center" Margin="0,0,12,0"/>
@@ -1584,7 +1584,7 @@ function Apply-Localization {
         </Border>
 
         <!-- Connection Status Bar -->
-        <Border Grid.Row="1" Background="{StaticResource BgStatusBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,10">
+        <Border Grid.Row="1" Background="{DynamicResource BgStatusBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -1598,69 +1598,69 @@ function Apply-Localization {
 
                 <!-- Connection Status -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,24,0" VerticalAlignment="Center">
-                    <Border x:Name="connStatusDot" Width="10" Height="10" CornerRadius="5" Background="{StaticResource AccentRedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <Border x:Name="connStatusDot" Width="10" Height="10" CornerRadius="5" Background="{DynamicResource AccentRedBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
                     <StackPanel>
-                        <TextBlock Text="STATUS" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
-                        <TextBlock x:Name="txtConnStatus" Text="Checking..." FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Medium"/>
+                        <TextBlock Text="STATUS" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                        <TextBlock x:Name="txtConnStatus" Text="Checking..." FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="Medium"/>
                     </StackPanel>
                 </StackPanel>
 
                 <!-- Local IP -->
                 <StackPanel Grid.Column="1" Margin="0,0,24,0" VerticalAlignment="Center">
-                    <TextBlock Text="LOCAL IP" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
-                    <TextBlock x:Name="txtConnLocalIP" Text="--" FontSize="12" Foreground="{StaticResource AccentBlueBrush}" FontFamily="Consolas"/>
+                    <TextBlock Text="LOCAL IP" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                    <TextBlock x:Name="txtConnLocalIP" Text="--" FontSize="12" Foreground="{DynamicResource AccentBlueBrush}" FontFamily="Consolas"/>
                 </StackPanel>
 
                 <!-- Public IP -->
                 <StackPanel Grid.Column="2" Margin="0,0,24,0" VerticalAlignment="Center">
-                    <TextBlock Text="PUBLIC IP" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
-                    <TextBlock x:Name="txtConnPublicIP" Text="--" FontSize="12" Foreground="{StaticResource AccentBlueBrush}" FontFamily="Consolas"/>
+                    <TextBlock Text="PUBLIC IP" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                    <TextBlock x:Name="txtConnPublicIP" Text="--" FontSize="12" Foreground="{DynamicResource AccentBlueBrush}" FontFamily="Consolas"/>
                 </StackPanel>
 
                 <!-- Gateway -->
                 <StackPanel Grid.Column="3" Margin="0,0,24,0" VerticalAlignment="Center">
-                    <TextBlock Text="GATEWAY" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
-                    <TextBlock x:Name="txtConnGateway" Text="--" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" FontFamily="Consolas"/>
+                    <TextBlock Text="GATEWAY" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                    <TextBlock x:Name="txtConnGateway" Text="--" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" FontFamily="Consolas"/>
                 </StackPanel>
 
                 <!-- Connection Type -->
                 <StackPanel Grid.Column="4" Margin="0,0,24,0" VerticalAlignment="Center">
-                    <TextBlock Text="TYPE" FontSize="9" Foreground="{StaticResource TextMutedBrush}"/>
-                    <TextBlock x:Name="txtConnType" Text="--" FontSize="12" Foreground="{StaticResource AccentOrangeBrush}" FontWeight="Medium"/>
+                    <TextBlock Text="TYPE" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                    <TextBlock x:Name="txtConnType" Text="--" FontSize="12" Foreground="{DynamicResource AccentOrangeBrush}" FontWeight="Medium"/>
                 </StackPanel>
 
                 <!-- WiFi Info (only visible when WiFi) -->
                 <StackPanel x:Name="pnlWifiInfo" Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed">
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                    <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="SSID: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
-                            <TextBlock x:Name="txtWifiSSID" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Medium"/>
+                            <TextBlock Text="SSID: " FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiSSID" Text="--" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="Medium"/>
                         </StackPanel>
                     </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                    <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Signal: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
-                            <TextBlock x:Name="txtWifiSignal" Text="--" FontSize="11" Foreground="{StaticResource AccentGreenBrush}" FontWeight="Medium"/>
+                            <TextBlock Text="Signal: " FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiSignal" Text="--" FontSize="11" Foreground="{DynamicResource AccentGreenBrush}" FontWeight="Medium"/>
                         </StackPanel>
                     </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                    <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Ch: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
-                            <TextBlock x:Name="txtWifiChannel" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
-                            <TextBlock Text=" / " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
-                            <TextBlock x:Name="txtWifiBand" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock Text="Ch: " FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiChannel" Text="--" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock Text=" / " FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiBand" Text="--" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                         </StackPanel>
                     </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                    <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Auth: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
-                            <TextBlock x:Name="txtWifiAuth" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock Text="Auth: " FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiAuth" Text="--" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                         </StackPanel>
                     </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4">
+                    <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="10,4">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Speed: " FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
-                            <TextBlock x:Name="txtWifiSpeed" Text="--" FontSize="11" Foreground="{StaticResource TextPrimaryBrush}"/>
+                            <TextBlock Text="Speed: " FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock x:Name="txtWifiSpeed" Text="--" FontSize="11" Foreground="{DynamicResource TextPrimaryBrush}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -1678,7 +1678,7 @@ function Apply-Localization {
             </Grid.ColumnDefinitions>
 
             <!-- Left Panel - Adapter List -->
-            <Border Grid.Column="0" Background="{StaticResource BgSecondaryBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -1686,20 +1686,20 @@ function Apply-Localization {
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+                    <Border Grid.Row="0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="NETWORK ADAPTERS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="0" Text="NETWORK ADAPTERS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
                             <CheckBox x:Name="chkAdvancedAdapters" Grid.Column="1" Content="Advanced" Style="{StaticResource ModernCheckBox}" FontSize="11" VerticalAlignment="Center"/>
                         </Grid>
                     </Border>
 
                     <ListBox x:Name="lstAdapters" Grid.Row="1" Style="{StaticResource ModernListBox}" BorderThickness="0" Background="Transparent"/>
 
-                    <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12">
+                    <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12">
                         <StackPanel>
                             <Button x:Name="btnEnableAdapter" Content="Enable Adapter" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8"/>
                             <Button x:Name="btnDisableAdapter" Content="Disable Adapter" Style="{StaticResource DangerButton}"/>
@@ -1720,7 +1720,7 @@ function Apply-Localization {
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel Margin="24">
                                 <!-- Current Status -->
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -1728,8 +1728,8 @@ function Apply-Localization {
                                         </Grid.RowDefinitions>
 
                                         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
-                                            <Ellipse x:Name="statusIndicator" Width="10" Height="10" Fill="{StaticResource AccentGreenBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="txtAdapterName" Text="Select an adapter" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <Ellipse x:Name="statusIndicator" Width="10" Height="10" Fill="{DynamicResource AccentGreenBrush}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="txtAdapterName" Text="Select an adapter" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
 
                                         <Grid Grid.Row="1">
@@ -1740,27 +1740,27 @@ function Apply-Localization {
                                             </Grid.ColumnDefinitions>
 
                                             <StackPanel Grid.Column="0">
-                                                <TextBlock Text="Current IP" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                                <TextBlock x:Name="txtCurrentIP" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="Current IP" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                <TextBlock x:Name="txtCurrentIP" Text="--" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="1">
-                                                <TextBlock Text="MAC Address" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                                <TextBlock x:Name="txtMAC" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="MAC Address" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                <TextBlock x:Name="txtMAC" Text="--" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="2">
-                                                <TextBlock Text="Status" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                                <TextBlock x:Name="txtStatus" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                <TextBlock Text="Status" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                <TextBlock x:Name="txtStatus" Text="--" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </StackPanel>
                                         </Grid>
                                     </Grid>
                                 </Border>
 
                                 <!-- MAC Address Override -->
-                                <TextBlock Text="MAC ADDRESS OVERRIDE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="MAC ADDRESS OVERRIDE" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -1773,17 +1773,17 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,16">
-                                            <TextBlock Text="Current MAC" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtMacOverrideCurrent" Text="--" FontSize="13" Foreground="{StaticResource AccentBlueBrush}" FontFamily="Consolas"/>
+                                            <TextBlock Text="Current MAC" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtMacOverrideCurrent" Text="--" FontSize="13" Foreground="{DynamicResource AccentBlueBrush}" FontFamily="Consolas"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,12,16">
-                                            <TextBlock Text="Override Status" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtMacOverrideStatus" Text="No override" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Override Status" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtMacOverrideStatus" Text="No override" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,12,0">
-                                            <TextBlock Text="New MAC (12 hex characters)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="New MAC (12 hex characters)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtMacOverride" Style="{StaticResource ModernTextBox}" Text=""/>
                                         </StackPanel>
 
@@ -1796,9 +1796,9 @@ function Apply-Localization {
                                 </Border>
 
                                 <!-- Interface Metric / Priority -->
-                                <TextBlock Text="ADAPTER PRIORITY / INTERFACE METRIC" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="ADAPTER PRIORITY / INTERFACE METRIC" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -1811,17 +1811,17 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,16">
-                                            <TextBlock Text="IPv4 Metric" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtMetricIPv4Current" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="IPv4 Metric" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtMetricIPv4Current" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,12,16">
-                                            <TextBlock Text="IPv6 Metric" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtMetricIPv6Current" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="IPv6 Metric" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtMetricIPv6Current" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,12,0">
-                                            <TextBlock Text="Manual Metric (lower wins)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Manual Metric (lower wins)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtInterfaceMetric" Style="{StaticResource ModernTextBox}" Text="25"/>
                                         </StackPanel>
 
@@ -1840,9 +1840,9 @@ function Apply-Localization {
                                 </Border>
 
                                 <!-- IP Mode Selection -->
-                                <TextBlock Text="IP CONFIGURATION MODE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="IP CONFIGURATION MODE" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <RadioButton x:Name="rbDHCP" Content="Obtain IP address automatically (DHCP)" Style="{StaticResource ModernRadioButton}" GroupName="IPMode" IsChecked="True" Margin="0,0,0,12"/>
                                         <RadioButton x:Name="rbStatic" Content="Use the following IP address (Static)" Style="{StaticResource ModernRadioButton}" GroupName="IPMode"/>
@@ -1850,7 +1850,7 @@ function Apply-Localization {
                                 </Border>
 
                                 <!-- Static IP Configuration -->
-                                <Border x:Name="pnlStaticIP" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" IsEnabled="False" Opacity="0.6">
+                                <Border x:Name="pnlStaticIP" Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" IsEnabled="False" Opacity="0.6">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -1862,30 +1862,30 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,16">
-                                            <TextBlock Text="IP Address" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="IP Address" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtIPAddress" Style="{StaticResource ModernTextBox}" Text="192.168.1.100"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0,0,16">
-                                            <TextBlock Text="Subnet Mask" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Subnet Mask" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtSubnet" Style="{StaticResource ModernTextBox}" Text="255.255.255.0"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
-                                            <TextBlock Text="Default Gateway" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Default Gateway" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtGateway" Style="{StaticResource ModernTextBox}" Text="192.168.1.1"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,0">
-                                            <TextBlock Text="Prefix Length (CIDR)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Prefix Length (CIDR)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtPrefix" Style="{StaticResource ModernTextBox}" Text="24"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
 
-                                <TextBlock Text="IPv6 ADDRESS CONFIGURATION" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="IPv6 ADDRESS CONFIGURATION" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <CheckBox x:Name="chkConfigureIPv6Address" Content="Configure static IPv6 address" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,16"/>
                                         <Grid x:Name="pnlIPv6StaticConfig" IsEnabled="False" Opacity="0.6">
@@ -1899,17 +1899,17 @@ function Apply-Localization {
                                             </Grid.ColumnDefinitions>
 
                                             <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,16">
-                                                <TextBlock Text="IPv6 Address" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBlock Text="IPv6 Address" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                                 <TextBox x:Name="txtIPv6Address" Style="{StaticResource ModernTextBox}" Text="2001:db8::100"/>
                                             </StackPanel>
 
                                             <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,0">
-                                                <TextBlock Text="IPv6 Prefix Length" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBlock Text="IPv6 Prefix Length" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                                 <TextBox x:Name="txtIPv6Prefix" Style="{StaticResource ModernTextBox}" Text="64"/>
                                             </StackPanel>
 
                                             <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,0">
-                                                <TextBlock Text="IPv6 Gateway (optional)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBlock Text="IPv6 Gateway (optional)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                                 <TextBox x:Name="txtIPv6Gateway" Style="{StaticResource ModernTextBox}" Text=""/>
                                             </StackPanel>
                                         </Grid>
@@ -1929,9 +1929,9 @@ function Apply-Localization {
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel Margin="24">
                                 <!-- DNS Preset Selection -->
-                                <TextBlock Text="DNS SERVER PRESETS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="DNS SERVER PRESETS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -1939,7 +1939,7 @@ function Apply-Localization {
                                         </Grid.RowDefinitions>
 
                                         <!-- Filter Bar -->
-                                        <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+                                        <Border Grid.Row="0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
@@ -1964,9 +1964,9 @@ function Apply-Localization {
                                 </Border>
 
                                 <!-- DNS Mode Selection -->
-                                <TextBlock Text="DNS CONFIGURATION MODE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="DNS CONFIGURATION MODE" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <RadioButton x:Name="rbDnsDHCP" Content="Obtain DNS server address automatically" Style="{StaticResource ModernRadioButton}" GroupName="DNSMode" IsChecked="True" Margin="0,0,0,12"/>
                                         <RadioButton x:Name="rbDnsPreset" Content="Use selected DNS preset" Style="{StaticResource ModernRadioButton}" GroupName="DNSMode" Margin="0,0,0,12"/>
@@ -1975,7 +1975,7 @@ function Apply-Localization {
                                 </Border>
 
                                 <!-- Custom DNS Configuration -->
-                                <Border x:Name="pnlCustomDns" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" IsEnabled="False" Opacity="0.6">
+                                <Border x:Name="pnlCustomDns" Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" IsEnabled="False" Opacity="0.6">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -1987,15 +1987,15 @@ function Apply-Localization {
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
 
-                                        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="IPv4 DNS Servers" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                                        <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="IPv4 DNS Servers" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,12"/>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,16">
-                                            <TextBlock Text="Primary DNS" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Primary DNS" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtDnsPrimary" Style="{StaticResource ModernTextBox}" Text="8.8.8.8"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,16">
-                                            <TextBlock Text="Secondary DNS" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Secondary DNS" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtDnsSecondary" Style="{StaticResource ModernTextBox}" Text="8.8.4.4"/>
                                         </StackPanel>
 
@@ -2004,31 +2004,31 @@ function Apply-Localization {
                                 </Border>
 
                                 <!-- Selected DNS Info -->
-                                <Border x:Name="pnlSelectedDns" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource AccentBlueBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" Visibility="Collapsed">
+                                <Border x:Name="pnlSelectedDns" Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource AccentBlueBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" Visibility="Collapsed">
                                     <StackPanel>
-                                        <TextBlock x:Name="txtSelectedDnsName" Text="Selected DNS" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
-                                        <TextBlock x:Name="txtSelectedDnsDesc" Text="Description" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="txtSelectedDnsName" Text="Selected DNS" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="txtSelectedDnsDesc" Text="Description" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Grid.Column="0">
-                                                <TextBlock Text="Primary" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
-                                                <TextBlock x:Name="txtSelectedDnsPrimary" Text="--" FontSize="13" Foreground="{StaticResource AccentBlueBrush}"/>
+                                                <TextBlock Text="Primary" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                <TextBlock x:Name="txtSelectedDnsPrimary" Text="--" FontSize="13" Foreground="{DynamicResource AccentBlueBrush}"/>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1">
-                                                <TextBlock Text="Secondary" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
-                                                <TextBlock x:Name="txtSelectedDnsSecondary" Text="--" FontSize="13" Foreground="{StaticResource AccentBlueBrush}"/>
+                                                <TextBlock Text="Secondary" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                                <TextBlock x:Name="txtSelectedDnsSecondary" Text="--" FontSize="13" Foreground="{DynamicResource AccentBlueBrush}"/>
                                             </StackPanel>
                                         </Grid>
                                     </StackPanel>
                                 </Border>
 
                                 <!-- Encrypted DNS -->
-                                <TextBlock Text="ENCRYPTED DNS (DOH / DOT)" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="ENCRYPTED DNS (DOH / DOT)" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -2042,17 +2042,17 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,12,16">
-                                            <TextBlock Text="Servers to register" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtDohServers" Text="Select a DNS preset or enter custom DNS servers." FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Servers to register" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtDohServers" Text="Select a DNS preset or enter custom DNS servers." FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,16">
-                                            <TextBlock Text="DoH Template" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="DoH Template" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtDohTemplate" Style="{StaticResource ModernTextBox}" Text=""/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,16">
-                                            <TextBlock Text="DoT Host" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="DoT Host" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtDotHost" Style="{StaticResource ModernTextBox}" Text=""/>
                                         </StackPanel>
 
@@ -2063,19 +2063,19 @@ function Apply-Localization {
 
                                         <StackPanel Grid.Row="0" Grid.RowSpan="4" Grid.Column="1" Width="190">
                                             <Button x:Name="btnRegisterDoh" Content="Register DoH" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8" Padding="14,8"/>
-                                            <TextBlock x:Name="txtDohStatus" Text="Registers DNS-over-HTTPS encryption for selected servers." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock x:Name="txtDohStatus" Text="Registers DNS-over-HTTPS encryption for selected servers." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
                                             <Button x:Name="btnRegisterDot" Content="Register DoT" Style="{StaticResource ModernButton}" Margin="0,14,0,8" Padding="14,8"/>
-                                            <TextBlock x:Name="txtDotStatus" Text="Registers DNS-over-TLS encryption for selected servers." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock x:Name="txtDotStatus" Text="Registers DNS-over-TLS encryption for selected servers." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
                                             <Button x:Name="btnTestEncryptedDns" Content="Test Health" Style="{StaticResource ModernButton}" Margin="0,14,0,8" Padding="14,8"/>
-                                            <TextBlock x:Name="txtEncryptedDnsHealthStatus" Text="Shows adapter DNS, encrypted probes, fallback, proxy, and latency." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock x:Name="txtEncryptedDnsHealthStatus" Text="Shows adapter DNS, encrypted probes, fallback, proxy, and latency." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
 
                                 <!-- Account-Specific Endpoints -->
-                                <TextBlock Text="ACCOUNT-SPECIFIC ENDPOINTS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="ACCOUNT-SPECIFIC ENDPOINTS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="260"/>
@@ -2084,20 +2084,20 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Column="0" Margin="0,0,14,0">
-                                            <TextBlock Text="NextDNS Config ID" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="NextDNS Config ID" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtNextDnsConfigId" Style="{StaticResource ModernTextBox}" Text=""/>
                                         </StackPanel>
 
                                         <Button x:Name="btnApplyNextDnsEndpoints" Grid.Column="1" Content="Apply NextDNS" Style="{StaticResource ModernButton}" Margin="0,20,14,0" Padding="14,8" VerticalAlignment="Top"/>
 
-                                        <TextBlock x:Name="txtNextDnsEndpointStatus" Grid.Column="2" Text="Fills DoH, DoT, and DoQ fields from a NextDNS account configuration ID." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="txtNextDnsEndpointStatus" Grid.Column="2" Text="Fills DoH, DoT, and DoQ fields from a NextDNS account configuration ID." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- DoQ Local Proxy -->
-                                <TextBlock Text="DOQ LOCAL PROXY" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="DOQ LOCAL PROXY" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -2115,11 +2115,11 @@ function Apply-Localization {
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                                <TextBlock Text="dnsproxy.exe Path" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBlock Text="dnsproxy.exe Path" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                                 <TextBox x:Name="txtDoqProxyPath" Style="{StaticResource ModernTextBox}" Text="dnsproxy.exe"/>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                                                <TextBlock Text="DoQ Upstream" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBlock Text="DoQ Upstream" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                                 <TextBox x:Name="txtDoqUpstream" Style="{StaticResource ModernTextBox}" Text="quic://dns.adguard.com"/>
                                             </StackPanel>
                                         </Grid>
@@ -2131,20 +2131,20 @@ function Apply-Localization {
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                                                <TextBlock Text="Listen Address" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBlock Text="Listen Address" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                                 <TextBox x:Name="txtDoqListenAddress" Style="{StaticResource ModernTextBox}" Text="127.0.0.1"/>
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Margin="10,0,10,0">
-                                                <TextBlock Text="Port" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBlock Text="Port" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                                 <TextBox x:Name="txtDoqListenPort" Style="{StaticResource ModernTextBox}" Text="53"/>
                                             </StackPanel>
                                             <StackPanel Grid.Column="2" Margin="10,0,0,0">
-                                                <TextBlock Text="Bootstrap DNS" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                                <TextBlock Text="Bootstrap DNS" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                                 <TextBox x:Name="txtDoqBootstrap" Style="{StaticResource ModernTextBox}" Text="1.1.1.1:53"/>
                                             </StackPanel>
                                         </Grid>
 
-                                        <TextBlock x:Name="txtDoqProxyStatus" Grid.Row="2" Grid.Column="0" Text="Requires AdGuard dnsproxy or a compatible DNS proxy binary." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,2,14,0"/>
+                                        <TextBlock x:Name="txtDoqProxyStatus" Grid.Row="2" Grid.Column="0" Text="Requires AdGuard dnsproxy or a compatible DNS proxy binary." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,2,14,0"/>
 
                                         <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="1">
                                             <Button x:Name="btnValidateDoqProxy" Content="Validate Proxy" Style="{StaticResource ModernButton}" Margin="0,0,0,8" Padding="14,8"/>
@@ -2156,22 +2156,22 @@ function Apply-Localization {
                                 </Border>
 
                                 <!-- DNS Benchmark -->
-                                <TextBlock Text="DNS RESOLVER BENCHMARK" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,20,0,12"/>
+                                <TextBlock Text="DNS RESOLVER BENCHMARK" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,20,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,16">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Benchmark selected preset resolvers (5 queries each)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="0" Text="Benchmark selected preset resolvers (5 queries each)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                             <Button x:Name="btnDnsBenchmark" Grid.Column="1" Content="Run Benchmark" Style="{StaticResource PrimaryButton}" Padding="16,8"/>
                                         </Grid>
 
-                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="300">
+                                        <Border Background="{DynamicResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="300">
                                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                                <TextBlock x:Name="txtDnsBenchmarkOutput" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Run Benchmark to test resolver latency."/>
+                                                <TextBlock x:Name="txtDnsBenchmarkOutput" FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Run Benchmark to test resolver latency."/>
                                             </ScrollViewer>
                                         </Border>
                                     </StackPanel>
@@ -2189,16 +2189,16 @@ function Apply-Localization {
                     <TabItem Header="WiFi">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel Margin="24">
-                                <TextBlock Text="WIFI NETWORKS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="WIFI NETWORKS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="360"/>
                                         </Grid.RowDefinitions>
 
-                                        <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+                                        <Border Grid.Row="0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
@@ -2208,8 +2208,8 @@ function Apply-Localization {
                                                 </Grid.ColumnDefinitions>
 
                                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                                    <TextBlock x:Name="txtWifiScanSummary" Text="Click Scan Networks to find nearby wireless networks." FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
-                                                    <TextBlock Text="Saved Windows WLAN profiles can connect immediately. Unsaved secured networks require a password." FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,4,0,0"/>
+                                                    <TextBlock x:Name="txtWifiScanSummary" Text="Click Scan Networks to find nearby wireless networks." FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                                    <TextBlock Text="Saved Windows WLAN profiles can connect immediately. Unsaved secured networks require a password." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,4,0,0"/>
                                                 </StackPanel>
 
                                                 <Button x:Name="btnWifiRefresh" Grid.Column="1" Content="Scan Networks" Style="{StaticResource ModernButton}" Margin="12,0,0,0" Padding="16,8"/>
@@ -2222,17 +2222,17 @@ function Apply-Localization {
                                     </Grid>
                                 </Border>
 
-                                <TextBlock Text="WIFI SPECTRUM" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="WIFI SPECTRUM" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
-                                        <TextBlock x:Name="txtWifiSpectrumOutput" Text="Scan WiFi networks to build channel utilization." FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="txtWifiSpectrumOutput" Text="Scan WiFi networks to build channel utilization." FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
                                     </ScrollViewer>
                                 </Border>
 
-                                <TextBlock Text="SELECTED NETWORK" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="SELECTED NETWORK" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border x:Name="pnlWifiDetails" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" Visibility="Collapsed">
+                                <Border x:Name="pnlWifiDetails" Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20" Visibility="Collapsed">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -2246,34 +2246,34 @@ function Apply-Localization {
                                         </Grid.RowDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,16,16">
-                                            <TextBlock Text="SSID" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtWifiDetailSsid" Text="--" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="SSID" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailSsid" Text="--" FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="PROFILE" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtWifiDetailProfile" Text="--" FontSize="14" Foreground="{StaticResource AccentBlueBrush}"/>
+                                            <TextBlock Text="PROFILE" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailProfile" Text="--" FontSize="14" Foreground="{DynamicResource AccentBlueBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,16">
-                                            <TextBlock Text="SECURITY" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtWifiDetailSecurity" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="SECURITY" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailSecurity" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="SIGNAL" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtWifiDetailSignal" Text="--" FontSize="13" Foreground="{StaticResource AccentGreenBrush}"/>
+                                            <TextBlock Text="SIGNAL" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailSignal" Text="--" FontSize="13" Foreground="{DynamicResource AccentGreenBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,16,16">
-                                            <TextBlock Text="RADIO / BAND" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtWifiDetailRadio" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="RADIO / BAND" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailRadio" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="CHANNELS / BSSIDS" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtWifiDetailBssids" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="CHANNELS / BSSIDS" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtWifiDetailBssids" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="3" Grid.ColumnSpan="2">
-                                            <TextBlock Text="Password for unsaved secured networks" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Password for unsaved secured networks" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <PasswordBox x:Name="txtWifiPassword" Style="{StaticResource ModernPasswordBox}"/>
                                         </StackPanel>
                                     </Grid>
@@ -2291,7 +2291,7 @@ function Apply-Localization {
                             </Grid.ColumnDefinitions>
 
                             <!-- Profile List -->
-                            <Border Grid.Column="0" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,20,0">
+                            <Border Grid.Column="0" Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Margin="0,0,20,0">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
@@ -2299,13 +2299,13 @@ function Apply-Localization {
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
-                                    <Border Grid.Row="0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
-                                        <TextBlock Text="SAVED PROFILES" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}"/>
+                                    <Border Grid.Row="0" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="16,12">
+                                        <TextBlock Text="SAVED PROFILES" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}"/>
                                     </Border>
 
                                     <ListBox x:Name="lstProfiles" Grid.Row="1" Style="{StaticResource ModernListBox}" BorderThickness="0" Background="Transparent"/>
 
-                                    <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12">
+                                    <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="12">
                                         <StackPanel>
                                             <Button x:Name="btnNewProfile" Content="Create New Profile" Style="{StaticResource PrimaryButton}" Margin="0,0,0,8"/>
                                             <Button x:Name="btnExportProfileQr" Content="Export QR" Style="{StaticResource ModernButton}" Margin="0,0,0,8" ToolTip="Export the selected profile as a QR code image"/>
@@ -2317,16 +2317,16 @@ function Apply-Localization {
                             </Border>
 
                             <!-- Profile Details -->
-                            <Border Grid.Column="1" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                            <Border Grid.Column="1" Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <StackPanel Margin="20">
-                                        <TextBlock Text="PROFILE DETAILS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,16"/>
+                                        <TextBlock Text="PROFILE DETAILS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,16"/>
 
-                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                             <StackPanel>
-                                                <TextBlock Text="Profile Storage" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,10"/>
-                                                <TextBlock x:Name="txtProfileStorePath" Text="Profile store path loading..." FontFamily="Consolas" FontSize="11" Foreground="{StaticResource AccentBlueBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                                                <TextBlock x:Name="txtProfileStoreStatus" Text="Profile storage health loading..." FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                                <TextBlock Text="Profile Storage" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,10"/>
+                                                <TextBlock x:Name="txtProfileStorePath" Text="Profile store path loading..." FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource AccentBlueBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                                <TextBlock x:Name="txtProfileStoreStatus" Text="Profile storage health loading..." FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
                                                 <WrapPanel>
                                                     <Button x:Name="btnChooseProfileStore" Content="Choose Folder" Style="{StaticResource ModernButton}" Margin="0,0,8,8" Padding="14,8"/>
                                                     <Button x:Name="btnUseOneDriveProfileStore" Content="Use OneDrive" Style="{StaticResource ModernButton}" Margin="0,0,8,8" Padding="14,8"/>
@@ -2337,18 +2337,18 @@ function Apply-Localization {
                                         </Border>
 
                                         <StackPanel Margin="0,0,0,16">
-                                            <TextBlock Text="Profile Name" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Profile Name" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtProfileName" Style="{StaticResource ModernTextBox}"/>
                                         </StackPanel>
 
                                         <StackPanel Margin="0,0,0,16">
-                                            <TextBlock Text="Description" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Description" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtProfileDesc" Style="{StaticResource ModernTextBox}" Height="60" TextWrapping="Wrap" AcceptsReturn="True"/>
                                         </StackPanel>
 
-                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                             <StackPanel>
-                                                <TextBlock Text="Auto-Apply Rules" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                                                <TextBlock Text="Auto-Apply Rules" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,12"/>
                                                 <CheckBox x:Name="chkProfileAutoApply" Content="Auto-apply when current network matches" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,10"/>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -2357,11 +2357,11 @@ function Apply-Localization {
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                                        <TextBlock Text="Match SSID" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Match SSID" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileMatchSsid" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1" Margin="8,0,8,0">
-                                                        <TextBlock Text="Gateway MAC" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Gateway MAC" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileGatewayMac" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                     <Button x:Name="btnCaptureProfileMatch" Grid.Column="2" Content="Capture Current" Style="{StaticResource ModernButton}" Padding="14,8" VerticalAlignment="Bottom"/>
@@ -2369,9 +2369,9 @@ function Apply-Localization {
                                             </StackPanel>
                                         </Border>
 
-                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                             <StackPanel>
-                                                <TextBlock Text="Scheduled Apply" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                                                <TextBlock Text="Scheduled Apply" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,12"/>
                                                 <CheckBox x:Name="chkProfileSchedule" Content="Apply profile on schedule" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,10"/>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -2379,20 +2379,20 @@ function Apply-Localization {
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                                        <TextBlock Text="Time (HH:mm)" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Time (HH:mm)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileScheduleTime" Style="{StaticResource ModernTextBox}" Text="08:00"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                        <TextBlock Text="Days" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Days" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileScheduleDays" Style="{StaticResource ModernTextBox}" Text="Every day"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </StackPanel>
                                         </Border>
 
-                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                             <StackPanel>
-                                                <TextBlock Text="IP Configuration" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                                                <TextBlock Text="IP Configuration" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,12"/>
                                                 <CheckBox x:Name="chkProfileDHCP" Content="Use DHCP" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,8"/>
                                                 <Grid Margin="0,8,0,0">
                                                     <Grid.ColumnDefinitions>
@@ -2405,28 +2405,28 @@ function Apply-Localization {
                                                     </Grid.RowDefinitions>
 
                                                     <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,8">
-                                                        <TextBlock Text="IP Address" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="IP Address" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileIP" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,8">
-                                                        <TextBlock Text="Subnet Mask" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Subnet Mask" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileSubnet" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
-                                                        <TextBlock Text="Gateway" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Gateway" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileGateway" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,0">
-                                                        <TextBlock Text="Prefix Length" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Prefix Length" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfilePrefix" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </StackPanel>
                                         </Border>
 
-                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                             <StackPanel>
-                                                <TextBlock Text="DNS Configuration" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                                                <TextBlock Text="DNS Configuration" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,12"/>
                                                 <CheckBox x:Name="chkProfileDnsDHCP" Content="Use DHCP for DNS" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,8"/>
                                                 <Grid Margin="0,8,0,0">
                                                     <Grid.ColumnDefinitions>
@@ -2434,20 +2434,20 @@ function Apply-Localization {
                                                         <ColumnDefinition Width="*"/>
                                                     </Grid.ColumnDefinitions>
                                                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                                        <TextBlock Text="Primary DNS" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Primary DNS" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileDns1" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                                        <TextBlock Text="Secondary DNS" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Secondary DNS" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileDns2" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </StackPanel>
                                         </Border>
 
-                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
+                                        <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16">
                                             <StackPanel>
-                                                <TextBlock Text="Environment Actions" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,12"/>
+                                                <TextBlock Text="Environment Actions" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,12"/>
 
                                                 <Grid Margin="0,0,0,12">
                                                     <Grid.ColumnDefinitions>
@@ -2471,11 +2471,11 @@ function Apply-Localization {
                                                     <CheckBox x:Name="chkProfileProxy" Grid.Column="0" Content="Set system proxy" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center"/>
                                                     <CheckBox x:Name="chkProfileProxyEnabled" Grid.Column="1" Content="Enable proxy" Style="{StaticResource ModernCheckBox}" VerticalAlignment="Center"/>
                                                     <StackPanel Grid.Column="2" Margin="0,0,8,0">
-                                                        <TextBlock Text="Proxy server" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Proxy server" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileProxyServer" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="3" Margin="8,0,0,0">
-                                                        <TextBlock Text="Bypass list" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                        <TextBlock Text="Bypass list" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                         <TextBox x:Name="txtProfileProxyBypass" Style="{StaticResource ModernTextBox}"/>
                                                     </StackPanel>
                                                 </Grid>
@@ -2491,7 +2491,7 @@ function Apply-Localization {
 
                                                 <StackPanel>
                                                     <CheckBox x:Name="chkProfileMappedDrives" Content="Map network drives" Style="{StaticResource ModernCheckBox}" Margin="0,0,0,8"/>
-                                                    <TextBlock Text="One drive per line, for example Z: \\server\share" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                                    <TextBlock Text="One drive per line, for example Z: \\server\share" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
                                                     <TextBox x:Name="txtProfileMappedDrives" Style="{StaticResource ModernTextBox}" Height="72" TextWrapping="Wrap" AcceptsReturn="True"/>
                                                 </StackPanel>
                                             </StackPanel>
@@ -2503,24 +2503,24 @@ function Apply-Localization {
                                             <Button x:Name="btnApplyProfile" Content="Apply to Adapter" Style="{StaticResource ModernButton}" Padding="20,10"/>
                                         </StackPanel>
 
-                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,16,0,0">
+                                        <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,16,0,0">
                                             <StackPanel>
-                                                <TextBlock Text="Profile Diff" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,10"/>
-                                                <TextBlock x:Name="txtProfileDiffOutput" Text="Click Preview Diff to compare this profile against the selected adapter." FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                                <TextBlock Text="Profile Diff" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Margin="0,0,0,10"/>
+                                                <TextBlock x:Name="txtProfileDiffOutput" Text="Click Preview Diff to compare this profile against the selected adapter." FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
                                             </StackPanel>
                                         </Border>
 
-                                        <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,16,0,0">
+                                        <Border Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,16,0,0">
                                             <StackPanel>
                                                 <Grid Margin="0,0,0,10">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0" Text="Auto-Apply Inspector" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                                    <TextBlock Grid.Column="0" Text="Auto-Apply Inspector" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                                                     <Button x:Name="btnRefreshAutoApply" Grid.Column="1" Content="Refresh" Style="{StaticResource ModernButton}" Padding="12,6"/>
                                                 </Grid>
-                                                <TextBlock x:Name="txtAutoApplyInspector" Text="Click Refresh to inspect auto-apply match status." FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                                                <TextBlock x:Name="txtAutoApplyInspector" Text="Click Refresh to inspect auto-apply match status." FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap"/>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -2534,9 +2534,9 @@ function Apply-Localization {
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel Margin="24">
                                 <!-- Quick Actions -->
-                                <TextBlock Text="QUICK ACTIONS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="QUICK ACTIONS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <WrapPanel>
                                         <Button x:Name="btnFlushDns" Content="Flush DNS Cache" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
                                         <Button x:Name="btnReleaseIP" Content="Release IP" Style="{StaticResource ModernButton}" Margin="0,0,12,12"/>
@@ -2551,9 +2551,9 @@ function Apply-Localization {
                                 </Border>
 
                                 <!-- Remote Desktop Profile Launch -->
-                                <TextBlock Text="REMOTE DESKTOP PROFILE LAUNCH" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="REMOTE DESKTOP PROFILE LAUNCH" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -2569,15 +2569,15 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,12">
-                                            <TextBlock Text="Host or .rdp file" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Host or .rdp file" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtRdpTarget" Style="{StaticResource ModernTextBox}" Text="server.example.com"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0,10,12">
-                                            <TextBlock Text="Profile" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Profile" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtRdpProfileName" Style="{StaticResource ModernTextBox}" Text=""/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="2" Margin="10,0,0,12">
-                                            <TextBlock Text="Adapter optional" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Adapter optional" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtRdpAdapterName" Style="{StaticResource ModernTextBox}" Text=""/>
                                         </StackPanel>
 
@@ -2586,14 +2586,14 @@ function Apply-Localization {
                                             <Button x:Name="btnRevertRdpProfile" Content="Revert RDP Profile" Style="{StaticResource ModernButton}" IsEnabled="False"/>
                                         </StackPanel>
 
-                                        <TextBlock x:Name="txtRdpStatus" Grid.Row="2" Grid.ColumnSpan="3" Text="Enter a host and saved profile, or leave Profile blank to use the selected profile." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="txtRdpStatus" Grid.Row="2" Grid.ColumnSpan="3" Text="Enter a host and saved profile, or leave Profile blank to use the selected profile." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- App Interface Guard -->
-                                <TextBlock Text="APP INTERFACE GUARD" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="APP INTERFACE GUARD" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -2608,7 +2608,7 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,10,12">
-                                            <TextBlock Text="Program path" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Program path" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtAppRoutingProgram" Style="{StaticResource ModernTextBox}" Text=""/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="2" Margin="10,20,0,12">
@@ -2616,7 +2616,7 @@ function Apply-Localization {
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,10,12">
-                                            <TextBlock Text="Allowed interface" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Allowed interface" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <ComboBox x:Name="cmbAppRoutingInterface" Style="{StaticResource ModernComboBox}"/>
                                         </StackPanel>
                                         <WrapPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="10,20,0,12">
@@ -2625,15 +2625,15 @@ function Apply-Localization {
                                             <Button x:Name="btnRefreshAppRouting" Content="Refresh Guards" Style="{StaticResource ModernButton}" Padding="16,8"/>
                                         </WrapPanel>
 
-                                        <TextBlock x:Name="txtAppRoutingStatus" Grid.Row="2" Grid.ColumnSpan="3" Text="Blocks the selected app on other current adapters using Windows Firewall interface filters." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                        <TextBlock x:Name="txtAppRoutingStatus" Grid.Row="2" Grid.ColumnSpan="3" Text="Blocks the selected app on other current adapters using Windows Firewall interface filters." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                         <ListBox x:Name="lstAppRoutingRules" Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource ModernListBox}" Height="120"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- Network Diagnostics -->
-                                <TextBlock Text="NETWORK DIAGNOSTICS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="NETWORK DIAGNOSTICS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -2653,18 +2653,18 @@ function Apply-Localization {
                                             <Button x:Name="btnRdapLookup" Content="RDAP Lookup" Style="{StaticResource ModernButton}"/>
                                         </WrapPanel>
 
-                                        <Border Grid.Row="1" Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="250">
+                                        <Border Grid.Row="1" Background="{DynamicResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="250">
                                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                                <TextBlock x:Name="txtDiagOutput" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Diagnostic output will appear here..."/>
+                                                <TextBlock x:Name="txtDiagOutput" FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Diagnostic output will appear here..."/>
                                             </ScrollViewer>
                                         </Border>
                                     </Grid>
                                 </Border>
 
                                 <!-- Static Routes -->
-                                <TextBlock Text="STATIC ROUTES" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="STATIC ROUTES" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -2679,15 +2679,15 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,12">
-                                            <TextBlock Text="Destination Prefix" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Destination Prefix" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtRouteDestination" Style="{StaticResource ModernTextBox}" Text="10.10.0.0/16"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0,10,12">
-                                            <TextBlock Text="Next Hop" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Next Hop" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtRouteNextHop" Style="{StaticResource ModernTextBox}" Text="192.168.1.1"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="2" Margin="10,0,0,12">
-                                            <TextBlock Text="Route Metric" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Route Metric" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtRouteMetric" Style="{StaticResource ModernTextBox}" Text="25"/>
                                         </StackPanel>
 
@@ -2698,14 +2698,14 @@ function Apply-Localization {
                                         </StackPanel>
 
                                         <ListBox x:Name="lstStaticRoutes" Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource ModernListBox}" Height="140" Margin="0,0,0,8"/>
-                                        <TextBlock x:Name="txtStaticRouteStatus" Grid.Row="3" Grid.ColumnSpan="3" Text="Select an adapter to view manual static routes." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="txtStaticRouteStatus" Grid.Row="3" Grid.ColumnSpan="3" Text="Select an adapter to view manual static routes." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- Hosts File Groups -->
-                                <TextBlock Text="HOSTS FILE GROUPS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="HOSTS FILE GROUPS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -2720,15 +2720,15 @@ function Apply-Localization {
                                         </Grid.ColumnDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,10,12">
-                                            <TextBlock Text="Group Name" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Group Name" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtHostsGroupName" Style="{StaticResource ModernTextBox}" Text="Work"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="10,0,10,12">
-                                            <TextBlock Text="Address" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Address" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtHostsAddress" Style="{StaticResource ModernTextBox}" Text="10.10.0.10"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="2" Margin="10,0,0,12">
-                                            <TextBlock Text="Hostnames" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Hostnames" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,0,6"/>
                                             <TextBox x:Name="txtHostsNames" Style="{StaticResource ModernTextBox}" Text="intranet.local files.local"/>
                                         </StackPanel>
 
@@ -2741,14 +2741,14 @@ function Apply-Localization {
                                         </StackPanel>
 
                                         <ListBox x:Name="lstHostsGroups" Grid.Row="2" Grid.ColumnSpan="3" Style="{StaticResource ModernListBox}" Height="150" Margin="0,0,0,8"/>
-                                        <TextBlock x:Name="txtHostsStatus" Grid.Row="3" Grid.ColumnSpan="3" Text="NetForge-managed hosts groups are written inside a marked section; unmanaged hosts lines are preserved." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="txtHostsStatus" Grid.Row="3" Grid.ColumnSpan="3" Text="NetForge-managed hosts groups are written inside a marked section; unmanaged hosts lines are preserved." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- Adapter Information -->
-                                <TextBlock Text="ADAPTER DETAILS" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="ADAPTER DETAILS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -2764,53 +2764,53 @@ function Apply-Localization {
                                         </Grid.RowDefinitions>
 
                                         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,16">
-                                            <TextBlock Text="Interface Index" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoIndex" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Interface Index" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoIndex" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="Interface Type" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoType" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Interface Type" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoType" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,16">
-                                            <TextBlock Text="Link Speed" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoSpeed" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Link Speed" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoSpeed" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="Media State" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoMedia" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Media State" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoMedia" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,0,16">
-                                            <TextBlock Text="DHCP Enabled" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoDHCP" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="DHCP Enabled" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoDHCP" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="DHCP Server / Lease" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoDHCPServer" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock Text="DHCP Server / Lease" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoDHCPServer" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,0,16">
-                                            <TextBlock Text="DNS Servers" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoDNS" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock Text="DNS Servers" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoDNS" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="Default Gateway" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoGateway" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Text="Default Gateway" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoGateway" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="4" Grid.Column="0" Margin="0,0,0,16">
-                                            <TextBlock Text="IPv6 Address" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoIPv6" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock Text="IPv6 Address" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoIPv6" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,0,0,16">
-                                            <TextBlock Text="Driver Description" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoDriver" Text="--" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap"/>
+                                            <TextBlock Text="Driver Description" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoDriver" Text="--" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}" TextWrapping="Wrap"/>
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="5" Grid.ColumnSpan="2">
-                                            <TextBlock Text="Physical Address (MAC)" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,4"/>
-                                            <TextBlock x:Name="txtInfoMAC" Text="--" FontSize="13" Foreground="{StaticResource AccentBlueBrush}" FontFamily="Consolas"/>
+                                            <TextBlock Text="Physical Address (MAC)" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"/>
+                                            <TextBlock x:Name="txtInfoMAC" Text="--" FontSize="13" Foreground="{DynamicResource AccentBlueBrush}" FontFamily="Consolas"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -2823,9 +2823,9 @@ function Apply-Localization {
                         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                             <StackPanel Margin="24">
                                 <!-- Privacy / Endpoint Policy -->
-                                <TextBlock Text="PRIVACY / ENDPOINT POLICY" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="PRIVACY / ENDPOINT POLICY" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -2844,12 +2844,12 @@ function Apply-Localization {
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Speed test endpoint" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <TextBlock Grid.Column="0" Text="Speed test endpoint" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                             <ComboBox x:Name="cmbSpeedTestEndpoint" Grid.Column="1" Style="{StaticResource ModernComboBox}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnSaveEndpointPolicy" Grid.Column="2" Content="Save Policy" Style="{StaticResource PrimaryButton}" Padding="16,8"/>
                                         </Grid>
 
-                                        <TextBlock x:Name="txtEndpointPolicyStatus" Grid.Row="2" Text="Endpoint policy settings load from settings.json." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                                        <TextBlock x:Name="txtEndpointPolicyStatus" Grid.Row="2" Text="Endpoint policy settings load from settings.json." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
                                         <Grid Grid.Row="3" Margin="0,0,0,8">
                                             <Grid.ColumnDefinitions>
@@ -2862,14 +2862,14 @@ function Apply-Localization {
                                             <Button x:Name="btnSaveDiscordWebhook" Grid.Column="2" Content="Save Webhook" Style="{StaticResource ModernButton}" Padding="16,8"/>
                                         </Grid>
 
-                                        <TextBlock x:Name="txtDiscordWebhookStatus" Grid.Row="4" Text="Discord webhook notifications are disabled." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="txtDiscordWebhookStatus" Grid.Row="4" Text="Discord webhook notifications are disabled." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"/>
                                     </Grid>
                                 </Border>
 
                                 <!-- Locale -->
-                                <TextBlock Text="LOCALE" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="LOCALE" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -2877,18 +2877,18 @@ function Apply-Localization {
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="UI language" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <TextBlock Grid.Column="0" Text="UI language" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                             <ComboBox x:Name="cmbLocaleSelector" Grid.Column="1" Style="{StaticResource ModernComboBox}" Margin="0,0,12,0"/>
                                             <Button x:Name="btnSaveLocale" Grid.Column="2" Content="Save Locale" Style="{StaticResource PrimaryButton}" Padding="16,8"/>
                                         </Grid>
-                                        <TextBlock x:Name="txtLocaleStatus" Text="Current locale loaded from settings." FontSize="11" Foreground="{StaticResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                                        <TextBlock x:Name="txtLocaleStatus" Text="Current locale loaded from settings." FontSize="11" Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"/>
                                     </StackPanel>
                                 </Border>
 
                                 <!-- Ping Test -->
-                                <TextBlock Text="PING / LATENCY MONITOR" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="PING / LATENCY MONITOR" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,16">
                                             <Grid.ColumnDefinitions>
@@ -2908,13 +2908,13 @@ function Apply-Localization {
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Duration (sec)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                            <TextBlock Grid.Column="0" Text="Duration (sec)" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,12,0"/>
                                             <TextBox x:Name="txtLatencyHistogramSeconds" Grid.Column="1" Style="{StaticResource ModernTextBox}" Text="30" Width="80" Margin="0,0,12,0"/>
                                             <Button x:Name="btnLatencyHistogram" Content="Latency Histogram" Style="{StaticResource ModernButton}" Grid.Column="2"/>
                                         </Grid>
 
                                         <!-- Ping Statistics -->
-                                        <Border x:Name="pnlPingStats" Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16" Visibility="Collapsed">
+                                        <Border x:Name="pnlPingStats" Background="{DynamicResource BgTertiaryBrush}" CornerRadius="6" Padding="16" Margin="0,0,0,16" Visibility="Collapsed">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
@@ -2923,41 +2923,41 @@ function Apply-Localization {
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                                    <TextBlock Text="MIN" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
-                                                    <TextBlock x:Name="txtPingMin" Text="--" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentGreenBrush}" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="ms" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="MIN" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtPingMin" Text="--" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource AccentGreenBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="ms" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                                    <TextBlock Text="AVG" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
-                                                    <TextBlock x:Name="txtPingAvg" Text="--" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentBlueBrush}" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="ms" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="AVG" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtPingAvg" Text="--" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource AccentBlueBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="ms" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                                                    <TextBlock Text="MAX" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
-                                                    <TextBlock x:Name="txtPingMax" Text="--" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="ms" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="MAX" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtPingMax" Text="--" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource AccentOrangeBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="ms" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="3" HorizontalAlignment="Center">
-                                                    <TextBlock Text="LOSS" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
-                                                    <TextBlock x:Name="txtPingLoss" Text="--" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentRedBrush}" HorizontalAlignment="Center"/>
-                                                    <TextBlock Text="%" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="LOSS" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock x:Name="txtPingLoss" Text="--" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource AccentRedBrush}" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="%" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
 
                                         <!-- Continuous Ping Log -->
-                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="350">
+                                        <Border Background="{DynamicResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="350">
                                             <ScrollViewer x:Name="svPingLog" VerticalScrollBarVisibility="Auto">
-                                                <TextBlock x:Name="txtPingLog" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Ping results will appear here..."/>
+                                                <TextBlock x:Name="txtPingLog" FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Ping results will appear here..."/>
                                             </ScrollViewer>
                                         </Border>
                                     </StackPanel>
                                 </Border>
 
                                 <!-- DNS Lookup -->
-                                <TextBlock Text="DNS LOOKUP" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="DNS LOOKUP" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,20">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,16">
                                             <Grid.ColumnDefinitions>
@@ -2968,18 +2968,18 @@ function Apply-Localization {
                                             <Button x:Name="btnDnsLookup" Content="Lookup" Style="{StaticResource PrimaryButton}" Grid.Column="1"/>
                                         </Grid>
 
-                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="200">
+                                        <Border Background="{DynamicResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="200">
                                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                                <TextBlock x:Name="txtDnsLookupOutput" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Enter a domain name and click Lookup..."/>
+                                                <TextBlock x:Name="txtDnsLookupOutput" FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Enter a domain name and click Lookup..."/>
                                             </ScrollViewer>
                                         </Border>
                                     </StackPanel>
                                 </Border>
 
                                 <!-- Speed Test Result -->
-                                <TextBlock Text="SPEED TEST RESULT" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,0,0,12"/>
+                                <TextBlock Text="SPEED TEST RESULT" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,12"/>
 
-                                <Border x:Name="pnlSpeedResult" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20">
+                                <Border x:Name="pnlSpeedResult" Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -2987,62 +2987,62 @@ function Apply-Localization {
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                            <TextBlock Text="DOWNLOAD" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
-                                            <TextBlock x:Name="txtSpeedDown" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentGreenBrush}" HorizontalAlignment="Center"/>
-                                            <TextBlock Text="Mbps" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="DOWNLOAD" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock x:Name="txtSpeedDown" Text="--" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource AccentGreenBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Mbps" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                            <TextBlock Text="FILE SIZE" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
-                                            <TextBlock x:Name="txtSpeedSize" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBlueBrush}" HorizontalAlignment="Center"/>
-                                            <TextBlock Text="MB" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="FILE SIZE" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock x:Name="txtSpeedSize" Text="--" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource AccentBlueBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="MB" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
                                         </StackPanel>
                                         <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                                            <TextBlock Text="DURATION" FontSize="10" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
-                                            <TextBlock x:Name="txtSpeedTime" Text="--" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentOrangeBrush}" HorizontalAlignment="Center"/>
-                                            <TextBlock Text="sec" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="DURATION" FontSize="10" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock x:Name="txtSpeedTime" Text="--" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource AccentOrangeBrush}" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="sec" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" HorizontalAlignment="Center"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
 
                                 <!-- Release Check -->
-                                <TextBlock Text="RELEASE CHECK" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,20,0,12"/>
+                                <TextBlock Text="RELEASE CHECK" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,20,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,16">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock x:Name="txtReleaseCheckVersion" Grid.Column="0" Text="Current version: --" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="txtReleaseCheckVersion" Grid.Column="0" Text="Current version: --" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                             <Button x:Name="btnCheckRelease" Content="Check Release" Style="{StaticResource PrimaryButton}" Grid.Column="1"/>
                                         </Grid>
 
-                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="200">
+                                        <Border Background="{DynamicResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="200">
                                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                                <TextBlock x:Name="txtReleaseCheckOutput" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Check Release to query the latest GitHub release."/>
+                                                <TextBlock x:Name="txtReleaseCheckOutput" FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Check Release to query the latest GitHub release."/>
                                             </ScrollViewer>
                                         </Border>
                                     </StackPanel>
                                 </Border>
 
                                 <!-- Capability Matrix -->
-                                <TextBlock Text="CAPABILITY MATRIX" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextMutedBrush}" Margin="0,20,0,12"/>
+                                <TextBlock Text="CAPABILITY MATRIX" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextMutedBrush}" Margin="0,20,0,12"/>
 
-                                <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="20">
+                                <Border Background="{DynamicResource BgSecondaryBrush}" CornerRadius="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" Padding="20">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,16">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="Host capabilities for NetForge features" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="0" Text="Host capabilities for NetForge features" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
                                             <Button x:Name="btnRefreshCapabilities" Grid.Column="1" Content="Scan" Style="{StaticResource PrimaryButton}"/>
                                         </Grid>
 
-                                        <Border Background="{StaticResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="280">
+                                        <Border Background="{DynamicResource BgPrimaryBrush}" CornerRadius="6" Padding="16" MaxHeight="280">
                                             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                                <TextBlock x:Name="txtCapabilityMatrix" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Scan to check host capabilities."/>
+                                                <TextBlock x:Name="txtCapabilityMatrix" FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextWrapping="Wrap" Text="Click Scan to check host capabilities."/>
                                             </ScrollViewer>
                                         </Border>
                                     </StackPanel>
@@ -3055,15 +3055,15 @@ function Apply-Localization {
         </Grid>
 
         <!-- Status Bar -->
-        <Border Grid.Row="3" Background="{StaticResource BgSecondaryBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
+        <Border Grid.Row="3" Background="{DynamicResource BgSecondaryBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.57.0 | Running as Administrator" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtStatusBar" Grid.Column="0" Text="Ready" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="txtFooterStatus" Grid.Column="1" Text="NetForge v1.58.0 | Running as Administrator" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </Border>
     </Grid>
@@ -3207,10 +3207,11 @@ function Set-ThemeBrushColor {
 
     $brush = $window.Resources[$BrushKey]
     $wpfColor = [System.Windows.Media.ColorConverter]::ConvertFromString($Color)
-    if ($brush -is [System.Windows.Media.SolidColorBrush]) {
+    if ($brush -is [System.Windows.Media.SolidColorBrush] -and -not $brush.IsFrozen) {
         $brush.Color = $wpfColor
     } else {
-        $window.Resources[$BrushKey] = New-Object System.Windows.Media.SolidColorBrush $wpfColor
+        $replacementBrush = New-Object System.Windows.Media.SolidColorBrush $wpfColor
+        $window.Resources[$BrushKey] = [System.Windows.Media.Brush]$replacementBrush
     }
 }
 
