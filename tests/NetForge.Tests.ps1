@@ -3109,6 +3109,186 @@ Describe 'Adapter display snapshot' {
     }
 }
 
+Describe 'Network snapshot restore planning' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Test-ValidIP',
+            'Test-ValidIPv4Address',
+            'Test-ValidIPv4PrefixLength',
+            'Test-ValidIPv6Address',
+            'Test-ValidIPv6PrefixLength',
+            'Get-NetworkSnapshotRestorePlan',
+            'Restore-NetworkSnapshot'
+        )
+    }
+
+    It 'rejects missing and invalid snapshot targets before mutation' {
+        (Get-NetworkSnapshotRestorePlan -Snapshot $null).IsValid | Should -BeFalse
+        $invalid = Get-NetworkSnapshotRestorePlan -Snapshot ([pscustomobject]@{ InterfaceIndex = 0 })
+        $invalid.IsValid | Should -BeFalse
+        $invalid.Message | Should -Match 'interface index'
+    }
+
+    It 'filters invalid restore values into a safe deterministic plan' {
+        $snapshot = [pscustomobject]@{
+            InterfaceIndex = 7
+            Dhcp = 'Disabled'
+            IPv4Addresses = @(
+                [pscustomobject]@{ IPAddress = '192.168.10.20'; PrefixLength = 24 },
+                [pscustomobject]@{ IPAddress = 'bad'; PrefixLength = 99 }
+            )
+            DefaultRoutes = @(
+                [pscustomobject]@{ NextHop = '192.168.10.1'; RouteMetric = 15 },
+                [pscustomobject]@{ NextHop = 'bad'; RouteMetric = 20 }
+            )
+            IPv6Addresses = @([pscustomobject]@{ IPAddress = '2001:db8::20'; PrefixLength = 64 })
+            IPv6DefaultRoutes = @([pscustomobject]@{ NextHop = 'fe80::1'; RouteMetric = 25 })
+            DnsAutomatic = $false
+            StaticDnsServers = @('1.1.1.1', 'not-an-ip', '1.1.1.1')
+            Environment = [pscustomobject]@{ NetworkCategory = 'Private' }
+        }
+
+        $plan = Get-NetworkSnapshotRestorePlan -Snapshot $snapshot
+
+        $plan.IsValid | Should -BeTrue
+        $plan.DhcpEnabled | Should -BeFalse
+        $plan.IPv4Addresses.Count | Should -Be 1
+        $plan.IPv4DefaultRoutes.Count | Should -Be 1
+        $plan.IPv6Addresses.Count | Should -Be 1
+        $plan.IPv6DefaultRoutes.Count | Should -Be 1
+        $plan.DnsServers | Should -Be @('1.1.1.1')
+        $plan.ResetDns | Should -BeFalse
+    }
+
+    It 'executes the DHCP restore plan and reports adapter success' {
+        Mock Get-NetAdapter { [pscustomobject]@{ Name = 'Ethernet' } }
+        Mock Get-NetIPAddress { @() }
+        Mock Remove-NetIPAddress {}
+        Mock Get-NetRoute { @() }
+        Mock Remove-NetRoute {}
+        Mock Set-NetIPInterface {}
+        Mock New-NetIPAddress {}
+        Mock New-NetRoute {}
+        Mock Set-DnsClientServerAddress {}
+
+        $snapshot = [pscustomobject]@{
+            InterfaceIndex = 7
+            Dhcp = 'Enabled'
+            IPv4Addresses = @()
+            DefaultRoutes = @()
+            IPv6Addresses = @()
+            IPv6DefaultRoutes = @()
+            DnsAutomatic = $true
+            StaticDnsServers = @()
+            Environment = $null
+        }
+
+        $result = Restore-NetworkSnapshot -Snapshot $snapshot
+
+        $result.Restored | Should -BeTrue
+        $result.Message | Should -Match 'Ethernet'
+        Should -Invoke Set-NetIPInterface -Times 1 -Exactly -ParameterFilter { $Dhcp -eq 'Enabled' }
+        Should -Invoke Set-DnsClientServerAddress -Times 1 -Exactly -ParameterFilter { $ResetServerAddresses }
+    }
+
+    It 'returns the mutation error when the restore target cannot be opened' {
+        Mock Get-NetAdapter { throw 'adapter missing' }
+
+        $snapshot = [pscustomobject]@{
+            InterfaceIndex = 7
+            Dhcp = 'Enabled'
+            IPv4Addresses = @()
+            DefaultRoutes = @()
+            IPv6Addresses = @()
+            IPv6DefaultRoutes = @()
+            DnsAutomatic = $true
+            StaticDnsServers = @()
+            Environment = $null
+        }
+
+        $result = Restore-NetworkSnapshot -Snapshot $snapshot
+
+        $result.Restored | Should -BeFalse
+        $result.Message | Should -Match 'adapter missing'
+    }
+}
+
+Describe 'Network mutation control flow' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @(
+            'Get-AdapterNetworkSnapshot',
+            'Register-LastNetworkSnapshot',
+            'Write-OperationLog',
+            'Update-Status',
+            'Restore-NetworkSnapshot',
+            'Invoke-NetworkMutation'
+        )
+
+        function global:Show-MessageBox {
+            param($Message, $Title, $Icon)
+        }
+    }
+
+    BeforeEach {
+        $script:MutationExecuted = $false
+        Mock Get-AdapterNetworkSnapshot {
+            [pscustomobject]@{ CapturedAt = '2026-08-12T12:00:00Z'; InterfaceIndex = 7 }
+        }
+        Mock Register-LastNetworkSnapshot {}
+        Mock Write-OperationLog {}
+        Mock Update-Status {}
+        Mock Show-MessageBox {}
+        Mock Restore-NetworkSnapshot {
+            [pscustomobject]@{ Restored = $true; Message = 'restored' }
+        }
+    }
+
+    It 'runs a mutation after capturing and registering a snapshot' {
+        $adapter = [pscustomobject]@{ Name = 'Ethernet'; ifIndex = 7 }
+
+        $result = Invoke-NetworkMutation -Adapter $adapter -ActionName 'Test change' -ScriptBlock { $script:MutationExecuted = $true } -Quiet
+
+        $result | Should -BeTrue
+        $script:MutationExecuted | Should -BeTrue
+        Should -Invoke Register-LastNetworkSnapshot -Times 1 -Exactly
+        Should -Invoke Restore-NetworkSnapshot -Times 0 -Exactly
+    }
+
+    It 'does not attempt rollback when snapshot capture fails' {
+        Mock Get-AdapterNetworkSnapshot { throw 'capture failed' }
+        $adapter = [pscustomobject]@{ Name = 'Ethernet'; ifIndex = 7 }
+
+        $result = Invoke-NetworkMutation -Adapter $adapter -ActionName 'Test change' -ScriptBlock { throw 'must not run' } -Quiet
+
+        $result | Should -BeFalse
+        Should -Invoke Restore-NetworkSnapshot -Times 0 -Exactly
+        Should -Invoke Update-Status -Times 1 -ParameterFilter { $Message -match 'before a rollback snapshot' }
+    }
+
+    It 'rolls back a failed mutation and reports restored state' {
+        $adapter = [pscustomobject]@{ Name = 'Ethernet'; ifIndex = 7 }
+
+        $result = Invoke-NetworkMutation -Adapter $adapter -ActionName 'Test change' -ScriptBlock { throw 'mutation failed' } -Quiet
+
+        $result | Should -BeFalse
+        Should -Invoke Restore-NetworkSnapshot -Times 1 -Exactly
+        Should -Invoke Update-Status -Times 1 -ParameterFilter { $Message -match 'previous network state restored' }
+    }
+
+    It 'reports a rollback failure without hiding the original mutation failure' {
+        Mock Restore-NetworkSnapshot {
+            [pscustomobject]@{ Restored = $false; Message = 'restore failed' }
+        }
+        $adapter = [pscustomobject]@{ Name = 'Ethernet'; ifIndex = 7 }
+
+        $result = Invoke-NetworkMutation -Adapter $adapter -ActionName 'Test change' -ScriptBlock { throw 'mutation failed' } -Quiet
+
+        $result | Should -BeFalse
+        Should -Invoke Update-Status -Times 1 -ParameterFilter { $Message -match 'restore failed' }
+        Should -Invoke Write-OperationLog -Times 1 -ParameterFilter { $Result -eq 'RollbackFailed' -and $Detail -match 'mutation failed' }
+    }
+}
+
 Describe 'Accessibility metadata' {
     It 'lists automation names for primary workflows' {
         $source = Get-Content -Raw $script:NetForgePath

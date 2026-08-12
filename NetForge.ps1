@@ -3700,102 +3700,174 @@ function Register-LastNetworkSnapshot {
     Show-RestoreSnapshotButtonState
 }
 
-function Restore-NetworkSnapshot {
+function Get-NetworkSnapshotRestorePlan {
     param([pscustomobject]$Snapshot)
 
     if ($null -eq $Snapshot) {
-        return [pscustomobject]@{ Restored = $false; Message = "No network snapshot is available." }
+        return [pscustomobject]@{ IsValid = $false; Message = "No network snapshot is available." }
+    }
+
+    $interfaceIndex = 0
+    if (-not [int]::TryParse([string]$Snapshot.InterfaceIndex, [ref]$interfaceIndex) -or $interfaceIndex -le 0) {
+        return [pscustomobject]@{ IsValid = $false; Message = "The network snapshot does not contain a valid interface index." }
+    }
+
+    $ipv4Addresses = @()
+    foreach ($address in @($Snapshot.IPv4Addresses)) {
+        $prefixLength = 0
+        if ((Test-ValidIPv4Address -IP $address.IPAddress) -and
+            [int]::TryParse([string]$address.PrefixLength, [ref]$prefixLength) -and
+            (Test-ValidIPv4PrefixLength -PrefixLength $prefixLength)) {
+            $ipv4Addresses += [pscustomobject]@{
+                IPAddress = [string]$address.IPAddress
+                PrefixLength = $prefixLength
+            }
+        }
+    }
+
+    $ipv4Routes = @()
+    foreach ($route in @($Snapshot.DefaultRoutes)) {
+        if (-not (Test-ValidIPv4Address -IP $route.NextHop)) { continue }
+        $routeMetric = $null
+        $parsedMetric = 0
+        if ($null -ne $route.RouteMetric -and [int]::TryParse([string]$route.RouteMetric, [ref]$parsedMetric)) {
+            $routeMetric = $parsedMetric
+        }
+        $ipv4Routes += [pscustomobject]@{
+            NextHop = [string]$route.NextHop
+            RouteMetric = $routeMetric
+        }
+    }
+
+    $ipv6Addresses = @()
+    foreach ($address in @($Snapshot.IPv6Addresses)) {
+        $prefixLength = 0
+        if ((Test-ValidIPv6Address -IP $address.IPAddress) -and
+            [int]::TryParse([string]$address.PrefixLength, [ref]$prefixLength) -and
+            (Test-ValidIPv6PrefixLength -PrefixLength $prefixLength)) {
+            $ipv6Addresses += [pscustomobject]@{
+                IPAddress = [string]$address.IPAddress
+                PrefixLength = $prefixLength
+            }
+        }
+    }
+
+    $ipv6Routes = @()
+    foreach ($route in @($Snapshot.IPv6DefaultRoutes)) {
+        if (-not (Test-ValidIPv6Address -IP $route.NextHop)) { continue }
+        $routeMetric = $null
+        $parsedMetric = 0
+        if ($null -ne $route.RouteMetric -and [int]::TryParse([string]$route.RouteMetric, [ref]$parsedMetric)) {
+            $routeMetric = $parsedMetric
+        }
+        $ipv6Routes += [pscustomobject]@{
+            NextHop = [string]$route.NextHop
+            RouteMetric = $routeMetric
+        }
+    }
+
+    $dnsServers = @($Snapshot.StaticDnsServers | Where-Object { Test-ValidIP $_ } | Select-Object -Unique)
+    $resetDns = [bool]$Snapshot.DnsAutomatic -or $dnsServers.Count -eq 0
+
+    return [pscustomobject]@{
+        IsValid = $true
+        Message = ""
+        InterfaceIndex = $interfaceIndex
+        DhcpEnabled = ([string]$Snapshot.Dhcp -eq "Enabled")
+        IPv4Addresses = $ipv4Addresses
+        IPv4DefaultRoutes = $ipv4Routes
+        IPv6Addresses = $ipv6Addresses
+        IPv6DefaultRoutes = $ipv6Routes
+        ResetDns = $resetDns
+        DnsServers = $dnsServers
+        Environment = $Snapshot.Environment
+    }
+}
+
+function Restore-NetworkSnapshot {
+    param([pscustomobject]$Snapshot)
+
+    $plan = Get-NetworkSnapshotRestorePlan -Snapshot $Snapshot
+    if (-not $plan.IsValid) {
+        return [pscustomobject]@{ Restored = $false; Message = $plan.Message }
     }
 
     try {
-        $adapter = Get-NetAdapter -InterfaceIndex $Snapshot.InterfaceIndex -ErrorAction Stop
+        $adapter = Get-NetAdapter -InterfaceIndex $plan.InterfaceIndex -ErrorAction Stop
 
-        Get-NetIPAddress -InterfaceIndex $Snapshot.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+        Get-NetIPAddress -InterfaceIndex $plan.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
             Where-Object { $_.IPAddress -notlike "169.254.*" -and $_.IPAddress -ne "127.0.0.1" } |
             Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
 
-        Get-NetRoute -InterfaceIndex $Snapshot.InterfaceIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+        Get-NetRoute -InterfaceIndex $plan.InterfaceIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
             Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
 
-        if ($Snapshot.Dhcp -eq "Enabled") {
-            Set-NetIPInterface -InterfaceIndex $Snapshot.InterfaceIndex -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop
+        if ($plan.DhcpEnabled) {
+            Set-NetIPInterface -InterfaceIndex $plan.InterfaceIndex -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop
         } else {
-            Set-NetIPInterface -InterfaceIndex $Snapshot.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
+            Set-NetIPInterface -InterfaceIndex $plan.InterfaceIndex -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
 
-            foreach ($address in @($Snapshot.IPv4Addresses)) {
-                if ((Test-ValidIPv4Address -IP $address.IPAddress) -and (Test-ValidIPv4PrefixLength -PrefixLength ([int]$address.PrefixLength))) {
-                    New-NetIPAddress -InterfaceIndex $Snapshot.InterfaceIndex -IPAddress $address.IPAddress -PrefixLength ([int]$address.PrefixLength) -ErrorAction Stop | Out-Null
-                }
+            foreach ($address in @($plan.IPv4Addresses)) {
+                New-NetIPAddress -InterfaceIndex $plan.InterfaceIndex -IPAddress $address.IPAddress -PrefixLength $address.PrefixLength -ErrorAction Stop | Out-Null
             }
 
-            foreach ($route in @($Snapshot.DefaultRoutes)) {
-                if (Test-ValidIPv4Address -IP $route.NextHop) {
-                    $routeParams = @{
-                        InterfaceIndex = $Snapshot.InterfaceIndex
-                        DestinationPrefix = "0.0.0.0/0"
-                        NextHop = $route.NextHop
-                        ErrorAction = "Stop"
-                    }
-                    if ($null -ne $route.RouteMetric) {
-                        $routeParams.RouteMetric = [int]$route.RouteMetric
-                    }
-                    New-NetRoute @routeParams | Out-Null
-                }
-            }
-        }
-
-        Get-NetIPAddress -InterfaceIndex $Snapshot.InterfaceIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue |
-            Where-Object { $_.PrefixOrigin -eq "Manual" -and $_.IPAddress -ne "::1" -and $_.IPAddress -notlike "fe80:*" } |
-            Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-
-        Get-NetRoute -InterfaceIndex $Snapshot.InterfaceIndex -DestinationPrefix "::/0" -ErrorAction SilentlyContinue |
-            Where-Object { (-not $_.PSObject.Properties["RouteProtocol"]) -or [string]$_.RouteProtocol -eq "NetMgmt" } |
-            Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-
-        foreach ($address in @($Snapshot.IPv6Addresses)) {
-            if ((Test-ValidIPv6Address -IP $address.IPAddress) -and (Test-ValidIPv6PrefixLength -PrefixLength ([int]$address.PrefixLength))) {
-                New-NetIPAddress -InterfaceIndex $Snapshot.InterfaceIndex -IPAddress $address.IPAddress -PrefixLength ([int]$address.PrefixLength) -ErrorAction Stop | Out-Null
-            }
-        }
-
-        foreach ($route in @($Snapshot.IPv6DefaultRoutes)) {
-            if (Test-ValidIPv6Address -IP $route.NextHop) {
+            foreach ($route in @($plan.IPv4DefaultRoutes)) {
                 $routeParams = @{
-                    InterfaceIndex = $Snapshot.InterfaceIndex
-                    DestinationPrefix = "::/0"
+                    InterfaceIndex = $plan.InterfaceIndex
+                    DestinationPrefix = "0.0.0.0/0"
                     NextHop = $route.NextHop
                     ErrorAction = "Stop"
                 }
                 if ($null -ne $route.RouteMetric) {
-                    $routeParams.RouteMetric = [int]$route.RouteMetric
+                    $routeParams.RouteMetric = $route.RouteMetric
                 }
                 New-NetRoute @routeParams | Out-Null
             }
         }
 
-        if ($Snapshot.DnsAutomatic) {
-            Set-DnsClientServerAddress -InterfaceIndex $Snapshot.InterfaceIndex -ResetServerAddresses -ErrorAction Stop
-        } else {
-            $dnsServers = @($Snapshot.StaticDnsServers | Where-Object { Test-ValidIP $_ } | Select-Object -Unique)
-            if ($dnsServers.Count -gt 0) {
-                Set-DnsClientServerAddress -InterfaceIndex $Snapshot.InterfaceIndex -ServerAddresses $dnsServers -ErrorAction Stop
-            } else {
-                Set-DnsClientServerAddress -InterfaceIndex $Snapshot.InterfaceIndex -ResetServerAddresses -ErrorAction Stop
-            }
+        Get-NetIPAddress -InterfaceIndex $plan.InterfaceIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+            Where-Object { $_.PrefixOrigin -eq "Manual" -and $_.IPAddress -ne "::1" -and $_.IPAddress -notlike "fe80:*" } |
+            Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+
+        Get-NetRoute -InterfaceIndex $plan.InterfaceIndex -DestinationPrefix "::/0" -ErrorAction SilentlyContinue |
+            Where-Object { (-not $_.PSObject.Properties["RouteProtocol"]) -or [string]$_.RouteProtocol -eq "NetMgmt" } |
+            Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+
+        foreach ($address in @($plan.IPv6Addresses)) {
+            New-NetIPAddress -InterfaceIndex $plan.InterfaceIndex -IPAddress $address.IPAddress -PrefixLength $address.PrefixLength -ErrorAction Stop | Out-Null
         }
 
-        if ($Snapshot.Environment) {
-            if (-not [string]::IsNullOrWhiteSpace($Snapshot.Environment.NetworkCategory)) {
-                Set-NetConnectionProfile -InterfaceIndex $Snapshot.InterfaceIndex -NetworkCategory $Snapshot.Environment.NetworkCategory -ErrorAction SilentlyContinue
+        foreach ($route in @($plan.IPv6DefaultRoutes)) {
+            $routeParams = @{
+                InterfaceIndex = $plan.InterfaceIndex
+                DestinationPrefix = "::/0"
+                NextHop = $route.NextHop
+                ErrorAction = "Stop"
             }
-            if ($Snapshot.Environment.Proxy) {
-                Set-SystemProxyState -Enabled ([bool]$Snapshot.Environment.Proxy.Enabled) -Server ([string]$Snapshot.Environment.Proxy.Server) -Bypass ([string]$Snapshot.Environment.Proxy.Bypass)
+            if ($null -ne $route.RouteMetric) {
+                $routeParams.RouteMetric = $route.RouteMetric
             }
-            if (-not [string]::IsNullOrWhiteSpace($Snapshot.Environment.DefaultPrinterName)) {
-                Set-DefaultPrinterByName -Name $Snapshot.Environment.DefaultPrinterName
+            New-NetRoute @routeParams | Out-Null
+        }
+
+        if ($plan.ResetDns) {
+            Set-DnsClientServerAddress -InterfaceIndex $plan.InterfaceIndex -ResetServerAddresses -ErrorAction Stop
+        } else {
+            Set-DnsClientServerAddress -InterfaceIndex $plan.InterfaceIndex -ServerAddresses $plan.DnsServers -ErrorAction Stop
+        }
+
+        if ($plan.Environment) {
+            if (-not [string]::IsNullOrWhiteSpace($plan.Environment.NetworkCategory)) {
+                Set-NetConnectionProfile -InterfaceIndex $plan.InterfaceIndex -NetworkCategory $plan.Environment.NetworkCategory -ErrorAction SilentlyContinue
             }
-            if ($null -ne $Snapshot.Environment.MappedDrives) {
-                Set-MappedDriveState -MappedDrives $Snapshot.Environment.MappedDrives
+            if ($plan.Environment.Proxy) {
+                Set-SystemProxyState -Enabled ([bool]$plan.Environment.Proxy.Enabled) -Server ([string]$plan.Environment.Proxy.Server) -Bypass ([string]$plan.Environment.Proxy.Bypass)
+            }
+            if (-not [string]::IsNullOrWhiteSpace($plan.Environment.DefaultPrinterName)) {
+                Set-DefaultPrinterByName -Name $plan.Environment.DefaultPrinterName
+            }
+            if ($null -ne $plan.Environment.MappedDrives) {
+                Set-MappedDriveState -MappedDrives $plan.Environment.MappedDrives
             }
         }
 

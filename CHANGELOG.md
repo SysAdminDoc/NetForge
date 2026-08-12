@@ -7,6 +7,7 @@ All notable changes to NetForge will be documented in this file.
 - Performance: Move connection-status adapter, address, route, and WLAN queries to a non-overlapping background runspace.
 - Performance: Cache `netsh wlan show interfaces` output for status and auto-apply consumers with a 60-second TTL.
 - Performance: Share one selected-adapter network snapshot between summary and detail views, eliminating duplicate cmdlet calls.
+- Reliability: Validate and normalize rollback snapshots before mutation, with branch coverage for restore and mutation failure control flow.
 
 ## [v1.57.0] - 2026-07-01
 
