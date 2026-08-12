@@ -1471,6 +1471,8 @@ Describe 'Hosts file group helpers' {
             'Get-ApplyValidationResult',
             'Get-HostsSectionBeginMarker',
             'Get-HostsSectionEndMarker',
+            'Get-HostsManagedSectionLimits',
+            'Test-HostsManagedSectionLimits',
             'Test-HostsGroupName',
             'Test-HostsEntryHostName',
             'ConvertTo-HostsEntryHostNames',
@@ -1577,6 +1579,47 @@ Describe 'Hosts file group helpers' {
         $result = Update-HostsManagedSection -CurrentText "" -Groups $groups
         $result | Should -Match 'NetForge group: Test'
         $result | Should -Match '10.0.0.1 test.local'
+    }
+
+    It 'rejects groups that exceed the per-group entry limit' {
+        $limits = Get-HostsManagedSectionLimits
+        $entries = @(1..($limits.MaxEntriesPerGroup + 1) | ForEach-Object {
+            [pscustomobject]@{ Address = '127.0.0.1'; HostNames = @("host$_.example") }
+        })
+        $groups = @([pscustomobject]@{ Name = 'Oversized'; Enabled = $true; Entries = $entries })
+
+        { ConvertTo-HostsManagedSection -Groups $groups } | Should -Throw "*maximum of $($limits.MaxEntriesPerGroup) entries*"
+    }
+
+    It 'rejects excessive group and total entry counts' {
+        $limits = Get-HostsManagedSectionLimits
+        $tooManyGroups = @(1..($limits.MaxGroups + 1) | ForEach-Object {
+            [pscustomobject]@{ Name = "Group$_"; Enabled = $true; Entries = @() }
+        })
+        $groupResult = Test-HostsManagedSectionLimits -Groups $tooManyGroups
+
+        $fullEntries = @(1..$limits.MaxEntriesPerGroup | ForEach-Object {
+            [pscustomobject]@{ Address = '127.0.0.1'; HostNames = @("host$_.example") }
+        })
+        $tooManyEntries = @(1..9 | ForEach-Object {
+            [pscustomobject]@{ Name = "Group$_"; Enabled = $true; Entries = $fullEntries }
+        })
+        $entryResult = Test-HostsManagedSectionLimits -Groups $tooManyEntries
+
+        $groupResult.IsValid | Should -BeFalse
+        $groupResult.Message | Should -Match 'maximum of 64 groups'
+        $entryResult.IsValid | Should -BeFalse
+        $entryResult.Message | Should -Match 'maximum of 2048 total entries'
+    }
+
+    It 'limits the number of hostnames on a single entry' {
+        $limits = Get-HostsManagedSectionLimits
+        $hostNames = (1..($limits.MaxHostNamesPerEntry + 1) | ForEach-Object { "host$_.example" }) -join ' '
+
+        $result = Get-HostsEntryTarget -GroupName 'Work' -Address '127.0.0.1' -HostNames $hostNames
+
+        $result.IsValid | Should -BeFalse
+        $result.Message | Should -Match "at most $($limits.MaxHostNamesPerEntry) hostnames"
     }
 }
 

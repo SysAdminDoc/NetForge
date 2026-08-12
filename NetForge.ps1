@@ -4400,6 +4400,50 @@ function Get-HostsFilePath {
     return (Join-Path $env:WinDir "System32\drivers\etc\hosts")
 }
 
+function Get-HostsManagedSectionLimits {
+    return [pscustomobject]@{
+        MaxGroups = 64
+        MaxEntriesPerGroup = 256
+        MaxTotalEntries = 2048
+        MaxHostNamesPerEntry = 16
+    }
+}
+
+function Test-HostsManagedSectionLimits {
+    param([object[]]$Groups)
+
+    $limits = Get-HostsManagedSectionLimits
+    $groupList = @($Groups)
+    if ($groupList.Count -gt $limits.MaxGroups) {
+        return Get-ApplyValidationResult -IsValid $false -Message "Managed hosts data exceeds the maximum of $($limits.MaxGroups) groups."
+    }
+
+    $totalEntries = 0
+    foreach ($group in $groupList) {
+        $entries = @($group.Entries)
+        if ($entries.Count -gt $limits.MaxEntriesPerGroup) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Hosts group '$($group.Name)' exceeds the maximum of $($limits.MaxEntriesPerGroup) entries."
+        }
+
+        $totalEntries += $entries.Count
+        if ($totalEntries -gt $limits.MaxTotalEntries) {
+            return Get-ApplyValidationResult -IsValid $false -Message "Managed hosts data exceeds the maximum of $($limits.MaxTotalEntries) total entries."
+        }
+
+        foreach ($entry in $entries) {
+            $hostNames = @($entry.HostNames | Where-Object { $_ } | Select-Object -Unique)
+            if ($hostNames.Count -gt $limits.MaxHostNamesPerEntry) {
+                return Get-ApplyValidationResult -IsValid $false -Message "A hosts entry in group '$($group.Name)' exceeds the maximum of $($limits.MaxHostNamesPerEntry) hostnames."
+            }
+        }
+    }
+
+    return Get-ApplyValidationResult -IsValid $true -Message "" -Data @{
+        GroupCount = $groupList.Count
+        TotalEntryCount = $totalEntries
+    }
+}
+
 function Test-HostsGroupName {
     param([string]$Name)
 
@@ -4444,6 +4488,10 @@ function Get-HostsEntryTarget {
     }
     if ($hostList.Count -eq 0) {
         return Get-ApplyValidationResult -IsValid $false -Message "Enter at least one hostname."
+    }
+    $limits = Get-HostsManagedSectionLimits
+    if ($hostList.Count -gt $limits.MaxHostNamesPerEntry) {
+        return Get-ApplyValidationResult -IsValid $false -Message "A hosts entry can contain at most $($limits.MaxHostNamesPerEntry) hostnames."
     }
     foreach ($hostName in $hostList) {
         if (-not (Test-HostsEntryHostName -HostName $hostName)) {
@@ -4507,11 +4555,16 @@ function ConvertFrom-HostsManagedSection {
     }
 
     if ($current) { $groups += [pscustomobject]$current }
+    $limitResult = Test-HostsManagedSectionLimits -Groups $groups
+    if (-not $limitResult.IsValid) { throw $limitResult.Message }
     return ,@($groups)
 }
 
 function ConvertTo-HostsManagedSection {
     param([object[]]$Groups)
+
+    $limitResult = Test-HostsManagedSectionLimits -Groups $Groups
+    if (-not $limitResult.IsValid) { throw $limitResult.Message }
 
     $lines = @((Get-HostsSectionBeginMarker))
     foreach ($group in @($Groups)) {
@@ -14872,8 +14925,24 @@ function Add-HostsEntry {
         return
     }
 
-    $group = @($script:HostsGroups | Where-Object { ([string]$_.Name).Equals($target.GroupName, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    $limits = Get-HostsManagedSectionLimits
+    $currentGroups = @($script:HostsGroups)
+    $currentEntryCount = @($currentGroups | ForEach-Object { @($_.Entries) }).Count
+    if ($currentEntryCount -ge $limits.MaxTotalEntries) {
+        $message = "Managed hosts data is limited to $($limits.MaxTotalEntries) total entries."
+        Show-MessageBox -Message $message -Title "Hosts Entry Limit" -Icon Warning
+        Update-Status $message -Type Error
+        return
+    }
+
+    $group = @($currentGroups | Where-Object { ([string]$_.Name).Equals($target.GroupName, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
     if ($group.Count -eq 0) {
+        if ($currentGroups.Count -ge $limits.MaxGroups) {
+            $message = "Managed hosts data is limited to $($limits.MaxGroups) groups."
+            Show-MessageBox -Message $message -Title "Hosts Group Limit" -Icon Warning
+            Update-Status $message -Type Error
+            return
+        }
         $newGroup = [pscustomobject]@{
             Name = $target.GroupName
             Enabled = $true
@@ -14883,6 +14952,12 @@ function Add-HostsEntry {
         $groupObject = $newGroup
     } else {
         $groupObject = $group[0]
+        if (@($groupObject.Entries).Count -ge $limits.MaxEntriesPerGroup) {
+            $message = "Hosts group '$($target.GroupName)' is limited to $($limits.MaxEntriesPerGroup) entries."
+            Show-MessageBox -Message $message -Title "Hosts Entry Limit" -Icon Warning
+            Update-Status $message -Type Error
+            return
+        }
     }
 
     $groupObject.Entries = @($groupObject.Entries) + [pscustomobject]@{

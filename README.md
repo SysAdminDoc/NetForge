@@ -108,6 +108,7 @@
 - **Hosts File Groups**:
   - Stage grouped hosts entries, toggle groups enabled/disabled, and write a NetForge-managed hosts section
   - Preserve unmanaged hosts lines and create a timestamped backup before applying changes
+  - Enforce bounded group, entry, and hostname counts before rendering or writing the managed section
 - **RDP Profile Launch**:
   - Apply a saved profile, launch `mstsc.exe` to a host or `.rdp` file, and monitor the RDP client
   - Revert the captured pre-RDP network state automatically when RDP exits, or manually from Network Tools

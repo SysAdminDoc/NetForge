@@ -10,6 +10,7 @@ All notable changes to NetForge will be documented in this file.
 - Reliability: Validate and normalize rollback snapshots before mutation, with branch coverage for restore and mutation failure control flow.
 - Security: Warn before contacting remote SMB servers from mapped-drive profile actions, and fail closed during silent applies.
 - Performance: Restart adapters for MAC override/revert in a guarded background runspace with re-enable recovery.
+- Security: Bound managed hosts data to 64 groups, 256 entries per group, 2,048 total entries, and 16 hostnames per entry.
 
 ## [v1.57.0] - 2026-07-01
 
