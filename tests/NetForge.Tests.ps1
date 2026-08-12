@@ -3021,6 +3021,52 @@ Describe 'MAC address validation' {
     }
 }
 
+Describe 'MAC adapter restart planning' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Get-AdapterRestartPlan')
+    }
+
+    It 'rejects a missing adapter' {
+        $plan = Get-AdapterRestartPlan -Adapter $null
+
+        $plan.IsValid | Should -BeFalse
+        $plan.ShouldRestart | Should -BeFalse
+        $plan.Message | Should -Match 'No adapter'
+    }
+
+    It 'defers restart for an inactive adapter' {
+        $plan = Get-AdapterRestartPlan -Adapter ([pscustomobject]@{ Name = 'Ethernet'; Status = 'Disabled' })
+
+        $plan.IsValid | Should -BeTrue
+        $plan.ShouldRestart | Should -BeFalse
+        $plan.Message | Should -Match 'next time it is enabled'
+    }
+
+    It 'plans a background restart for an active adapter' {
+        $plan = Get-AdapterRestartPlan -Adapter ([pscustomobject]@{ Name = 'Ethernet'; Status = 'Up' })
+
+        $plan.IsValid | Should -BeTrue
+        $plan.ShouldRestart | Should -BeTrue
+        $plan.AdapterName | Should -Be 'Ethernet'
+    }
+
+    It 'keeps the restart sleeps inside a background PowerShell worker' {
+        $source = Get-Content -Raw $script:NetForgePath
+        $ast = [scriptblock]::Create($source).Ast
+        $functionAst = $ast.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-AdapterRestartForMac'
+        }, $true)
+        $functionText = $functionAst.Extent.Text
+
+        $functionText | Should -Match '\[PowerShell\]::Create\(\)'
+        $functionText | Should -Match '\.BeginInvoke\(\)'
+        $functionText | Should -Match 'DispatcherTimer'
+        $functionText | Should -Match 'Start-Sleep -Milliseconds 1200'
+        $functionText | Should -Match 'MacRestartRunning'
+    }
+}
+
 Describe 'Adapter connection kind classification' {
     BeforeAll {
         Import-NetForgeFunction -Name @('Get-AdapterSearchText', 'Get-AdapterConnectionKind')

@@ -9,6 +9,7 @@ All notable changes to NetForge will be documented in this file.
 - Performance: Share one selected-adapter network snapshot between summary and detail views, eliminating duplicate cmdlet calls.
 - Reliability: Validate and normalize rollback snapshots before mutation, with branch coverage for restore and mutation failure control flow.
 - Security: Warn before contacting remote SMB servers from mapped-drive profile actions, and fail closed during silent applies.
+- Performance: Restart adapters for MAC override/revert in a guarded background runspace with re-enable recovery.
 
 ## [v1.57.0] - 2026-07-01
 

@@ -154,6 +154,9 @@ $script:ConnectionStatusRefreshRunning = $false
 $script:ConnectionStatusRefreshPending = $false
 $script:ConnectionStatusPowerShell = $null
 $script:ConnectionStatusResultTimer = $null
+$script:MacRestartRunning = $false
+$script:MacRestartPowerShell = $null
+$script:MacRestartResultTimer = $null
 $script:ShowAdvancedAdapters = $false
 $script:EncryptedDnsHealthRunning = $false
 $script:EncryptedDnsHealthJob = $null
@@ -4702,19 +4705,132 @@ function Show-MacOverrideDisplay {
     }
 }
 
-function Invoke-AdapterRestartForMac {
+function Get-AdapterRestartPlan {
     param($Adapter)
 
-    if ($null -eq $Adapter) { return "No adapter selected." }
-    if ($Adapter.Status -ne "Up") {
-        return "Adapter is not active; change applies next time it is enabled."
+    if ($null -eq $Adapter) {
+        return [pscustomobject]@{
+            IsValid = $false
+            ShouldRestart = $false
+            AdapterName = ""
+            Message = "No adapter selected."
+        }
     }
 
-    Disable-NetAdapter -Name $Adapter.Name -Confirm:$false -ErrorAction Stop
-    Start-Sleep -Milliseconds 1200
-    Enable-NetAdapter -Name $Adapter.Name -Confirm:$false -ErrorAction Stop
-    Start-Sleep -Milliseconds 1200
-    return "Adapter restarted."
+    if ($Adapter.Status -ne "Up") {
+        return [pscustomobject]@{
+            IsValid = $true
+            ShouldRestart = $false
+            AdapterName = [string]$Adapter.Name
+            Message = "Adapter is not active; change applies next time it is enabled."
+        }
+    }
+
+    return [pscustomobject]@{
+        IsValid = $true
+        ShouldRestart = $true
+        AdapterName = [string]$Adapter.Name
+        Message = ""
+    }
+}
+
+function Set-MacRestartControlState {
+    param([bool]$Running)
+
+    if ($script:btnApplyMac) { $script:btnApplyMac.IsEnabled = -not $Running }
+    if ($script:btnRevertMac) { $script:btnRevertMac.IsEnabled = -not $Running }
+}
+
+function Invoke-AdapterRestartForMac {
+    param(
+        $Adapter,
+        [scriptblock]$OnCompleted,
+        [scriptblock]$OnFailed
+    )
+
+    $plan = Get-AdapterRestartPlan -Adapter $Adapter
+    if (-not $plan.IsValid) {
+        if ($OnFailed) { [void](& $OnFailed $plan.Message) }
+        return $false
+    }
+    if (-not $plan.ShouldRestart) {
+        if ($OnCompleted) { [void](& $OnCompleted $plan.Message) }
+        return $true
+    }
+    if ($script:MacRestartRunning) {
+        if ($OnFailed) { [void](& $OnFailed "An adapter restart is already in progress.") }
+        return $false
+    }
+
+    $script:MacRestartRunning = $true
+    Set-MacRestartControlState -Running $true
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        param([string]$AdapterName)
+
+        $adapterDisabled = $false
+        try {
+            Disable-NetAdapter -Name $AdapterName -Confirm:$false -ErrorAction Stop | Out-Null
+            $adapterDisabled = $true
+            Start-Sleep -Milliseconds 1200
+            Enable-NetAdapter -Name $AdapterName -Confirm:$false -ErrorAction Stop | Out-Null
+            $adapterDisabled = $false
+            Start-Sleep -Milliseconds 1200
+            return [pscustomobject]@{ Success = $true; Message = "Adapter restarted." }
+        } catch {
+            $message = $_.Exception.Message
+            if ($adapterDisabled) {
+                try {
+                    Enable-NetAdapter -Name $AdapterName -Confirm:$false -ErrorAction Stop | Out-Null
+                    $message = "$message The adapter was re-enabled during recovery."
+                } catch {
+                    $message = "$message The adapter could not be re-enabled: $($_.Exception.Message)"
+                }
+            }
+            return [pscustomobject]@{ Success = $false; Message = $message }
+        }
+    }).AddArgument($plan.AdapterName) | Out-Null
+
+    try {
+        $handle = $ps.BeginInvoke()
+        $timer = New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval = [TimeSpan]::FromMilliseconds(200)
+        $script:MacRestartPowerShell = $ps
+        $script:MacRestartResultTimer = $timer
+        $timer.Add_Tick({
+            if ($handle.IsCompleted) {
+                $timer.Stop()
+                try {
+                    $result = $ps.EndInvoke($handle) | Select-Object -First 1
+                    if ($result -and $result.Success) {
+                        if ($OnCompleted) { [void](& $OnCompleted $result.Message) }
+                    } else {
+                        $message = if ($result -and $result.Message) { [string]$result.Message } else { "Adapter restart returned no result." }
+                        if ($OnFailed) { [void](& $OnFailed $message) }
+                    }
+                } catch {
+                    if ($OnFailed) { [void](& $OnFailed $_.Exception.Message) }
+                } finally {
+                    $ps.Dispose()
+                    if ($script:MacRestartPowerShell -eq $ps) { $script:MacRestartPowerShell = $null }
+                    if ($script:MacRestartResultTimer -eq $timer) { $script:MacRestartResultTimer = $null }
+                    $script:MacRestartRunning = $false
+                    Set-MacRestartControlState -Running $false
+                }
+            }
+        }.GetNewClosure())
+        $timer.Start()
+        return $true
+    } catch {
+        $ps.Dispose()
+        $script:MacRestartPowerShell = $null
+        $script:MacRestartResultTimer = $null
+        $script:MacRestartRunning = $false
+        Set-MacRestartControlState -Running $false
+        if ($OnFailed) { [void](& $OnFailed $_.Exception.Message) }
+        return $false
+    }
 }
 
 function Invoke-GenerateMacAddress {
@@ -4744,9 +4860,17 @@ function Invoke-MacOverride {
     Update-Status "Applying MAC override to $($adapter.Name)..."
     try {
         New-ItemProperty -LiteralPath $registryPath -Name NetworkAddress -Value $cleanMac -PropertyType String -Force -ErrorAction Stop | Out-Null
-        $restartMessage = Invoke-AdapterRestartForMac -Adapter $adapter
-        Update-Status "MAC override $cleanMac applied. $restartMessage" -Type Success
-        Refresh-AdapterList
+        $onCompleted = {
+            param($restartMessage)
+            Update-Status "MAC override $cleanMac applied. $restartMessage" -Type Success
+            Refresh-AdapterList
+        }.GetNewClosure()
+        $onFailed = {
+            param($errorMessage)
+            Update-Status "MAC override failed: $errorMessage" -Type Error
+            Show-MessageBox -Message "Failed to apply MAC override:`n$errorMessage" -Title "MAC Override Failed" -Icon Error
+        }.GetNewClosure()
+        [void](Invoke-AdapterRestartForMac -Adapter $adapter -OnCompleted $onCompleted -OnFailed $onFailed)
     } catch {
         Update-Status "MAC override failed: $($_.Exception.Message)" -Type Error
         Show-MessageBox -Message "Failed to apply MAC override:`n$($_.Exception.Message)" -Title "MAC Override Failed" -Icon Error
@@ -4769,9 +4893,17 @@ function Invoke-MacRevert {
     Update-Status "Reverting MAC override on $($adapter.Name)..."
     try {
         Remove-ItemProperty -LiteralPath $registryPath -Name NetworkAddress -ErrorAction SilentlyContinue
-        $restartMessage = Invoke-AdapterRestartForMac -Adapter $adapter
-        Update-Status "MAC override removed. $restartMessage" -Type Success
-        Refresh-AdapterList
+        $onCompleted = {
+            param($restartMessage)
+            Update-Status "MAC override removed. $restartMessage" -Type Success
+            Refresh-AdapterList
+        }.GetNewClosure()
+        $onFailed = {
+            param($errorMessage)
+            Update-Status "MAC revert failed: $errorMessage" -Type Error
+            Show-MessageBox -Message "Failed to revert MAC override:`n$errorMessage" -Title "MAC Revert Failed" -Icon Error
+        }.GetNewClosure()
+        [void](Invoke-AdapterRestartForMac -Adapter $adapter -OnCompleted $onCompleted -OnFailed $onFailed)
     } catch {
         Update-Status "MAC revert failed: $($_.Exception.Message)" -Type Error
         Show-MessageBox -Message "Failed to revert MAC override:`n$($_.Exception.Message)" -Title "MAC Revert Failed" -Icon Error
@@ -16075,6 +16207,17 @@ $window.Add_Closing({
             $script:ConnectionStatusPowerShell.Dispose()
         } catch {
             Write-OperationLog -Action "Connection status stop" -Result "Warning" -Detail $_.Exception.Message
+        }
+    }
+    if ($script:MacRestartResultTimer) {
+        $script:MacRestartResultTimer.Stop()
+    }
+    if ($script:MacRestartPowerShell) {
+        try {
+            $script:MacRestartPowerShell.Stop()
+            $script:MacRestartPowerShell.Dispose()
+        } catch {
+            Write-OperationLog -Action "MAC adapter restart stop" -Result "Warning" -Detail $_.Exception.Message
         }
     }
     if ($script:RdpRestoreSnapshot) {
