@@ -2,6 +2,11 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [Unreleased]
+
+- Performance: Move connection-status adapter, address, route, and WLAN queries to a non-overlapping background runspace.
+- Performance: Cache `netsh wlan show interfaces` output for status and auto-apply consumers with a 60-second TTL.
+
 ## [v1.57.0] - 2026-07-01
 
 - Security: Add 10 MB file size limit to profile/configuration import to prevent memory exhaustion.

@@ -1899,6 +1899,43 @@ Describe 'WiFi spectrum helpers' {
     }
 }
 
+Describe 'WLAN interface status parsing' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('ConvertFrom-WlanInterfaceOutput')
+    }
+
+    It 'parses connected interface details and infers a missing band' {
+        $output = @'
+    Name                   : Wi-Fi
+    State                  : connected
+    SSID                   : Clinic Wireless
+    BSSID                  : 00:11:22:33:44:55
+    Authentication         : WPA2-Personal
+    Radio type             : 802.11ac
+    Channel                : 149
+    Receive rate (Mbps)    : 866.7
+    Signal                 : 82%
+'@
+
+        $result = ConvertFrom-WlanInterfaceOutput -Output $output
+
+        $result.SSID | Should -Be 'Clinic Wireless'
+        $result.Signal | Should -Be '82%'
+        $result.Channel | Should -Be '149'
+        $result.Band | Should -Be '5 GHz'
+        $result.Authentication | Should -Be 'WPA2-Personal'
+        $result.Speed | Should -Be '866.7 Mbps'
+    }
+
+    It 'returns display fallbacks for empty output' {
+        $result = ConvertFrom-WlanInterfaceOutput -Output ''
+
+        $result.SSID | Should -Be '--'
+        $result.Signal | Should -Be '--'
+        $result.Speed | Should -Be '--'
+    }
+}
+
 Describe 'Profile storage migration' {
     BeforeAll {
         Import-NetForgeFunction -Name @(

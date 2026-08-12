@@ -147,6 +147,13 @@ $script:SpeedTestRunning = $false
 $script:WifiScanRunning = $false
 $script:WifiNetworks = @()
 $script:WifiInterfaceName = $null
+$script:CachedWlanInterfaceOutput = $null
+$script:CachedWlanInterfaceOutputTimestamp = [datetime]::MinValue
+$script:WlanInterfaceCacheTtlSec = 60
+$script:ConnectionStatusRefreshRunning = $false
+$script:ConnectionStatusRefreshPending = $false
+$script:ConnectionStatusPowerShell = $null
+$script:ConnectionStatusResultTimer = $null
 $script:ShowAdvancedAdapters = $false
 $script:EncryptedDnsHealthRunning = $false
 $script:EncryptedDnsHealthJob = $null
@@ -5214,102 +5221,240 @@ function Update-AdapterDetails {
 # ============================================================================
 # CONNECTION STATUS FUNCTIONS
 # ============================================================================
-function Update-ConnectionStatus {
+function Set-CachedWlanInterfaceOutput {
+    param([string]$Output)
+
+    if ([string]::IsNullOrWhiteSpace($Output)) { return }
+    $script:CachedWlanInterfaceOutput = $Output
+    $script:CachedWlanInterfaceOutputTimestamp = Get-Date
+}
+
+function Get-CachedWlanInterfaceOutput {
+    param(
+        [int]$MaxAgeSec = $script:WlanInterfaceCacheTtlSec,
+        [switch]$CacheOnly
+    )
+
+    $now = Get-Date
+    if (-not [string]::IsNullOrWhiteSpace($script:CachedWlanInterfaceOutput) -and
+        ($now - $script:CachedWlanInterfaceOutputTimestamp).TotalSeconds -lt $MaxAgeSec) {
+        return $script:CachedWlanInterfaceOutput
+    }
+
+    if ($CacheOnly) { return $null }
+
     try {
-        # Determine connection type and status
-        $activeAdapter = Get-CachedNetAdapterList | Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } | Select-Object -First 1
-
-        if ($null -eq $activeAdapter) {
-            $script:connStatusDot.Background = $window.Resources["AccentRedBrush"]
-            $script:txtConnStatus.Text = Get-UiString -Key "status.disconnected" -DefaultValue "Disconnected"
-            $script:txtConnLocalIP.Text = "--"
-            $script:txtConnGateway.Text = "--"
-            $script:txtConnType.Text = "--"
-            $script:pnlWifiInfo.Visibility = "Collapsed"
-            return
+        $output = netsh wlan show interfaces 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($output)) {
+            Set-CachedWlanInterfaceOutput -Output $output
         }
-
-        $script:connStatusDot.Background = $window.Resources["AccentGreenBrush"]
-        $script:txtConnStatus.Text = Get-UiString -Key "status.connected" -DefaultValue "Connected"
-
-        # Local IP
-        $localIP = Get-NetIPAddress -InterfaceIndex $activeAdapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
-        $script:txtConnLocalIP.Text = if ($localIP) { $localIP.IPAddress } else { "--" }
-
-        # Gateway
-        $gw = Get-NetRoute -InterfaceIndex $activeAdapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
-        $script:txtConnGateway.Text = if ($gw) { $gw.NextHop } else { "--" }
-
-        # Connection type
-        $connType = Get-AdapterConnectionKind -Adapter $activeAdapter
-        $script:txtConnType.Text = $connType
-
-        # WiFi info
-        if ($connType -eq "WiFi") {
-            $script:pnlWifiInfo.Visibility = "Visible"
-            Update-WifiInfo
-        } else {
-            $script:pnlWifiInfo.Visibility = "Collapsed"
-        }
+        return $output
     } catch {
-        Write-OperationLog -Action "Update connection status" -Result "Warning" -Detail $_.Exception.Message
+        Write-OperationLog -Action "Read WLAN interface status" -Result "Warning" -Detail $_.Exception.Message
+        return $null
     }
 }
 
-function Update-WifiInfo {
-    try {
-        $wlanOutput = netsh wlan show interfaces 2>&1 | Out-String
-        $lines = $wlanOutput -split "`n"
+function ConvertFrom-WlanInterfaceOutput {
+    param([string]$Output)
 
-        $ssid = "--"
-        $signal = "--"
-        $channel = "--"
-        $band = "--"
-        $auth = "--"
-        $speed = "--"
+    $ssid = "--"
+    $signal = "--"
+    $channel = "--"
+    $band = "--"
+    $auth = "--"
+    $speed = "--"
 
-        foreach ($line in $lines) {
-            $trimmed = $line.Trim()
-            if ($trimmed -match '^\s*SSID\s*:\s*(.+)$' -and $trimmed -notmatch 'BSSID') {
-                $ssid = $Matches[1].Trim()
-            }
-            if ($trimmed -match '^\s*Signal\s*:\s*(.+)$') {
-                $signal = $Matches[1].Trim()
-            }
-            if ($trimmed -match '^\s*Channel\s*:\s*(.+)$') {
-                $channel = $Matches[1].Trim()
-            }
-            if ($trimmed -match '^\s*Band\s*:\s*(.+)$') {
-                $band = $Matches[1].Trim()
-            }
-            if ($trimmed -match '^\s*Radio type\s*:\s*(.+)$') {
-                $radioType = $Matches[1].Trim()
-                if ($band -eq "--") {
-                    if ($radioType -match '802\.11a' -or $radioType -match '802\.11ac' -or $radioType -match '802\.11ax' -or $radioType -match '802\.11n.*5') {
-                        $band = "5 GHz"
-                    } else {
-                        $band = "2.4 GHz"
-                    }
+    foreach ($line in @($Output -split "`n")) {
+        $trimmed = $line.Trim()
+        if ($trimmed -match '^\s*SSID\s*:\s*(.+)$' -and $trimmed -notmatch 'BSSID') {
+            $ssid = $Matches[1].Trim()
+        }
+        if ($trimmed -match '^\s*Signal\s*:\s*(.+)$') {
+            $signal = $Matches[1].Trim()
+        }
+        if ($trimmed -match '^\s*Channel\s*:\s*(.+)$') {
+            $channel = $Matches[1].Trim()
+        }
+        if ($trimmed -match '^\s*Band\s*:\s*(.+)$') {
+            $band = $Matches[1].Trim()
+        }
+        if ($trimmed -match '^\s*Radio type\s*:\s*(.+)$') {
+            $radioType = $Matches[1].Trim()
+            if ($band -eq "--") {
+                if ($radioType -match '802\.11a' -or $radioType -match '802\.11ac' -or $radioType -match '802\.11ax' -or $radioType -match '802\.11n.*5') {
+                    $band = "5 GHz"
+                } else {
+                    $band = "2.4 GHz"
                 }
             }
-            if ($trimmed -match '^\s*Authentication\s*:\s*(.+)$') {
-                $auth = $Matches[1].Trim()
+        }
+        if ($trimmed -match '^\s*Authentication\s*:\s*(.+)$') {
+            $auth = $Matches[1].Trim()
+        }
+        if ($trimmed -match '^\s*Receive rate \(Mbps\)\s*:\s*(.+)$') {
+            $speed = $Matches[1].Trim() + " Mbps"
+        }
+    }
+
+    return [pscustomobject]@{
+        SSID = $ssid
+        Signal = $signal
+        Channel = $channel
+        Band = $band
+        Authentication = $auth
+        Speed = $speed
+    }
+}
+
+function Show-ConnectionStatusSnapshot {
+    param([pscustomobject]$Snapshot)
+
+    if ($null -eq $Snapshot -or -not $Snapshot.Success) {
+        $message = if ($Snapshot -and $Snapshot.Message) { $Snapshot.Message } else { "No connection status result was returned." }
+        Write-OperationLog -Action "Update connection status" -Result "Warning" -Detail $message
+        return
+    }
+
+    $script:CachedAdapterList = @($Snapshot.Adapters)
+    $script:CachedAdapterListTimestamp = Get-Date
+
+    if ($Snapshot.WlanOutputRefreshed -and -not [string]::IsNullOrWhiteSpace($Snapshot.WlanOutput)) {
+        Set-CachedWlanInterfaceOutput -Output $Snapshot.WlanOutput
+    }
+
+    $activeAdapter = $Snapshot.Adapters |
+        Where-Object { $_.Status -eq "Up" -and (Test-NetForgeAdapter -Adapter $_) } |
+        Select-Object -First 1
+
+    if ($null -eq $activeAdapter) {
+        $script:connStatusDot.Background = $window.Resources["AccentRedBrush"]
+        $script:txtConnStatus.Text = Get-UiString -Key "status.disconnected" -DefaultValue "Disconnected"
+        $script:txtConnLocalIP.Text = "--"
+        $script:txtConnGateway.Text = "--"
+        $script:txtConnType.Text = "--"
+        $script:pnlWifiInfo.Visibility = "Collapsed"
+        return
+    }
+
+    $script:connStatusDot.Background = $window.Resources["AccentGreenBrush"]
+    $script:txtConnStatus.Text = Get-UiString -Key "status.connected" -DefaultValue "Connected"
+
+    $localIP = $Snapshot.IPv4Addresses | Where-Object { $_.InterfaceIndex -eq $activeAdapter.ifIndex } | Select-Object -First 1
+    $script:txtConnLocalIP.Text = if ($localIP) { $localIP.IPAddress } else { "--" }
+
+    $gateway = $Snapshot.DefaultRoutes | Where-Object { $_.InterfaceIndex -eq $activeAdapter.ifIndex } | Select-Object -First 1
+    $script:txtConnGateway.Text = if ($gateway) { $gateway.NextHop } else { "--" }
+
+    $connType = Get-AdapterConnectionKind -Adapter $activeAdapter
+    $script:txtConnType.Text = $connType
+
+    if ($connType -eq "WiFi") {
+        $script:pnlWifiInfo.Visibility = "Visible"
+        Update-WifiInfo -WlanOutput $Snapshot.WlanOutput
+    } else {
+        $script:pnlWifiInfo.Visibility = "Collapsed"
+    }
+}
+
+function Update-ConnectionStatus {
+    if ($script:ConnectionStatusRefreshRunning) {
+        $script:ConnectionStatusRefreshPending = $true
+        return
+    }
+
+    $script:ConnectionStatusRefreshRunning = $true
+    $script:ConnectionStatusRefreshPending = $false
+    $cachedWlanOutput = Get-CachedWlanInterfaceOutput -CacheOnly
+
+    $ps = [PowerShell]::Create()
+    $ps.AddScript({
+        param([string]$CachedWlanOutput)
+
+        try {
+            $adapters = @(Get-NetAdapter -ErrorAction Stop | Sort-Object Name)
+            $ipv4Addresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue)
+            $defaultRoutes = @(Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue)
+            $wlanOutput = $CachedWlanOutput
+            $wlanOutputRefreshed = $false
+
+            if ([string]::IsNullOrWhiteSpace($wlanOutput)) {
+                try {
+                    $candidateOutput = netsh wlan show interfaces 2>&1 | Out-String
+                    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($candidateOutput)) {
+                        $wlanOutput = $candidateOutput
+                        $wlanOutputRefreshed = $true
+                    }
+                } catch {
+                    $wlanOutput = ""
+                }
             }
-            if ($trimmed -match '^\s*Receive rate \(Mbps\)\s*:\s*(.+)$') {
-                $speed = $Matches[1].Trim() + " Mbps"
+
+            return [pscustomobject]@{
+                Success = $true
+                Message = ""
+                Adapters = $adapters
+                IPv4Addresses = $ipv4Addresses
+                DefaultRoutes = $defaultRoutes
+                WlanOutput = $wlanOutput
+                WlanOutputRefreshed = $wlanOutputRefreshed
+            }
+        } catch {
+            return [pscustomobject]@{
+                Success = $false
+                Message = $_.Exception.Message
+                Adapters = @()
+                IPv4Addresses = @()
+                DefaultRoutes = @()
+                WlanOutput = $CachedWlanOutput
+                WlanOutputRefreshed = $false
             }
         }
+    }).AddArgument($cachedWlanOutput) | Out-Null
 
-        $script:txtWifiSSID.Text = $ssid
-        $script:txtWifiSignal.Text = $signal
-        $script:txtWifiChannel.Text = $channel
-        $script:txtWifiBand.Text = $band
-        $script:txtWifiAuth.Text = $auth
-        $script:txtWifiSpeed.Text = $speed
+    $handle = $ps.BeginInvoke()
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(250)
+    $script:ConnectionStatusPowerShell = $ps
+    $script:ConnectionStatusResultTimer = $timer
+    $timer.Add_Tick({
+        if ($handle.IsCompleted) {
+            $timer.Stop()
+            try {
+                $snapshot = $ps.EndInvoke($handle) | Select-Object -First 1
+                Show-ConnectionStatusSnapshot -Snapshot $snapshot
+            } catch {
+                Write-OperationLog -Action "Update connection status" -Result "Warning" -Detail $_.Exception.Message
+            } finally {
+                $ps.Dispose()
+                if ($script:ConnectionStatusPowerShell -eq $ps) { $script:ConnectionStatusPowerShell = $null }
+                if ($script:ConnectionStatusResultTimer -eq $timer) { $script:ConnectionStatusResultTimer = $null }
+                $script:ConnectionStatusRefreshRunning = $false
+            }
 
-        # Color signal strength
+            if ($script:ConnectionStatusRefreshPending) {
+                $script:ConnectionStatusRefreshPending = $false
+                Update-ConnectionStatus
+            }
+        }
+    }.GetNewClosure())
+    $timer.Start()
+}
+
+function Update-WifiInfo {
+    param([string]$WlanOutput = (Get-CachedWlanInterfaceOutput))
+
+    try {
+        $wifiInfo = ConvertFrom-WlanInterfaceOutput -Output $WlanOutput
+        $script:txtWifiSSID.Text = $wifiInfo.SSID
+        $script:txtWifiSignal.Text = $wifiInfo.Signal
+        $script:txtWifiChannel.Text = $wifiInfo.Channel
+        $script:txtWifiBand.Text = $wifiInfo.Band
+        $script:txtWifiAuth.Text = $wifiInfo.Authentication
+        $script:txtWifiSpeed.Text = $wifiInfo.Speed
+
         $signalNum = 0
-        if ($signal -match '(\d+)') { $signalNum = [int]$Matches[1] }
+        if ($wifiInfo.Signal -match '(\d+)') { $signalNum = [int]$Matches[1] }
         if ($signalNum -ge 70) {
             $script:txtWifiSignal.Foreground = $window.Resources["AccentGreenBrush"]
         } elseif ($signalNum -ge 40) {
@@ -11530,7 +11675,7 @@ function Get-CurrentNetworkSignature {
 
     $ssid = ""
     if ((Get-AdapterConnectionKind -Adapter $activeAdapter) -eq "WiFi") {
-        $wlanOutput = netsh wlan show interfaces 2>&1 | Out-String
+        $wlanOutput = Get-CachedWlanInterfaceOutput
         foreach ($line in ($wlanOutput -split "`n")) {
             $trimmed = $line.Trim()
             if ($trimmed -match '^\s*SSID\s*:\s*(.+)$' -and $trimmed -notmatch 'BSSID') {
@@ -15751,6 +15896,17 @@ $window.Add_Closing({
     }
     if ($script:ScheduleProfileTimer) {
         $script:ScheduleProfileTimer.Stop()
+    }
+    if ($script:ConnectionStatusResultTimer) {
+        $script:ConnectionStatusResultTimer.Stop()
+    }
+    if ($script:ConnectionStatusPowerShell) {
+        try {
+            $script:ConnectionStatusPowerShell.Stop()
+            $script:ConnectionStatusPowerShell.Dispose()
+        } catch {
+            Write-OperationLog -Action "Connection status stop" -Result "Warning" -Detail $_.Exception.Message
+        }
     }
     if ($script:RdpRestoreSnapshot) {
         [void](Invoke-RdpProfileRevert -Reason "app close")
