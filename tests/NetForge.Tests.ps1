@@ -3056,6 +3056,59 @@ Describe 'Adapter connection kind classification' {
     }
 }
 
+Describe 'Adapter display snapshot' {
+    BeforeAll {
+        Import-NetForgeFunction -Name @('Get-AdapterDisplaySnapshot')
+    }
+
+    BeforeEach {
+        Mock Get-NetIPInterface {
+            @(
+                [pscustomobject]@{ AddressFamily = 'IPv4'; Dhcp = 'Enabled' },
+                [pscustomobject]@{ AddressFamily = 'IPv6'; Dhcp = 'Enabled' }
+            )
+        }
+        Mock Get-NetIPAddress {
+            @(
+                [pscustomobject]@{ AddressFamily = 'IPv4'; IPAddress = '192.168.1.20'; PrefixLength = 24; PrefixOrigin = 'Dhcp' },
+                [pscustomobject]@{ AddressFamily = 'IPv6'; IPAddress = '2001:db8::20'; PrefixLength = 64; PrefixOrigin = 'Manual' }
+            )
+        }
+        Mock Get-NetRoute {
+            @(
+                [pscustomobject]@{ DestinationPrefix = '0.0.0.0/0'; NextHop = '192.168.1.1'; RouteProtocol = 'Dhcp' },
+                [pscustomobject]@{ DestinationPrefix = '::/0'; NextHop = 'fe80::1'; RouteProtocol = 'NetMgmt' }
+            )
+        }
+        Mock Get-DnsClientServerAddress {
+            [pscustomobject]@{ ServerAddresses = @('1.1.1.1', '1.0.0.1') }
+        }
+        Mock Get-CimInstance {
+            [pscustomobject]@{ DHCPServer = '192.168.1.1' }
+        }
+    }
+
+    It 'queries each networking source once and projects both display views' {
+        $adapter = [pscustomobject]@{ ifIndex = 7; Name = 'Ethernet' }
+
+        $snapshot = Get-AdapterDisplaySnapshot -Adapter $adapter
+
+        $snapshot.IPv4Address.IPAddress | Should -Be '192.168.1.20'
+        $snapshot.IPv4DefaultRoute.NextHop | Should -Be '192.168.1.1'
+        $snapshot.IPv6ManualAddress.IPAddress | Should -Be '2001:db8::20'
+        $snapshot.IPv6DisplayAddress.IPAddress | Should -Be '2001:db8::20'
+        $snapshot.IPv6DefaultRoute.NextHop | Should -Be 'fe80::1'
+        $snapshot.DnsServers | Should -Be @('1.1.1.1', '1.0.0.1')
+        $snapshot.CimConfig.DHCPServer | Should -Be '192.168.1.1'
+
+        Should -Invoke Get-NetIPInterface -Times 1 -Exactly
+        Should -Invoke Get-NetIPAddress -Times 1 -Exactly
+        Should -Invoke Get-NetRoute -Times 1 -Exactly
+        Should -Invoke Get-DnsClientServerAddress -Times 1 -Exactly
+        Should -Invoke Get-CimInstance -Times 1 -Exactly
+    }
+}
+
 Describe 'Accessibility metadata' {
     It 'lists automation names for primary workflows' {
         $source = Get-Content -Raw $script:NetForgePath

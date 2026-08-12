@@ -5054,6 +5054,45 @@ function Set-IPv6ConfigurationControlState {
     }
 }
 
+function Get-AdapterDisplaySnapshot {
+    param($Adapter)
+
+    if ($null -eq $Adapter) { return $null }
+
+    $ipInterfaces = @(Get-NetIPInterface -InterfaceIndex $Adapter.ifIndex -ErrorAction SilentlyContinue)
+    $ipAddresses = @(Get-NetIPAddress -InterfaceIndex $Adapter.ifIndex -ErrorAction SilentlyContinue)
+    $routes = @(Get-NetRoute -InterfaceIndex $Adapter.ifIndex -ErrorAction SilentlyContinue)
+    $dnsRows = @(Get-DnsClientServerAddress -InterfaceIndex $Adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue)
+    $cimConfig = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "InterfaceIndex = $($Adapter.ifIndex)" -ErrorAction SilentlyContinue
+
+    $dnsServers = @()
+    foreach ($row in $dnsRows) {
+        if ($row.ServerAddresses) {
+            $dnsServers += @($row.ServerAddresses)
+        }
+    }
+
+    return [pscustomobject]@{
+        IPv4Interface = $ipInterfaces | Where-Object { $_.AddressFamily -eq "IPv4" } | Select-Object -First 1
+        IPv4Address = $ipAddresses | Where-Object { $_.AddressFamily -eq "IPv4" } | Select-Object -First 1
+        IPv4DefaultRoute = $routes | Where-Object { $_.DestinationPrefix -eq "0.0.0.0/0" } | Select-Object -First 1
+        IPv6ManualAddress = $ipAddresses |
+            Where-Object { $_.AddressFamily -eq "IPv6" -and $_.PrefixOrigin -eq "Manual" -and $_.IPAddress -ne "::1" -and $_.IPAddress -notlike "fe80:*" } |
+            Select-Object -First 1
+        IPv6DisplayAddress = $ipAddresses |
+            Where-Object { $_.AddressFamily -eq "IPv6" -and $_.PrefixOrigin -ne "WellKnown" } |
+            Select-Object -First 1
+        IPv6DefaultRoute = $routes |
+            Where-Object {
+                $_.DestinationPrefix -eq "::/0" -and
+                ((-not $_.PSObject.Properties["RouteProtocol"]) -or [string]$_.RouteProtocol -eq "NetMgmt")
+            } |
+            Select-Object -First 1
+        DnsServers = @($dnsServers | Select-Object -Unique)
+        CimConfig = $cimConfig
+    }
+}
+
 function Update-AdapterDisplay {
     $adapter = Get-SelectedAdapter
     if ($null -eq $adapter) {
@@ -5075,6 +5114,7 @@ function Update-AdapterDisplay {
     $script:txtAdapterName.Text = $adapter.Name
     $script:txtMAC.Text = $adapter.MacAddress
     $script:txtStatus.Text = $adapter.Status
+    $snapshot = Get-AdapterDisplaySnapshot -Adapter $adapter
 
     if ($adapter.Status -eq "Up") {
         $script:statusIndicator.Fill = $window.Resources["AccentGreenBrush"]
@@ -5084,7 +5124,7 @@ function Update-AdapterDisplay {
 
     # Get IP configuration
     try {
-        $ipConfig = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+        $ipConfig = $snapshot.IPv4Address
         if ($ipConfig) {
             $script:txtCurrentIP.Text = $ipConfig.IPAddress
             $script:txtIPAddress.Text = $ipConfig.IPAddress
@@ -5095,29 +5135,25 @@ function Update-AdapterDisplay {
         }
 
         # Get gateway
-        $gateway = Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $gateway = $snapshot.IPv4DefaultRoute
         if ($gateway) {
             $script:txtGateway.Text = $gateway.NextHop
         }
 
         # Check if DHCP
-        $dhcpEnabled = (Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).Dhcp -eq "Enabled"
+        $dhcpEnabled = $snapshot.IPv4Interface.Dhcp -eq "Enabled"
         if ($dhcpEnabled) {
             $script:rbDHCP.IsChecked = $true
         } else {
             $script:rbStatic.IsChecked = $true
         }
 
-        $ipv6Config = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue |
-            Where-Object { $_.PrefixOrigin -eq "Manual" -and $_.IPAddress -ne "::1" -and $_.IPAddress -notlike "fe80:*" } |
-            Select-Object -First 1
+        $ipv6Config = $snapshot.IPv6ManualAddress
         if ($ipv6Config) {
             $script:chkConfigureIPv6Address.IsChecked = $true
             $script:txtIPv6Address.Text = $ipv6Config.IPAddress
             $script:txtIPv6Prefix.Text = $ipv6Config.PrefixLength.ToString()
-            $ipv6Gateway = Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "::/0" -ErrorAction SilentlyContinue |
-                Where-Object { (-not $_.PSObject.Properties["RouteProtocol"]) -or [string]$_.RouteProtocol -eq "NetMgmt" } |
-                Select-Object -First 1
+            $ipv6Gateway = $snapshot.IPv6DefaultRoute
             $script:txtIPv6Gateway.Text = if ($ipv6Gateway -and $ipv6Gateway.NextHop -ne "::") { $ipv6Gateway.NextHop } else { "" }
         } else {
             $script:chkConfigureIPv6Address.IsChecked = $false
@@ -5131,7 +5167,7 @@ function Update-AdapterDisplay {
         Write-OperationLog -Action "Update IP configuration display" -Result "Warning" -Detail $_.Exception.Message
     }
 
-    Update-AdapterDetails
+    Update-AdapterDetails -Adapter $adapter -Snapshot $snapshot
     Show-MacOverrideDisplay
     Show-InterfaceMetricDisplay
 }
@@ -5182,8 +5218,14 @@ function Format-DhcpLeaseInfo {
 }
 
 function Update-AdapterDetails {
-    $adapter = Get-SelectedAdapter
+    param(
+        $Adapter,
+        [pscustomobject]$Snapshot
+    )
+
+    $adapter = if ($null -ne $Adapter) { $Adapter } else { Get-SelectedAdapter }
     if ($null -eq $adapter) { return }
+    if ($null -eq $Snapshot) { $Snapshot = Get-AdapterDisplaySnapshot -Adapter $adapter }
 
     try {
         $script:txtInfoIndex.Text = $adapter.ifIndex.ToString()
@@ -5195,20 +5237,20 @@ function Update-AdapterDetails {
 
         $script:txtInfoMedia.Text = if ($adapter.MediaConnectionState -eq "Connected") { Get-UiString -Key "status.connected" -DefaultValue "Connected" } else { Get-UiString -Key "status.disconnected" -DefaultValue "Disconnected" }
 
-        $ipInterface = Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+        $ipInterface = $Snapshot.IPv4Interface
         $script:txtInfoDHCP.Text = if ($ipInterface.Dhcp -eq "Enabled") { "Yes" } else { "No" }
 
-        $cimConfig = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -Filter "InterfaceIndex = $($adapter.ifIndex)" -ErrorAction SilentlyContinue
+        $cimConfig = $Snapshot.CimConfig
         $dhcpInfo = Format-DhcpLeaseInfo -CimConfig $cimConfig
         $script:txtInfoDHCPServer.Text = $dhcpInfo.ServerText
 
-        $dnsServers = (Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses
+        $dnsServers = @($Snapshot.DnsServers)
         $script:txtInfoDNS.Text = if ($dnsServers) { $dnsServers -join ", " } else { "--" }
 
-        $gateway = Get-NetRoute -InterfaceIndex $adapter.ifIndex -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $gateway = $Snapshot.IPv4DefaultRoute
         $script:txtInfoGateway.Text = if ($gateway) { $gateway.NextHop } else { "--" }
 
-        $ipv6 = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv6 -ErrorAction SilentlyContinue | Where-Object { $_.PrefixOrigin -ne "WellKnown" } | Select-Object -First 1
+        $ipv6 = $Snapshot.IPv6DisplayAddress
         $script:txtInfoIPv6.Text = if ($ipv6) { $ipv6.IPAddress } else { "--" }
 
         $script:txtInfoDriver.Text = $adapter.DriverDescription
