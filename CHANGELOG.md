@@ -2,6 +2,10 @@
 
 All notable changes to NetForge will be documented in this file.
 
+## [v1.58.1] - 2026-09-28
+
+- Docs: Replaced the one-line pasted install command and the git-clone install option with download-first links (Releases page, and GitHub's Download ZIP for the current main branch).
+
 ## [v1.58.0] - 2026-08-12
 
 - Performance: Move connection-status adapter, address, route, and WLAN queries to a non-overlapping background runspace.
